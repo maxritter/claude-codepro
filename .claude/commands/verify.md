@@ -1,273 +1,202 @@
 ---
-description: Run comprehensive end-to-end verification after implementation - reads plan, checks all changes, runs all tests, verifies data integrity, ensures TDD compliance
+description: Active verification and fix command - runs all tests, immediately fixes any issues found, ensures everything works end-to-end
 model: sonnet
 ---
 
-# Comprehensive Implementation Verification
+# Active Verification & Fix
 
-**Purpose:** Thorough E2E verification after plan completion, ensuring all requirements met, tests pass, data integrity maintained.
+**Purpose:** Hands-on verification that immediately fixes issues as they're discovered, ensuring all tests pass and the system works end-to-end.
 
 **Workflow Position:** Step 3 of 3 in spec-driven development
 - **Previous command (/plan):** Idea → Design → Implementation Plan
 - **Previous command (/implement):** Implementation Plan → Working Code
-- **This command (/verify):** Working Code → Verified Implementation
+- **This command (/verify):** Working Code → Fixed & Verified Implementation
 
-**Process:** Read plan → Understand changes → Run all tests → Verify data → Check standards → Generate report
+**Process:** Run tests → Fix failures immediately → Re-test → Run program → Fix issues → Repeat until all green
 
 ## Process
 
-### Step 1: Gather Context
+### Step 1: Gather Context & Fix Initial Issues
 
-**Understand what was built:**
-1. Read plan: `Read(file_path="docs/plans/YYYY-MM-DD-*.md")` - Extract requirements, tasks, architecture
-2. Check changes: `git status --short` and `git diff --stat` - See all modified files
-3. Query Cipher: `ask_cipher("What was implemented for [feature]? Key patterns and decisions?")`
-4. Search codebase: `search_code(path="/workspaces/...", query="new implementations from plan")`
-5. Check diagnostics: `getDiagnostics()` - Must be zero errors/warnings
+**Understand what needs verification and fix obvious problems:**
+1. Check diagnostics: `getDiagnostics()`
+   - **If errors/warnings found:** Fix them immediately before proceeding
+2. Read plan (if exists): `Glob("docs/plans/*.md")` then `Read(latest_plan)`
+   - Extract requirements, success criteria, architecture decisions
+   - If no plan found, continue without (standalone verification)
+3. Check changes: `git status --short` and `git diff --stat` - Understand scope
+4. Query Cipher: `ask_cipher("What was implemented? Any known issues?")`
 
-### Step 2: Execute Actual Program
+### Step 2: Run & Fix Unit Tests
 
-**Run the actual code FIRST to verify functionality:**
+**Start with the fastest tests and fix failures immediately:**
 
 ```bash
+# Run unit tests first
+uv run pytest -m unit -v --tb=short
+```
+
+**If failures occur:**
+1. Identify the failing test and error message
+2. Read the test file to understand expected behavior
+3. Fix the implementation code (not the test unless it's wrong)
+4. Re-run the specific failing test: `uv run pytest path/to/test.py::test_function -v`
+5. Once fixed, re-run all unit tests to ensure no regression
+6. Continue until all unit tests pass
+
+### Step 3: Run & Fix Integration Tests
+
+**Test component interactions and fix issues:**
+
+```bash
+# Run integration tests
+uv run pytest -m integration -v --tb=short
+```
+
+**If failures occur:**
+1. Analyze the failure - often related to:
+   - Database connection issues
+   - External service mocks not properly configured
+   - Missing test data setup
+2. Fix the issue in the code or test setup
+3. Re-run the failing test specifically
+4. Continue until all integration tests pass
+
+### Step 4: Execute & Fix the Actual Program
+
+**Run the real application and fix any runtime issues:**
+
+```bash
+# Identify the main entry point from the plan or codebase
+# Examples based on common patterns:
+
 # ETL Pipeline
 uv run python src/main.py
-# Verify: Logs show success, check DB records, inspect S3 files
+# If fails: Check logs, fix configuration, retry
 
 # API Server
 uv run python src/app.py &  # Start server
-curl -X POST localhost:8000/api/endpoint -d '{"test": "data"}'
-# Verify: Response correct, check DB records
+sleep 2  # Wait for startup
+curl -X GET localhost:8000/health  # Health check
+# If fails: Fix startup issues, port conflicts, missing env vars
 
 # CLI Tool
-uv run python src/cli.py --command test
-# Verify: Expected output shown, files created
+uv run python src/cli.py --help
+# Then run actual commands based on implementation
+# If fails: Fix argument parsing, missing dependencies
 
-# Background Job
+# Background Job/Worker
 uv run python src/worker.py
-# Verify: Job completes, side effects visible
+# If fails: Fix queue connections, task definitions
 ```
 
-**Show actual outputs (logs, responses, files) - NO "should work" claims**
+**Common runtime fixes:**
+- Missing environment variables → Add to .env file
+- Database connection errors → Check credentials, network
+- Import errors → Install missing packages with `uv add`
+- Configuration issues → Update config files
+- Permission errors → Fix file/directory permissions
 
-### Step 3: Run Test Suites
+### Step 5: Run & Fix Coverage Issues
 
-**Execute ALL test types (MANDATORY):**
+**Check test coverage and add missing tests:**
 
 ```bash
-# Unit tests
-uv run pytest -m unit -v --tb=short
-# Expected: 100% pass
-
-# Integration tests
-uv run pytest -m integration -v --tb=short
-# Expected: 100% pass
-
-# All tests with coverage
+# Run with coverage report
 uv run pytest --cov=. --cov-report=term-missing --cov-fail-under=80
-# Expected: >80% coverage, all new code covered
-
-# E2E API tests (if API changes)
-newman run postman/collections/*.json -e postman/environments/dev.json
-# Expected: All collections pass
 ```
 
-### Step 4: Data Verification
+**If coverage < 80% or critical code uncovered:**
+1. Identify uncovered lines from the report
+2. Write tests for uncovered critical paths:
+   - Create test file if it doesn't exist
+   - Write test FIRST (TDD approach)
+   - Verify test fails appropriately
+   - Run again to confirm coverage improvement
+3. Skip coverage for truly untestable code (e.g., if __name__ == "__main__")
 
-**Verify source → target data integrity:**
+### Step 6: Fix Code Quality Issues
 
-1. **Database checks (if data pipeline):**
-```sql
--- Count source records
-SELECT COUNT(*) FROM source_table;
--- Count target records
-SELECT COUNT(*) FROM target_table;
--- Verify data completeness
-SELECT * FROM target WHERE source_id NOT IN (SELECT id FROM source);
-```
-
-2. **API verification (if REST/GraphQL):**
-```bash
-# Test all endpoints
-for endpoint in $(grep -r "route\|endpoint" --include="*.py" | cut -d'"' -f2); do
-  curl -X GET "localhost:8000$endpoint" -w "\n%{http_code}\n"
-done
-```
-
-3. **UI verification (if frontend):**
-```javascript
-// Enable Playwright
-discover_tools_by_words(words="playwright browser", enable=true)
-// Navigate and verify
-browser_navigate(url="http://localhost:3000")
-browser_snapshot()
-// Check key elements exist
-browser_get_element_text(selector="[data-testid='feature']")
-```
-
-### Step 5: Code Quality Checks
-
-**Standards compliance:**
+**Run quality checks and fix all issues:**
 
 ```bash
-# Python linting
-uv run ruff check . --statistics
-# Expected: 0 violations
+# Linting - auto-fix what's possible
+uv run ruff check . --fix
+# If issues remain, manually fix them
 
-# Format check
-uv run ruff format . --check
-# Expected: All files formatted
+# Format all files
+uv run ruff format .
+# No manual action needed - it auto-formats
 
 # Type checking
 uv run mypy src --strict
-# Expected: Success, no errors
+# If errors: Add type hints, fix type mismatches
 
-# Security scan
-uv run bandit -r src
-# Expected: No high/medium issues
-
-# Complexity check
-uv run radon cc src -s -nb
-# Expected: A or B ratings
+# Security scan (if available)
+uv run bandit -r src 2>/dev/null || echo "Bandit not installed"
+# If issues: Fix security vulnerabilities immediately
 ```
 
-### Step 6: TDD Compliance Verification
+**Common fixes:**
+- Import errors → Reorder/remove unused imports
+- Type errors → Add type hints or fix incorrect types
+- Line too long → Break into multiple lines
+- Undefined names → Import missing modules
+- Security issues → Use secure functions/patterns
 
-**Verify test-first development:**
+### Step 7: E2E Verification (if applicable)
 
-1. Check test files exist for all source files:
+**For API projects - test with real requests:**
 ```bash
-for src in $(find src -name "*.py" -not -path "*/tests/*"); do
-  test_file="tests/$(basename $src | sed 's/\.py$/_test.py/')"
-  [[ -f "$test_file" ]] || echo "Missing test: $test_file"
-done
+# If Postman collection exists
+if [ -d "postman/collections" ]; then
+  newman run postman/collections/*.json -e postman/environments/dev.json
+  # Fix any failing requests
+fi
+
+# Or test key endpoints manually
+curl -X GET localhost:8000/api/health
+curl -X POST localhost:8000/api/[endpoint] -H "Content-Type: application/json" -d '{}'
 ```
 
-2. Verify tests were written before code (git history):
+**For data pipelines - verify data flow:**
+```sql
+-- Check if data was loaded correctly
+SELECT COUNT(*) FROM target_table WHERE created_at > NOW() - INTERVAL '1 hour';
+-- If no data, debug the pipeline
+```
+
+### Step 8: Final Verification Loop
+
+**Run everything one more time to ensure all fixes work together:**
+
 ```bash
-for file in $(git diff --name-only HEAD~10 | grep -E "\.py$"); do
-  git log --oneline --follow "$file" | tail -5
-done
+# Quick final check
+uv run pytest -q  # Quiet mode for quick pass/fail
+uv run python src/main.py  # Or whatever the main entry point is
+getDiagnostics()  # Must return zero issues
 ```
 
-3. Check test quality:
-- Tests have descriptive names
-- Tests verify behavior, not implementation
-- No test pollution or excessive mocking
+**If anything fails:** Go back to the specific step and fix it
 
-### Step 7: Performance Verification
+## Store Progress in Cipher
 
-**If applicable, check performance:**
-
-```bash
-# Load testing for APIs
-ab -n 1000 -c 10 http://localhost:8000/api/endpoint
-
-# Memory profiling
-uv run python -m memory_profiler src/main.py
-
-# Query performance
-EXPLAIN ANALYZE SELECT * FROM large_table;
+**After fixing each major issue:**
+```
+ask_cipher("Fixed: [issue description] in [file].
+Solution: [what was done]
+Tests now passing: [test names]")
 ```
 
-### Step 8: Documentation Verification
-
-**Ensure documentation matches implementation:**
-
-1. API docs match actual endpoints
-2. README instructions work
-3. Docstrings present for public functions
-4. Type hints complete
-
-### Step 9: Generate Verification Report
-
-```markdown
-## ✅ Verification Report - [Feature Name]
-
-**Date:** [YYYY-MM-DD]
-**Plan:** docs/plans/[plan-file].md
-
-### Test Results
-- Unit Tests: X/X passed (100%)
-- Integration Tests: X/X passed (100%)
-- E2E Tests: X/X passed (100%)
-- Coverage: XX% (target: 80%)
-
-### Data Integrity
-- Source Records: X
-- Target Records: X
-- Data Validation: ✅ Complete match
-
-### Code Quality
-- Linting: 0 violations
-- Type Checking: ✅ Passed
-- Security: No issues
-- Complexity: A rating
-
-### TDD Compliance
-- All source files have tests: ✅
-- Tests written first: ✅ Verified
-- Test quality: ✅ High
-
-### Performance (if tested)
-- Response time: Xms avg
-- Throughput: X req/s
-- Memory usage: XMB
-
-### Issues Found
-[List any issues discovered]
-
-### Recommendations
-[Any improvements suggested]
-
-**Conclusion:** Implementation verified successfully.
+**After successful completion:**
 ```
-
-## MCP Tools for Verification
-
-**Testing:** IDE (`getDiagnostics`)
-**Memory:** Cipher (`ask_cipher`) | Claude Context (`search_code`)
-**Data:** Database (`execute_sql`) | Playwright (`browser_*` for UI)
-**Analysis:** FireCrawl (external API testing) | Newman (Postman collections)
-
-## Verification Checklist
-
-**Must Pass ALL:**
-- [ ] Zero diagnostics errors
-- [ ] All unit tests pass
-- [ ] All integration tests pass
-- [ ] All E2E tests pass
-- [ ] Coverage > 80%
-- [ ] Source/target data match
-- [ ] Linting clean
-- [ ] Type checking passes
-- [ ] Security scan clean
-- [ ] TDD compliance verified
-
-## When to FAIL Verification
-
-**Stop and report issues if:**
-- Any test fails
-- Coverage < 80% or new code uncovered
-- Data integrity issues found
-- Security vulnerabilities detected
-- TDD not followed (code before tests)
-- Performance degradation > 20%
-
-## Store Results
-
-After verification:
-```
-ask_cipher("Store: Verification of [feature] complete.
-Tests: [results]
-Coverage: [percentage]
-Data integrity: [status]
-Issues: [any found]
-Performance: [metrics if tested]")
+ask_cipher("Verification complete for [feature/plan].
+All tests passing, coverage at X%, program runs successfully.
+Key fixes applied: [list of major fixes]")
 ```
 
 ## Key Principles
 
-**Be thorough** | **No assumptions** | **Evidence-based** | **Fail fast on issues** | **Document everything**
+**Fix immediately** | **Test after each fix** | **No "should work" - verify it works** | **Keep fixing until green**
 
-**Success = ALL checks pass. Partial success = FAILURE.**
+**Success = Everything works. No exceptions.**
