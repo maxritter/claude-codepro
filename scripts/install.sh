@@ -344,6 +344,22 @@ install_newman() {
 }
 
 install_statusline() {
+    # Check if jq is installed (required by statusline)
+    if ! command -v jq &> /dev/null; then
+        print_status "Installing jq (required for statusline)..."
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install jq 2>/dev/null || {
+                print_warning "Please install jq manually: brew install jq"
+                return 1
+            }
+        else
+            sudo apt-get install -y jq 2>/dev/null || sudo yum install -y jq 2>/dev/null || {
+                print_warning "Please install jq manually"
+                return 1
+            }
+        fi
+    fi
+
     print_status "Installing Claude Code Statusline..."
     curl -fsSL https://raw.githubusercontent.com/hagan/claudia-statusline/main/scripts/quick-install.sh | bash
 
@@ -389,8 +405,8 @@ add_shell_alias() {
 add_cc_alias() {
     print_status "Configuring cc alias in shell configurations..."
 
-    local bash_alias="alias cc=\"cd '$PROJECT_DIR' && bash scripts/build-rules.sh && clear && dotenvx run -- claude\""
-    local fish_alias="alias cc='cd $PROJECT_DIR; and bash scripts/build-rules.sh; and clear; and dotenvx run -- claude'"
+    local bash_alias="alias cc=\"cd '$PROJECT_DIR' && bash scripts/build-rules.sh &>/dev/null && clear && dotenvx run -- claude\""
+    local fish_alias="alias cc='cd $PROJECT_DIR; and bash scripts/build-rules.sh &>/dev/null; and clear; and dotenvx run -- claude'"
 
     add_shell_alias "$HOME/.bashrc" "$bash_alias" ".bashrc"
     add_shell_alias "$HOME/.zshrc" "$bash_alias" ".zshrc"
