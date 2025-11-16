@@ -1,0 +1,34 @@
+---
+version: 2
+updates:
+  # GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # npm dependencies (for Node.js tools)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "npm"
+    ignore:
+      # Ignore major version updates for stability
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

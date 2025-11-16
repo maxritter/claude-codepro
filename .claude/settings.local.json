@@ -87,7 +87,7 @@
   },
    "statusLine": {
     "type": "command",
-    "command": "npx -y @owloops/claude-powerline@latest --theme=dark --style=capsule"
+    "command": "npx -y @owloops/claude-powerline@latest --config=.claude/statusline.config.json"
   },
   "outputStyle": "default",
   "spinnerTipsEnabled": false,

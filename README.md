@@ -43,37 +43,43 @@ curl -sSL https://raw.githubusercontent.com/maxritter/claude-codepro/v2.1.3/scri
 ### 📋 Flexible Development Workflows via Slash Commands
 
 **Quick Development** (For fast fixes, refactoring, experiments):
+
 - `/quick` - Fast, focused development without spec-driven overhead → No mandatory TDD (Sonnet 4.5)
 
 **Spec-Driven Workflow** (For complex features requiring planning and testing):
+
 - `/plan` - Based on your input asks the right questions → Detailed spec with exact code (Opus 4.1)
 - `/implement` - Execute spec with mandatory TDD → Auto-manages context when full (Sonnet 4.5)
 - `/remember` - Stores learnings in cross-session memory → Continue after /clear (Sonnet 4.5)
 - `/verify` - End-to-end spec verification → All tests, quality, security (Sonnet 4.5)
 
 ### 💡 Modular Rules System with Auto-Generated Commands & Skills
-- **Rules Builder** - Automatically assembles commands and skills from markdown rules on every `cc` startup
+
+- **Rules Builder** - Automatically assembles commands and skills from markdown rules on every `ccp` startup
 - **Core Rules** - Coding standards, TDD enforcement, error handling, validation, context management
 - **Extended Rules** - Domain-specific rules auto-converted to skills, f. ex. @frontend-components
 - **Workflow Rules** - Command-specific behavior for /plan, /implement, /verify, /quick, /remember
 - **Flexible Customization** - Edit `.claude/rules/config.yaml` to adjust which rules apply to which commands
 
 ### 🔌 Enhanced Context and Capabilities via MCP Servers
+
 - **Cipher & Claude Context** - Cross-session memory and semantic code search for optimal context
 - **Context7 & Ref** - Up-to-date library documentation with limited context blur
 - **FireCrawl** - Web scraping and search for dynamic data retrieval in MarkDown format
 - **MCP Funnel** - Allows to plug-in more MCP servers as needed without wasting context
 
 ### 🛠️ Testing and Quality via Automated Tool Installation
+
 - **Post-Edit Hooks** - Automated formatting and code checking after every edit
 - **Qlty** - Automated code quality hooks for all programming languages
 - **uv, ruff, mypy, basedpyright** - Python linter, formatter, and type checker (optional)
 - **Newman** - API end-to-end testing with Postman collections
 
 ### 🏗️ One-Command Installation
+
 - **Automated Setup Script** - Installs and configures everything in one command
 - **Global Tools** - Python tools, qlty, Claude Code, Cipher, Newman installed globally
-- **Shell Integration** - Auto-configures bash, zsh, and fish with `cc` alias
+- **Shell Integration** - Auto-configures bash, zsh, and fish with `ccp` alias
 - **IDE Compatible** - Works with VS Code, Cursor, Windsurf, or any terminal
 
 ---
@@ -82,30 +88,33 @@ curl -sSL https://raw.githubusercontent.com/maxritter/claude-codepro/v2.1.3/scri
 
 ### ⚙️ Configuration
 
-1. Open Claude Code in the IDE Terminal, Extension or an external Terminal with the `cc` command
+1. Open Claude Code in the IDE Terminal, Extension or an external Terminal with the `ccp` command
 
 2. In CC, run `/config` to set `Auto-connect to IDE=true` and set `Auto-compact=false` for best experience
-<img src="docs/img/ide-setup-config.png" alt="Setup config Screenshot" width="600">
+   <img src="docs/img/ide-setup-config.png" alt="Setup config Screenshot" width="600">
 
 3. In CC, run `/ide` to connect to VS Code diagnostics and make sure all MCP servers for `/mcp` are online
-<img src="docs/img/ide-setup-mcp.png" alt="Setup mcp Screenshot" width="600">
+   <img src="docs/img/ide-setup-mcp.png" alt="Setup mcp Screenshot" width="600">
 
 4. In CC, run `/context` to verify context looks similar to this screenshot with less than 20% used
-<img src="docs/img/ide-setup-context.png" alt="Setup context Screenshot" width="600">
+   <img src="docs/img/ide-setup-context.png" alt="Setup context Screenshot" width="600">
 
 ### 👣 First Steps
 
 **For Quick Changes:**
+
 - Use `/quick` - Fast development for fixes, refactoring, or experiments without spec overhead
 - TDD not enforced, but best practices still apply via core rules and auto-injected skills
 
 **For Complex Features (Spec-Driven & TDD):**
+
 - Start with `/plan` - Provide your input and it will ask clarifying questions to create a spec
 - Use `/implement` to execute the spec with automatic TDD, best practices and context management
 - When context fills, `/remember` automatically updates your plan and stores learnings
 - After spec completion, run `/verify` to run end-to-end review, all tests, and quality checks
 
 ### 🎯 Rules Builder
+
 The system uses a modular rules-based architecture that automatically generates slash commands and skills:
 
 - `.claude/rules/core/` - Fundamental rules injected into all commands
@@ -113,7 +122,7 @@ The system uses a modular rules-based architecture that automatically generates 
 - `.claude/rules/extended/` - Domain-specific rules auto-converted to individual skills
 - `.claude/rules/config.yaml` - Defines which rules are included in which commands
 
-**Auto-Rebuild:** Commands and skills are automatically regenerated on every `cc` startup, making customization seamless.
+**Auto-Rebuild:** Commands and skills are automatically regenerated on every `ccp` startup, making customization seamless.
 
 ## ⚖️ What Makes This Different
 
@@ -141,7 +150,7 @@ The system uses a modular rules-based architecture that automatically generates 
 
 ## 🎓 Claude CodePro Academy Coming Soon!
 
-If you want to dive deeper into the setup and advanced usage of Claude CodePro, check out the upcoming  academy that starts with 10 comprehensive modules where we do a deep-dive into all important topics:
+If you want to dive deeper into the setup and advanced usage of Claude CodePro, check out the upcoming academy that starts with 10 comprehensive modules where we do a deep-dive into all important topics:
 
 ➡️ **[www.claude-code.pro](https://www.claude-code.pro)**
 

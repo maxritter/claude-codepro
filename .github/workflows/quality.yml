@@ -1,0 +1,50 @@
+---
+name: Code Quality
+
+"on":
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Run ShellCheck
+        run: |
+          find . -name "*.sh" -type f -not -path "./.git/*" \
+            -not -path "./node_modules/*" -exec shellcheck {} +
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Run yamllint
+        run: yamllint .
+
+      - name: Install qlty
+        run: curl -s https://qlty.sh | sh
+
+      - name: Run qlty
+        run: |
+          export QLTY_INSTALL="$HOME/.qlty"
+          export PATH="$QLTY_INSTALL/bin:$PATH"
+          "$HOME/.qlty/bin/qlty" check --install-only
+          "$HOME/.qlty/bin/qlty" check

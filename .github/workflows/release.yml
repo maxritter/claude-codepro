@@ -1,0 +1,69 @@
+---
+name: Release
+
+"on":
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: >
+          npm install -g semantic-release@latest
+          @semantic-release/git@latest
+          @semantic-release/changelog@latest
+          @semantic-release/exec@latest
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
+      - name: Update README with latest version
+        if: success()
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null \
+            || echo "main")
+
+          if [ -f README.md ]; then
+            PATTERN="maxritter/claude-codepro/[^/]*/scripts/install.sh"
+            REPLACE="maxritter/claude-codepro/${LATEST_TAG}/scripts/"
+            REPLACE="${REPLACE}install.sh"
+            sed -i "s|${PATTERN}|${REPLACE}|g" README.md
+
+            if git diff --quiet README.md; then
+              echo "No changes to README.md"
+            else
+              EMAIL="github-actions[bot]@users.noreply.github.com"
+              git config --local user.email "${EMAIL}"
+              git config --local user.name "github-actions[bot]"
+              git add README.md
+              MSG="docs: update install URL to ${LATEST_TAG} [skip ci]"
+              git commit -m "${MSG}"
+              TOKEN="${{ secrets.GITHUB_TOKEN }}"
+              REPO="${{ github.repository }}"
+              URL="https://x-access-token:${TOKEN}@github.com/"
+              git push "${URL}${REPO}.git" HEAD:main
+            fi
+          fi

@@ -1,0 +1,24 @@
+{
+  "theme": "dark",
+  "display": {
+    "style": "capsule",
+    "colorCompatibility": "auto",
+    "lines": [
+      {
+        "segments": {
+          "directory": { "enabled": true, "showBasename": true },
+          "git": { "enabled": true },
+          "model": { "enabled": true },
+          "context": { "enabled": true, "showPercentageOnly": false }
+        }
+      }
+    ]
+  },
+  "budget": {
+    "session": { "warningThreshold": 90 },
+    "block": { "amount": 20000000, "type": "tokens", "warningThreshold": 90 }
+  },
+  "modelContextLimits": {
+    "sonnet": 200000
+  }
+}
