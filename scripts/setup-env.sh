@@ -1,8 +1,9 @@
-#!/bin/zsh
+#!/bin/bash
 
 # =============================================================================
 # Claude CodePro Environment Setup
 # Interactive script to create .env file with API keys
+# Compatible with bash 3.2+ (macOS, Linux, WSL2)
 # =============================================================================
 
 set -e
@@ -62,6 +63,25 @@ prompt_api_key() {
     echo ""
 }
 
+# Get API config data for a given key (bash 3.2+ compatible)
+get_api_config() {
+    local key=$1
+    case $key in
+        OPENAI_API_KEY)
+            echo "2. OpenAI API Key - For Memory LLM Calls|Low-usage LLM calls in Cipher memory system|https://platform.openai.com/account/api-keys"
+            ;;
+        CONTEXT7_API_KEY)
+            echo "3. Context7 API Key - Free Library Documentation|Up-to-date library documentation access|https://context7.com/dashboard"
+            ;;
+        REF_API_KEY)
+            echo "4. Ref API Key - Free Documentation Search|Searching public and private documentation|https://ref.tools/dashboard"
+            ;;
+        FIRECRAWL_API_KEY)
+            echo "5. Firecrawl API Key - Web Crawling|Web scraping and crawling capabilities|https://www.firecrawl.dev/app"
+            ;;
+    esac
+}
+
 # -----------------------------------------------------------------------------
 # Interactive .env Setup
 # -----------------------------------------------------------------------------
@@ -105,16 +125,10 @@ setup_env_file() {
     fi
 
     # OpenAI, Context7, Ref, Firecrawl
-    declare -A api_configs=(
-        ["OPENAI_API_KEY"]="2. OpenAI API Key - For Memory LLM Calls|Low-usage LLM calls in Cipher memory system|https://platform.openai.com/account/api-keys"
-        ["CONTEXT7_API_KEY"]="3. Context7 API Key - Free Library Documentation|Up-to-date library documentation access|https://context7.com/dashboard"
-        ["REF_API_KEY"]="4. Ref API Key - Free Documentation Search|Searching public and private documentation|https://ref.tools/dashboard"
-        ["FIRECRAWL_API_KEY"]="5. Firecrawl API Key - Web Crawling|Web scraping and crawling capabilities|https://www.firecrawl.dev/app"
-    )
-
     for key in OPENAI_API_KEY CONTEXT7_API_KEY REF_API_KEY FIRECRAWL_API_KEY; do
         if ! $APPEND_MODE || ! key_exists "$key" "$ENV_FILE"; then
-            IFS='|' read -r title description url <<< "${api_configs[$key]}"
+            local config_data=$(get_api_config "$key")
+            IFS='|' read -r title description url <<< "$config_data"
             prompt_api_key "$title" "$key" "$description" "$url"
             read -r -p "   Enter $key: " value < /dev/tty
             eval "$key=\"\$value\""
