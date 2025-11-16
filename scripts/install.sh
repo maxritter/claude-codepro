@@ -8,6 +8,10 @@
 
 set -e
 
+# =============================================================================
+# Configuration & Constants
+# =============================================================================
+
 # Repository configuration
 REPO_URL="https://github.com/maxritter/claude-codepro"
 REPO_BRANCH="main"
@@ -16,52 +20,12 @@ REPO_BRANCH="main"
 PROJECT_DIR="$(pwd)"
 TEMP_DIR=$(mktemp -d)
 
-# Color codes
-BLUE='\033[0;36m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+# =============================================================================
+# Bootstrap - Download and source library modules
+# =============================================================================
 
-# Print functions
-print_status() {
-	echo -e "${BLUE}$1${NC}"
-}
-
-print_success() {
-	echo -e "${GREEN}✓ $1${NC}"
-}
-
-print_warning() {
-	echo -e "${YELLOW}⚠ $1${NC}"
-}
-
-print_error() {
-	echo -e "${RED}✗ $1${NC}"
-}
-
-print_section() {
-	echo ""
-	echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
-	echo -e "${BLUE}  $1${NC}"
-	echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
-	echo ""
-}
-
-# Cleanup on exit
-cleanup() {
-	if [[ -d $TEMP_DIR ]]; then
-		rm -rf "$TEMP_DIR"
-	fi
-	tput cnorm 2>/dev/null || true
-}
-trap cleanup EXIT
-
-# -----------------------------------------------------------------------------
-# Download Functions
-# -----------------------------------------------------------------------------
-
-download_file() {
+# Minimal download function for bootstrapping (before lib modules are loaded)
+_bootstrap_download() {
 	local repo_path=$1
 	local dest_path=$2
 	local file_url="${REPO_URL}/raw/${REPO_BRANCH}/${repo_path}"
@@ -75,373 +39,58 @@ download_file() {
 	fi
 }
 
-# Get all files from repo directory
-get_repo_files() {
-	local dir_path=$1
-	local branch="main"
-	local repo_path
-	repo_path="${REPO_URL#https://github.com/}"
-	local tree_url="https://api.github.com/repos/${repo_path}/git/trees/${branch}?recursive=true"
+# Download library modules
+download_lib_modules() {
+	local lib_dir="$PROJECT_DIR/scripts/lib"
+	mkdir -p "$lib_dir"
 
-	local response
-	response=$(curl -sL "$tree_url")
+	local modules=(
+		"ui.sh"
+		"utils.sh"
+		"download.sh"
+		"files.sh"
+		"dependencies.sh"
+		"shell.sh"
+	)
 
-	# Ensure jq is available
-	if ! ensure_jq; then
-		print_error "jq is required but not available"
-		return 1
-	fi
-
-	# Parse JSON with jq to extract file paths
-	echo "$response" | jq -r ".tree[]? | select(.type == \"blob\" and (.path | startswith(\"$dir_path\"))) | .path"
-}
-
-# -----------------------------------------------------------------------------
-# Installation Functions - Claude CodePro Files
-# -----------------------------------------------------------------------------
-
-install_directory() {
-	local repo_dir=$1
-	local dest_base=$2
-
-	print_status "Installing $repo_dir files..."
-
-	local file_count=0
-	local files
-	files=$(get_repo_files "$repo_dir")
-
-	if [[ -n $files ]]; then
-		while IFS= read -r file_path; do
-			if [[ -n $file_path ]]; then
-				local dest_file="${dest_base}/${file_path}"
-
-				if download_file "$file_path" "$dest_file" 2>/dev/null; then
-					((file_count++)) || true
-					echo "   ✓ $(basename "$file_path")"
-				fi
-			fi
-		done <<<"$files"
-	fi
-
-	print_success "Installed $file_count files"
-}
-
-install_file() {
-	local repo_file=$1
-	local dest_file=$2
-
-	if download_file "$repo_file" "$dest_file"; then
-		print_success "Installed $repo_file"
-		return 0
-	else
-		print_warning "Failed to install $repo_file"
-		return 1
-	fi
-}
-
-# Install jq if needed
-ensure_jq() {
-	if command -v jq &>/dev/null; then
-		return 0
-	fi
-
-	print_status "Installing jq (JSON processor)..."
-
-	if [[ $OSTYPE == "darwin"* ]]; then
-		if command -v brew &>/dev/null; then
-			brew install jq &>/dev/null
-		else
-			print_error "Homebrew not found. Please install jq manually: brew install jq"
-			return 1
+	for module in "${modules[@]}"; do
+		if ! _bootstrap_download "scripts/lib/$module" "$lib_dir/$module"; then
+			echo "Warning: Failed to download lib/$module" >&2
 		fi
-	elif command -v apt-get &>/dev/null; then
-		sudo apt-get update &>/dev/null && sudo apt-get install -y jq &>/dev/null
-	elif command -v yum &>/dev/null; then
-		sudo yum install -y jq &>/dev/null
-	elif command -v dnf &>/dev/null; then
-		sudo dnf install -y jq &>/dev/null
-	else
-		print_error "Could not install jq. Please install manually"
-		return 1
-	fi
-
-	if command -v jq &>/dev/null; then
-		print_success "Installed jq"
-		return 0
-	else
-		return 1
-	fi
+	done
 }
 
-# Merge MCP configuration
-merge_mcp_config() {
-	local repo_file=$1
-	local dest_file=$2
-	local temp_file="${TEMP_DIR}/mcp-temp.json"
+# Download library modules if they don't exist or if running via curl | bash
+if [[ ! -f "$PROJECT_DIR/scripts/lib/ui.sh" ]] || [[ ! -f "$PROJECT_DIR/scripts/lib/utils.sh" ]]; then
+	download_lib_modules
+fi
 
-	print_status "Installing MCP configuration..."
+# Source library modules
+# shellcheck source=lib/ui.sh
+source "$PROJECT_DIR/scripts/lib/ui.sh"
+# shellcheck source=lib/utils.sh
+source "$PROJECT_DIR/scripts/lib/utils.sh"
+# shellcheck source=lib/download.sh
+source "$PROJECT_DIR/scripts/lib/download.sh"
+# shellcheck source=lib/files.sh
+source "$PROJECT_DIR/scripts/lib/files.sh"
+# shellcheck source=lib/dependencies.sh
+source "$PROJECT_DIR/scripts/lib/dependencies.sh"
+# shellcheck source=lib/shell.sh
+source "$PROJECT_DIR/scripts/lib/shell.sh"
 
-	# Download the new config
-	if ! download_file "$repo_file" "$temp_file"; then
-		print_warning "Failed to download $repo_file"
-		return 1
-	fi
+# =============================================================================
+# Setup cleanup trap
+# =============================================================================
 
-	# If destination doesn't exist, just copy it
-	if [[ ! -f $dest_file ]]; then
-		cp "$temp_file" "$dest_file"
-		print_success "Created $repo_file"
-		return 0
-	fi
+trap cleanup EXIT
 
-	# Ensure jq is available
-	if ! ensure_jq; then
-		print_warning "jq not available, preserving existing $repo_file"
-		return 1
-	fi
-
-	# Merge configurations using jq
-	# This merges new servers into existing without overwriting existing servers
-	local merged
-	if merged=$(jq -s '
-		(.[0].mcpServers // .[0].servers // {}) as $existing |
-		(.[1].mcpServers // .[1].servers // {}) as $new |
-		if (.[0] | has("mcpServers")) then
-			.[0] * .[1] | .mcpServers = ($new + $existing)
-		elif (.[0] | has("servers")) then
-			.[0] * .[1] | .servers = ($new + $existing)
-		else
-			.[0] * .[1]
-		end' \
-		"$dest_file" "$temp_file" 2>/dev/null); then
-		echo "$merged" >"$dest_file"
-		print_success "Merged MCP servers (preserved existing configuration)"
-		return 0
-	else
-		print_warning "Failed to merge MCP configuration, preserving existing"
-		return 1
-	fi
-}
-
-# -----------------------------------------------------------------------------
-# Dependency Installation Functions
-# -----------------------------------------------------------------------------
-
-install_nodejs() {
-	# Check if NVM is already installed
-	if [[ ! -d "$HOME/.nvm" ]] && [[ ! -s "$HOME/.nvm/nvm.sh" ]]; then
-		print_status "Installing NVM (Node Version Manager)..."
-
-		# Install NVM
-		curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-
-		# Load NVM into current shell
-		export NVM_DIR="$HOME/.nvm"
-		# shellcheck source=/dev/null
-		[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-		print_success "Installed NVM"
-	else
-		print_success "NVM already installed"
-
-		# Load NVM into current shell
-		export NVM_DIR="$HOME/.nvm"
-		# shellcheck source=/dev/null
-		[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-	fi
-
-	# Install Node.js 22 (latest) using NVM
-	print_status "Installing Node.js 22.x (required for Claude Context)..."
-
-	# Install the latest Node.js 22.x version
-	nvm install 22
-	nvm use 22
-	nvm alias default 22
-
-	# Verify installation
-	if command -v npm &>/dev/null; then
-		local node_version
-		node_version=$(node --version)
-		print_success "Installed Node.js $node_version and npm $(npm --version)"
-
-		# Verify it's version 22.x
-		if [[ ! $node_version =~ ^v22\. ]]; then
-			print_warning "Warning: Expected Node.js 22.x but got $node_version"
-		fi
-	else
-		print_error "npm installation failed. Please install Node.js manually using NVM"
-		exit 1
-	fi
-}
-
-install_uv() {
-	if command -v uv &>/dev/null; then
-		print_success "uv already installed"
-		return 0
-	fi
-
-	print_status "Installing uv..."
-	curl -LsSf https://astral.sh/uv/install.sh | sh
-
-	# Source the uv env
-	export PATH="$HOME/.cargo/bin:$PATH"
-
-	print_success "Installed uv"
-}
-
-install_python_tools() {
-	print_status "Installing Python tools globally..."
-
-	uv tool install ruff
-	uv tool install mypy
-	uv tool install basedpyright
-
-	print_success "Installed Python tools (ruff, mypy, basedpyright)"
-}
-
-install_qlty() {
-	if command -v qlty &>/dev/null; then
-		print_success "qlty already installed"
-		return 0
-	fi
-
-	print_status "Installing qlty..."
-	curl -s https://qlty.sh | sh
-
-	# Add to PATH
-	export QLTY_INSTALL="$HOME/.qlty"
-	export PATH="$QLTY_INSTALL/bin:$PATH"
-
-	# Initialize qlty for this project
-	cd "$PROJECT_DIR" && "$HOME/.qlty/bin/qlty" check --install-only
-
-	print_success "Installed qlty"
-}
-
-install_claude_code() {
-	if command -v claude &>/dev/null; then
-		print_success "Claude Code already installed"
-		return 0
-	fi
-
-	print_status "Installing Claude Code..."
-	curl -fsSL https://claude.ai/install.sh | bash
-
-	print_success "Installed Claude Code"
-}
-
-install_cipher() {
-	if command -v cipher &>/dev/null; then
-		print_success "Cipher already installed"
-		return 0
-	fi
-
-	print_status "Installing Cipher..."
-	npm install -g @byterover/cipher
-
-	print_success "Installed Cipher"
-}
-
-install_newman() {
-	if command -v newman &>/dev/null; then
-		print_success "Newman already installed"
-		return 0
-	fi
-
-	print_status "Installing Newman..."
-	npm install -g newman
-
-	print_success "Installed Newman"
-}
-
-install_dotenvx() {
-	if command -v dotenvx &>/dev/null; then
-		print_success "dotenvx already installed"
-		return 0
-	fi
-
-	print_status "Installing dotenvx..."
-	npm install -g @dotenvx/dotenvx
-
-	print_success "Installed dotenvx"
-}
-
-# -----------------------------------------------------------------------------
-# Shell Configuration
-# -----------------------------------------------------------------------------
-
-add_shell_alias() {
-	local shell_file=$1
-	local alias_cmd=$2
-	local shell_name=$3
-	local alias_name=$4
-
-	[[ ! -f $shell_file ]] && return
-
-	# Check if this specific project alias exists
-	if grep -q "# Claude CodePro alias - $PROJECT_DIR" "$shell_file"; then
-		# Update existing alias for this project
-		sed -i.bak "/# Claude CodePro alias - ${PROJECT_DIR//\//\\/}/,/^alias ${alias_name}=/c\\
-# Claude CodePro alias - $PROJECT_DIR\\
-$alias_cmd" "$shell_file" && rm -f "${shell_file}.bak"
-		print_success "Updated alias '$alias_name' in $shell_name"
-	elif grep -q "^alias ${alias_name}=" "$shell_file"; then
-		print_warning "Alias '$alias_name' already exists in $shell_name (skipped)"
-	else
-		printf "\n# Claude CodePro alias - %s\n%s\n" "$PROJECT_DIR" "$alias_cmd" >>"$shell_file"
-		print_success "Added alias '$alias_name' to $shell_name"
-	fi
-}
-
-ensure_nvm_in_shell() {
-	local shell_file=$1
-	local shell_name=$2
-
-	[[ ! -f $shell_file ]] && return
-
-	# Check if NVM is already sourced in the shell config
-	if ! grep -q "NVM_DIR" "$shell_file"; then
-		print_status "Adding NVM initialization to $shell_name..."
-		cat >>"$shell_file" <<'EOF'
-
-# NVM (Node Version Manager)
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-EOF
-		print_success "Added NVM initialization to $shell_name"
-	fi
-}
-
-add_cc_alias() {
-	local alias_name="ccp"
-
-	print_status "Configuring shell for NVM and '$alias_name' alias..."
-
-	# Ensure NVM initialization is in shell configs
-	ensure_nvm_in_shell "$HOME/.bashrc" ".bashrc"
-	ensure_nvm_in_shell "$HOME/.zshrc" ".zshrc"
-
-	local bash_alias="alias ${alias_name}=\"cd '$PROJECT_DIR' && [ -s \\\"\\\$HOME/.nvm/nvm.sh\\\" ] && . \\\"\\\$HOME/.nvm/nvm.sh\\\" && nvm use && bash scripts/build-rules.sh &>/dev/null && clear && dotenvx run -- claude\""
-	local fish_alias="alias ${alias_name}='cd $PROJECT_DIR; and [ -s \"\$HOME/.nvm/nvm.sh\" ]; and source \"\$HOME/.nvm/nvm.sh\"; and nvm use; and bash scripts/build-rules.sh &>/dev/null; and clear; and dotenvx run -- claude'"
-
-	add_shell_alias "$HOME/.bashrc" "$bash_alias" ".bashrc" "$alias_name"
-	add_shell_alias "$HOME/.zshrc" "$bash_alias" ".zshrc" "$alias_name"
-
-	if command -v fish &>/dev/null; then
-		mkdir -p "$HOME/.config/fish"
-		add_shell_alias "$HOME/.config/fish/config.fish" "$fish_alias" "fish config" "$alias_name"
-	fi
-
-	echo ""
-	print_success "Alias '$alias_name' configured!"
-	echo "   Run '$alias_name' from anywhere to start Claude Code for this project"
-}
-
-# -----------------------------------------------------------------------------
+# =============================================================================
 # Build Rules
-# -----------------------------------------------------------------------------
+# =============================================================================
 
+# Build Claude Code commands and skills
+# Executes the build-rules.sh script to generate command/skill files
 build_rules() {
 	print_status "Building Claude Code commands and skills..."
 
@@ -453,9 +102,9 @@ build_rules() {
 	fi
 }
 
-# -----------------------------------------------------------------------------
-# Main Installation
-# -----------------------------------------------------------------------------
+# =============================================================================
+# Main Installation Flow
+# =============================================================================
 
 main() {
 	print_section "Claude CodePro Installation"
@@ -471,7 +120,10 @@ main() {
 	echo ""
 	echo ""
 
-	# Install Claude CodePro files
+	# =============================================================================
+	# Install Claude CodePro Files
+	# =============================================================================
+
 	print_section "Installing Claude CodePro Files"
 
 	# Download .claude directory (update existing files, preserve settings.local.json)
@@ -553,6 +205,7 @@ main() {
 	print_success "Installed $file_count .claude files"
 	echo ""
 
+	# Install other configuration directories
 	if [[ ! -d "$PROJECT_DIR/.cipher" ]]; then
 		install_directory ".cipher" "$PROJECT_DIR"
 		echo ""
@@ -563,10 +216,12 @@ main() {
 		echo ""
 	fi
 
+	# Install MCP configurations
 	merge_mcp_config ".mcp.json" "$PROJECT_DIR/.mcp.json"
 	merge_mcp_config ".mcp-funnel.json" "$PROJECT_DIR/.mcp-funnel.json"
 	echo ""
 
+	# Install scripts
 	mkdir -p "$PROJECT_DIR/scripts"
 	install_file "scripts/setup-env.sh" "$PROJECT_DIR/scripts/setup-env.sh"
 	install_file "scripts/build-rules.sh" "$PROJECT_DIR/scripts/build-rules.sh"
@@ -579,11 +234,17 @@ main() {
 	print_success "Created .nvmrc"
 	echo ""
 
-	# Run .env setup
+	# =============================================================================
+	# Environment Setup
+	# =============================================================================
+
 	print_section "Environment Setup"
 	bash "$PROJECT_DIR/scripts/setup-env.sh"
 
-	# Install dependencies
+	# =============================================================================
+	# Install Dependencies
+	# =============================================================================
+
 	print_section "Installing Dependencies"
 
 	# Install Node.js first (required for npm packages)
@@ -614,16 +275,25 @@ main() {
 	install_dotenvx
 	echo ""
 
-	# Build rules
+	# =============================================================================
+	# Build Rules
+	# =============================================================================
+
 	print_section "Building Rules"
 	build_rules
 	echo ""
 
-	# Configure shells
+	# =============================================================================
+	# Configure Shell
+	# =============================================================================
+
 	print_section "Configuring Shell"
 	add_cc_alias
 
-	# Success message
+	# =============================================================================
+	# Success Message
+	# =============================================================================
+
 	print_section "🎉 Installation Complete!"
 
 	echo ""
@@ -666,5 +336,8 @@ main() {
 	echo ""
 }
 
-# Run main
+# =============================================================================
+# Execute Main
+# =============================================================================
+
 main "$@"
