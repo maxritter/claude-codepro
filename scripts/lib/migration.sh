@@ -103,8 +103,17 @@ migrate_config_yaml() {
 
 	# Read old config and convert to new format
 	awk '
-		/^commands:/ { print; in_commands=1; next }
-		in_commands && /^  [a-z_-]+:/ {
+		/^commands:/ {
+			print
+			in_commands=1
+			next
+		}
+		in_commands && /^  [a-z_-]+:/ && !/^    / {
+			# New command starting, close previous rules if needed
+			if (in_rules) {
+				print "      custom: []"
+				in_rules=0
+			}
 			print
 			command=1
 			next
@@ -123,15 +132,14 @@ migrate_config_yaml() {
 			# End of rules section, add empty custom
 			print "      custom: []"
 			in_rules=0
+			print
+			next
 		}
-		command && /^  [a-z_-]+:/ {
-			# New command starting, close previous rules if needed
-			if (in_rules) {
-				print "      custom: []"
-				in_rules=0
-			}
-			command=1
+		# Skip blank lines while in rules section
+		in_rules && /^[[:space:]]*$/ {
+			next
 		}
+		# Default: print line as-is
 		{ print }
 		END {
 			# Close last command rules if needed
