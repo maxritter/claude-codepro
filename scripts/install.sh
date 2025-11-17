@@ -127,20 +127,9 @@ download_lib_modules() {
 	done
 }
 
-# Check if ALL library modules exist
-check_modules_exist() {
-	for module in "${LIB_MODULES[@]}"; do
-		if [[ ! -f "$PROJECT_DIR/scripts/lib/$module" ]]; then
-			return 1  # At least one module missing
-		fi
-	done
-	return 0  # All modules exist
-}
-
-# Download library modules if ANY are missing (e.g., running via curl | bash or new modules added)
-if ! check_modules_exist; then
-	download_lib_modules
-fi
+# Always download library modules to ensure latest versions
+# This prevents using stale cached versions from previous installations
+download_lib_modules
 
 # Source library modules
 # shellcheck source=lib/ui.sh
