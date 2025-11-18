@@ -70,29 +70,22 @@ test_config_merge_with_yq() {
 
 	local test_dir="$TEST_DIR/test-yq"
 	mkdir -p "$test_dir"
-	export PROJECT_DIR="$test_dir"
-	export TEMP_DIR="$test_dir/tmp"
-	mkdir -p "$TEMP_DIR"
 
-	# Source required libraries
-	# shellcheck source=/dev/null
-	source "$PROJECT_ROOT/scripts/lib/ui.sh"
-	# shellcheck source=/dev/null
-	source "$PROJECT_ROOT/scripts/lib/utils.sh"
+	# Helper function to merge configs using Python
+	merge_rules_config() {
+		local new_config=$1
+		local existing_config=$2
+		python3 -c "
+import sys
+from pathlib import Path
+sys.path.insert(0, '$PROJECT_ROOT/scripts')
+from lib import files
 
-	# Re-define print functions to restore counter functionality
-	print_success() {
-		echo -e "${GREEN}✓ $1${NC}"
-		((PASSED_TESTS++))
+result = files.merge_yaml_config(Path('$new_config'), Path('$existing_config'))
+sys.exit(0 if result else 1)
+"
+		return $?
 	}
-
-	print_error() {
-		echo -e "${RED}✗ $1${NC}"
-		((FAILED_TESTS++))
-	}
-
-	# Extract just the merge_rules_config function from install.sh
-	eval "$(sed -n '/^merge_rules_config() {/,/^}/p' "$PROJECT_ROOT/scripts/install.sh")"
 
 	# Create existing config with custom rules
 	print_test "Creating existing config with custom rules"
@@ -146,11 +139,10 @@ EOF
 
 	# Run merge
 	print_test "Running config merge"
-	if merge_rules_config "$test_dir/new-config.yaml" "$test_dir/existing-config.yaml" >merge.log 2>&1 && grep -q "preserved custom rules" merge.log; then
+	if merge_rules_config "$test_dir/new-config.yaml" "$test_dir/existing-config.yaml"; then
 		print_success "Merge completed successfully"
 	else
 		print_error "Merge did not complete"
-		cat merge.log
 		return 1
 	fi
 

@@ -60,30 +60,36 @@ print_info() {
 	echo -e "${BLUE}ℹ $1${NC}"
 }
 
-# Source migration functions
-source_migration() {
+# Helper function to check migration using Python
+needs_migration() {
 	local test_dir=$1
-	export PROJECT_DIR="$test_dir"
-	export TEMP_DIR="$test_dir/tmp"
-	mkdir -p "$TEMP_DIR"
+	python3 -c "
+import sys
+from pathlib import Path
+sys.path.insert(0, '$PROJECT_ROOT/scripts')
+from lib import migration
 
-	# Source the libraries
-	# shellcheck source=/dev/null
-	source "$PROJECT_ROOT/scripts/lib/ui.sh"
-	# shellcheck source=/dev/null
-	source "$PROJECT_ROOT/scripts/lib/migration.sh"
+if migration.needs_migration(Path('$test_dir')):
+    sys.exit(0)
+else:
+    sys.exit(1)
+"
+	return $?
+}
 
-	# Re-define our test print functions to restore counter functionality
-	# (ui.sh overwrites them with non-counting versions)
-	print_success() {
-		echo -e "${GREEN}✓ $1${NC}"
-		((PASSED_TESTS++))
-	}
+# Helper function to run migration using Python
+run_migration() {
+	local test_dir=$1
+	local non_interactive=$2
+	python3 -c "
+import sys
+from pathlib import Path
+sys.path.insert(0, '$PROJECT_ROOT/scripts')
+from lib import migration
 
-	print_error() {
-		echo -e "${RED}✗ $1${NC}"
-		((FAILED_TESTS++))
-	}
+migration.run_migration(Path('$test_dir'), $non_interactive)
+"
+	return $?
 }
 
 # =============================================================================
@@ -107,9 +113,7 @@ commands:
       - git-operations
 EOF
 
-	source_migration "$test_dir"
-
-	if needs_migration; then
+	if needs_migration "$test_dir"; then
 		print_success "Old format correctly detected as needing migration"
 	else
 		print_error "Old format should need migration"
@@ -131,9 +135,7 @@ commands:
       custom: []
 EOF
 
-	source_migration "$test_dir"
-
-	if ! needs_migration; then
+	if ! needs_migration "$test_dir"; then
 		print_success "New format (standard:) correctly detected as NOT needing migration"
 	else
 		print_error "New format should NOT need migration"
@@ -154,9 +156,7 @@ commands:
         - my-rule
 EOF
 
-	source_migration "$test_dir"
-
-	if ! needs_migration; then
+	if ! needs_migration "$test_dir"; then
 		print_success "New format (custom:) correctly detected as NOT needing migration"
 	else
 		print_error "New format should NOT need migration"
@@ -168,9 +168,7 @@ EOF
 	test_dir="$TEST_DIR/test-no-config"
 	mkdir -p "$test_dir/.claude/rules"
 
-	source_migration "$test_dir"
-
-	if ! needs_migration; then
+	if ! needs_migration "$test_dir"; then
 		print_success "Missing config correctly detected as NOT needing migration"
 	else
 		print_error "Missing config should NOT need migration"
@@ -206,12 +204,9 @@ EOF
 
 	print_success "Test files created"
 
-	# Source migration and run it (simulating non-interactive mode)
-	source_migration "$test_dir"
-
-	# Override the interactive prompt by providing Y input
+	# Run migration in non-interactive mode
 	print_test "Running migration with auto-accept"
-	if printf "Y\n" | run_migration >migration.log 2>&1 && grep -q "Migration complete" migration.log; then
+	if run_migration "$test_dir" "True" >migration.log 2>&1; then
 		print_success "Migration executed successfully"
 	else
 		print_error "Migration did not complete successfully"
