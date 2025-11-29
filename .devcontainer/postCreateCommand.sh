@@ -34,20 +34,41 @@ echo "✓ Shell configuration complete"
 echo ""
 
 # =============================================================================
-# Dev Container Setup Complete
+# Install Claude CodePro (latest version)
 # =============================================================================
 
+echo "=================================================="
+echo "Installing Claude CodePro..."
+echo "=================================================="
+echo ""
+
+# Download and run the latest installer
+curl -sSL https://raw.githubusercontent.com/maxritter/claude-codepro/main/scripts/install.py -o /tmp/claude-codepro-install.py
+python3 /tmp/claude-codepro-install.py --non-interactive
+
+# Get project slug from workspace folder name (matches container name)
+PROJECT_SLUG=$(basename "$PWD")
+
+echo ""
 echo "=================================================="
 echo "Dev Container Setup Complete!"
 echo "=================================================="
 echo ""
-echo "To install Claude CodePro, run the installation command"
-echo "from the project README with your desired version."
+echo "To continue Claude Code setup in your favorite terminal:"
 echo ""
-echo "For the latest version:"
-echo "  curl -sSL https://raw.githubusercontent.com/maxritter/claude-codepro/main/scripts/install.py -o /tmp/claude-codepro-install.py && python3 /tmp/claude-codepro-install.py"
+echo "  1. Open your preferred terminal (iTerm, Terminal, etc.)"
 echo ""
-echo "For a specific version (e.g., v2.4.1):"
-echo "  curl -sSL https://raw.githubusercontent.com/maxritter/claude-codepro/v2.4.1/scripts/install.py -o /tmp/claude-codepro-install.py && python3 /tmp/claude-codepro-install.py"
+echo "  2. Connect to the dev container:"
+echo "     docker exec -it \$(docker ps --filter \"name=${PROJECT_SLUG}\" -q) zsh"
+echo ""
+echo "  3. Start Claude CodePro:"
+echo "     ccp"
+echo ""
+echo "  4. In Claude Code, run: /config"
+echo "     - Set 'Auto-connect to IDE' = true"
+echo "     - Set 'Auto-compact' = false"
+echo ""
+echo "  5. Initialize your project:"
+echo "     /setup"
 echo ""
 echo "=================================================="

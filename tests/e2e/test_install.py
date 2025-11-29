@@ -42,7 +42,12 @@ def run_install(
     install_python: str = "Y",
 ) -> subprocess.CompletedProcess:
     """Run install.py script."""
-    env = {**subprocess.os.environ, "INSTALL_PYTHON": install_python}
+    env = {
+        **subprocess.os.environ,
+        "INSTALL_PYTHON": install_python,
+        "GIT_USER_NAME": "Test User",
+        "GIT_USER_EMAIL": "test@example.com",
+    }
 
     args = [
         "python3",
@@ -236,6 +241,7 @@ class TestBootstrapDownload:
             "migration.py",
             "env_setup.py",
             "devcontainer.py",
+            "git_setup.py",
         ]
 
         for module in required_modules:

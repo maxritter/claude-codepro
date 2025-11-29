@@ -33,6 +33,7 @@ LIB_MODULES = [
     "migration.py",
     "env_setup.py",
     "devcontainer.py",
+    "git_setup.py",
 ]
 
 PYTHON_PERMISSIONS = [
@@ -285,6 +286,7 @@ def main() -> None:
         downloads,
         env_setup,
         files,
+        git_setup,
         migration,
         shell_config,
         ui,
@@ -413,6 +415,11 @@ def main() -> None:
 
             dependencies.install_python_tools()
             print("")
+
+        # Git must be configured before qlty (qlty requires git)
+        if not git_setup.setup_git(project_dir, args.non_interactive):
+            ui.print_error("Git setup failed. Qlty requires git to be configured.")
+            sys.exit(1)
 
         dependencies.install_qlty(project_dir)
         print("")
