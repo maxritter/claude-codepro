@@ -43,11 +43,12 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install pytest pytest-cov
+          python3 -m pip install rich InquirerPy httpx typer platformdirs
 
       - name: Run unit tests with coverage
         run: |
           python3 -m pytest tests/unit/ -v \
-            --cov=.claude/rules --cov=scripts \
+            --cov=.claude/rules --cov=installer \
             --cov-report=term --cov-report=xml
 
       - name: Run E2E tests
