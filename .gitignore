@@ -228,8 +228,8 @@ data/
 .claude.backup.*
 settings.local.json
 .claude/CLAUDE.md
-.claude/rules/custom/project.md
-.claude/rules/custom/git-commits.md
+.claude/rules/custom/*
+!.claude/rules/custom/python-rules.md
 CLAUDE.local.md
 
 # Premium build artifacts (source is encrypted with git-crypt)

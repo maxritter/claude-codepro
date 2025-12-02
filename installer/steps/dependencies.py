@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from installer.context import InstallContext
 
 MAX_RETRIES = 3
-RETRY_DELAY = 2  # seconds
+RETRY_DELAY = 2
 
 
 def _run_bash_with_retry(command: str, cwd: Path | None = None) -> bool:
@@ -81,12 +81,49 @@ def install_claude_code() -> bool:
     return _run_bash_with_retry("curl -fsSL https://claude.ai/install.sh | bash")
 
 
-def install_qlty(project_dir: Path) -> bool:
-    """Install qlty code quality tool."""
-    if command_exists("qlty"):
-        return True
+def install_qlty(project_dir: Path) -> tuple[bool, bool]:
+    """Install qlty code quality tool. Returns (success, was_fresh_install)."""
+    qlty_bin = Path.home() / ".qlty" / "bin" / "qlty"
 
-    return _run_bash_with_retry("curl https://qlty.sh | bash", cwd=project_dir)
+    if command_exists("qlty") or qlty_bin.exists():
+        return True, False
+
+    success = _run_bash_with_retry("curl https://qlty.sh | bash", cwd=project_dir)
+    return success, success
+
+
+def run_qlty_check(project_dir: Path, ui) -> bool:
+    """Run qlty check to download prerequisites (formatters, linters)."""
+    import os
+
+    qlty_bin = Path.home() / ".qlty" / "bin" / "qlty"
+    if not qlty_bin.exists():
+        return False
+
+    env = os.environ.copy()
+    env["PATH"] = f"{qlty_bin.parent}:{env.get('PATH', '')}"
+
+    try:
+        process = subprocess.Popen(
+            [str(qlty_bin), "check", "--no-fix"],
+            cwd=project_dir,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+
+        if process.stdout:
+            for line in process.stdout:
+                line = line.rstrip()
+                if line and ui:
+                    if "Installing" in line or "Downloading" in line or "✔" in line:
+                        ui.print(f"  {line}")
+
+        process.wait()
+        return True
+    except Exception:
+        return False
 
 
 def install_dotenvx() -> bool:
@@ -138,8 +175,20 @@ class DependenciesStep(BaseStep):
         if _install_with_spinner(ui, "Claude Code", install_claude_code):
             installed.append("claude_code")
 
-        if _install_with_spinner(ui, "qlty", install_qlty, ctx.project_dir):
+        qlty_result = install_qlty(ctx.project_dir)
+        if qlty_result[0]:
             installed.append("qlty")
+            if ui:
+                ui.success("qlty installed")
+            if qlty_result[1]:
+                if ui:
+                    ui.status("Downloading qlty prerequisites (formatters, linters)...")
+                run_qlty_check(ctx.project_dir, ui)
+                if ui:
+                    ui.success("qlty prerequisites ready")
+        else:
+            if ui:
+                ui.warning("Could not install qlty - please install manually")
 
         if _install_with_spinner(ui, "dotenvx", install_dotenvx):
             installed.append("dotenvx")

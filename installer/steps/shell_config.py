@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 CCP_ALIAS_MARKER = "# Claude CodePro alias"
 FZF_MARKER = "source <(fzf --zsh)"
 DOTENV_MARKER = "ZSH_DOTENV_PROMPT"
+QLTY_PATH_MARKER = "# qlty PATH"
 
 
 def get_alias_line(shell_type: str) -> str:
@@ -95,7 +96,6 @@ def _configure_zsh_dotenv(zshrc: Path, ui) -> bool:
     content = zshrc.read_text()
     modified = False
 
-    # Add dotenv to plugins if not present
     if "plugins=(" in content and "dotenv" not in content:
         content = content.replace("plugins=(", "plugins=(dotenv ")
         zshrc.write_text(content)
@@ -106,18 +106,14 @@ def _configure_zsh_dotenv(zshrc: Path, ui) -> bool:
         if ui:
             ui.info("dotenv plugin already configured")
 
-    # Add ZSH_DOTENV_PROMPT setting BEFORE source $ZSH/oh-my-zsh.sh
-    # This must come before oh-my-zsh is loaded for the setting to take effect
     if DOTENV_MARKER not in content:
         content = zshrc.read_text()
         dotenv_setting = "# Auto-load .env files without prompting\nexport ZSH_DOTENV_PROMPT=false\n\n"
 
         if "source $ZSH/oh-my-zsh.sh" in content:
-            # Insert before oh-my-zsh source line
             content = content.replace("source $ZSH/oh-my-zsh.sh", dotenv_setting + "source $ZSH/oh-my-zsh.sh")
             zshrc.write_text(content)
         else:
-            # Fallback: append to end
             with open(zshrc, "a") as f:
                 f.write(f"\n{dotenv_setting}")
 
@@ -130,6 +126,30 @@ def _configure_zsh_dotenv(zshrc: Path, ui) -> bool:
     return modified
 
 
+def _configure_qlty_path(config_file: Path, ui, quiet: bool = False) -> bool:
+    """Add qlty to PATH in shell config (idempotent)."""
+    if not config_file.exists():
+        return False
+
+    content = config_file.read_text()
+    if QLTY_PATH_MARKER in content or ".qlty/bin" in content:
+        if ui and not quiet:
+            ui.info(f"qlty PATH already configured in {config_file.name}")
+        return False
+
+    if "fish" in config_file.name:
+        qlty_path_line = f"\n{QLTY_PATH_MARKER}\nset -gx PATH $HOME/.qlty/bin $PATH\n"
+    else:
+        qlty_path_line = f'\n{QLTY_PATH_MARKER}\nexport PATH="$HOME/.qlty/bin:$PATH"\n'
+
+    with open(config_file, "a") as f:
+        f.write(qlty_path_line)
+
+    if ui:
+        ui.success(f"Added qlty to PATH in {config_file.name}")
+    return True
+
+
 def _set_zsh_default_shell(ui) -> bool:
     """Set zsh as default shell if not already (idempotent)."""
     import os
@@ -140,7 +160,6 @@ def _set_zsh_default_shell(ui) -> bool:
             ui.info("zsh already default shell")
         return False
 
-    # Find zsh path
     zsh_path = subprocess.run(["which", "zsh"], capture_output=True, text=True).stdout.strip()
 
     if not zsh_path:
@@ -178,7 +197,6 @@ class ShellConfigStep(BaseStep):
         config_files = get_shell_config_files()
         modified_files: list[str] = []
 
-        # Configure zsh-specific settings if in devcontainer
         if is_in_devcontainer():
             zshrc = Path.home() / ".zshrc"
             if zshrc.exists():
@@ -187,6 +205,11 @@ class ShellConfigStep(BaseStep):
                 _configure_zsh_fzf(zshrc, ui)
                 _configure_zsh_dotenv(zshrc, ui)
                 _set_zsh_default_shell(ui)
+
+        if ui:
+            ui.status("Configuring qlty PATH...")
+        for config_file in config_files:
+            _configure_qlty_path(config_file, ui, quiet=True)
 
         if ui:
             ui.status("Configuring shell alias...")

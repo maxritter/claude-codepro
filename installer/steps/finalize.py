@@ -144,6 +144,7 @@ class FinalizeStep(BaseStep):
                     "     • Auto-connect to IDE (external terminal) = true",
                 ),
                 ("Verify MCP servers", "Run: /mcp → If any fail, click on the server and select 'Reconnect'"),
+                ("Connect IDE", "Run: /ide → Enables real-time diagnostics"),
                 ("Initialize project", "Run: /setup → Scans and indexes codebase"),
                 ("Start building!", "/plan → /implement → /verify"),
             ]
