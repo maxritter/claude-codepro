@@ -121,8 +121,8 @@ class TestGetPremiumKey:
             )
             assert step._get_premium_key(ctx) == "EXISTING-KEY"
 
-    def test_get_premium_key_returns_env_key_if_set(self):
-        """_get_premium_key returns key from CCP_LICENSE_KEY env var."""
+    def test_get_premium_key_returns_existing_if_env_key_set(self):
+        """_get_premium_key returns EXISTING when CCP_LICENSE_KEY is already set."""
         from installer.context import InstallContext
         from installer.steps.premium import PremiumStep
         from installer.ui import Console
@@ -135,7 +135,7 @@ class TestGetPremiumKey:
                 ui=Console(non_interactive=True),
             )
             with patch.dict("os.environ", {"CCP_LICENSE_KEY": "ENV-KEY"}):
-                assert step._get_premium_key(ctx) == "ENV-KEY"
+                assert step._get_premium_key(ctx) == "EXISTING"
 
     def test_get_premium_key_returns_none_in_non_interactive(self):
         """_get_premium_key returns None in non-interactive mode without key."""

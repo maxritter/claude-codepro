@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from installer.steps.base import BaseStep
+from installer.steps.environment import key_is_set
 
 if TYPE_CHECKING:
     from installer.context import InstallContext
@@ -187,15 +188,13 @@ class PremiumStep(BaseStep):
     name = "premium"
 
     def _get_premium_key(self, ctx: InstallContext) -> str | None:
-        """Get premium key from context, environment, or prompt."""
-        import os
-
+        """Get premium key from context, environment, or prompt. Returns 'EXISTING' if already validated."""
         if ctx.premium_key:
             return ctx.premium_key
 
-        env_key = os.environ.get("CCP_LICENSE_KEY", "").strip()
-        if env_key:
-            return env_key
+        env_file = ctx.project_dir / ".env"
+        if key_is_set("CCP_LICENSE_KEY", env_file):
+            return "EXISTING"
 
         if not ctx.non_interactive and ctx.ui:
             ctx.ui.print()
@@ -245,37 +244,43 @@ class PremiumStep(BaseStep):
             remove_premium_hooks_from_settings(settings_file)
             return
 
-        ctx.premium_key = premium_key
-
         if ui:
             ui.section("Premium Features")
-            ui.status("Validating license key...")
 
-        while True:
-            valid, message = validate_license_key(ctx.premium_key)
-            if valid:
-                break
-
+        if premium_key == "EXISTING":
             if ui:
-                ui.error(f"License validation failed: {message}")
+                ui.success("License key already configured")
+        else:
+            ctx.premium_key = premium_key
 
-            retry_key = self._prompt_for_license_key(ctx)
-            if not retry_key:
-                if ui:
-                    ui.status("Skipping premium features")
-                remove_premium_hooks_from_settings(settings_file)
-                return
-
-            ctx.premium_key = retry_key
             if ui:
                 ui.status("Validating license key...")
 
-        if ui:
-            ui.success(message)
+            while True:
+                valid, message = validate_license_key(ctx.premium_key)
+                if valid:
+                    break
 
-        save_env_var(ctx.project_dir, "CCP_LICENSE_KEY", ctx.premium_key)
-        if ui:
-            ui.success("Saved license key to .env")
+                if ui:
+                    ui.error(f"License validation failed: {message}")
+
+                retry_key = self._prompt_for_license_key(ctx)
+                if not retry_key:
+                    if ui:
+                        ui.status("Skipping premium features")
+                    remove_premium_hooks_from_settings(settings_file)
+                    return
+
+                ctx.premium_key = retry_key
+                if ui:
+                    ui.status("Validating license key...")
+
+            if ui:
+                ui.success(message)
+
+            save_env_var(ctx.project_dir, "CCP_LICENSE_KEY", ctx.premium_key)
+            if ui:
+                ui.success("Saved license key to .env")
 
         if ctx.local_mode:
             if ui:
@@ -303,12 +308,8 @@ class PremiumStep(BaseStep):
             ui.success(f"Installed premium binary to {result}")
 
         if not ctx.non_interactive and ui:
-            import os
-
             env_file = ctx.project_dir / ".env"
-            gemini_already_set = os.environ.get("GEMINI_API_KEY") or (
-                env_file.exists() and "GEMINI_API_KEY=" in env_file.read_text()
-            )
+            gemini_already_set = key_is_set("GEMINI_API_KEY", env_file)
 
             if gemini_already_set:
                 ui.success("GEMINI_API_KEY already set, skipping")
