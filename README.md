@@ -24,7 +24,7 @@ Start shipping systematically with Spec-Driven Development, Skills, TDD, Semanti
 Run this command in **any project directory** for a **fresh install** or to **update to the latest version**:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v3.0.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v3.0.1/install.sh | bash
 ```
 
 The installer will guide you through the setup process with interactive prompts.
