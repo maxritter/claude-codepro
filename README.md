@@ -37,7 +37,7 @@ Claude CodePro can be installed into any existing project:
 2. Run this command in the terminal:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v3.1.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v3.1.1/install.sh | bash
 ```
 
 3. Reopen in Container: `Cmd+Shift+P` → "Dev Containers: Reopen in Container"
