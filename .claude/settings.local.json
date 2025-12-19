@@ -59,10 +59,20 @@
       "SlashCommand(/verify:*)",
       "SlashCommand(/setup:*)",
       "Skill(claude-mem:mem-search)",
-      "Skill(claude-mem:troubleshoot)"
+      "Skill(claude-mem:troubleshoot)",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_install"
     ],
     "deny": []
   },
+  "model": "opus",
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "claude-context",
+    "tavily",
+    "Ref",
+    "mcp-funnel"
+  ],
   "hooks": {
     "PreToolUse": [
       {
@@ -105,12 +115,9 @@
     "command": "npx -y ccstatusline@latest",
     "padding": 0
   },
-  "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": ["claude-context", "tavily", "Ref", "mcp-funnel"],
   "enabledPlugins": {
     "claude-mem@thedotmack": true
   },
-  "model": "opus",
   "outputStyle": "default",
   "spinnerTipsEnabled": false,
   "alwaysThinkingEnabled": true
