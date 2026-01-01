@@ -79,10 +79,11 @@ class TestClaudeFilesStep:
 
         step = ClaudeFilesStep()
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Create source with settings.local.json
+            # Create source with both settings files
             source_claude = Path(tmpdir) / "source" / ".claude"
             source_claude.mkdir(parents=True)
-            (source_claude / "settings.local.json").write_text('{"test": true}')
+            (source_claude / "settings.local.json").write_text('{"python": true}')
+            (source_claude / "settings.local.base.json").write_text('{"python": false}')
 
             dest_dir = Path(tmpdir) / "dest"
             dest_dir.mkdir()
@@ -100,6 +101,78 @@ class TestClaudeFilesStep:
             # settings.local.json should be copied
             assert (dest_dir / ".claude" / "settings.local.json").exists()
 
+    def test_claude_files_installs_python_settings_when_enabled(self):
+        """ClaudeFilesStep installs Python settings when install_python=True."""
+        import json
+
+        from installer.context import InstallContext
+        from installer.steps.claude_files import ClaudeFilesStep
+        from installer.ui import Console
+
+        step = ClaudeFilesStep()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create source with both settings files
+            source_claude = Path(tmpdir) / "source" / ".claude"
+            source_claude.mkdir(parents=True)
+            (source_claude / "settings.local.json").write_text('{"hasPythonHooks": true}')
+            (source_claude / "settings.local.base.json").write_text('{"hasPythonHooks": false}')
+
+            dest_dir = Path(tmpdir) / "dest"
+            dest_dir.mkdir()
+            (dest_dir / ".claude").mkdir()
+
+            ctx = InstallContext(
+                project_dir=dest_dir,
+                install_python=True,
+                ui=Console(non_interactive=True),
+                local_mode=True,
+                local_repo_dir=Path(tmpdir) / "source",
+            )
+
+            step.run(ctx)
+
+            # settings.local.json should contain Python hooks config
+            settings_file = dest_dir / ".claude" / "settings.local.json"
+            assert settings_file.exists()
+            settings = json.loads(settings_file.read_text())
+            assert settings["hasPythonHooks"] is True
+
+    def test_claude_files_installs_base_settings_when_python_disabled(self):
+        """ClaudeFilesStep installs base settings (no Python hooks) when install_python=False."""
+        import json
+
+        from installer.context import InstallContext
+        from installer.steps.claude_files import ClaudeFilesStep
+        from installer.ui import Console
+
+        step = ClaudeFilesStep()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create source with both settings files
+            source_claude = Path(tmpdir) / "source" / ".claude"
+            source_claude.mkdir(parents=True)
+            (source_claude / "settings.local.json").write_text('{"hasPythonHooks": true}')
+            (source_claude / "settings.local.base.json").write_text('{"hasPythonHooks": false}')
+
+            dest_dir = Path(tmpdir) / "dest"
+            dest_dir.mkdir()
+            (dest_dir / ".claude").mkdir()
+
+            ctx = InstallContext(
+                project_dir=dest_dir,
+                install_python=False,
+                ui=Console(non_interactive=True),
+                local_mode=True,
+                local_repo_dir=Path(tmpdir) / "source",
+            )
+
+            step.run(ctx)
+
+            # settings.local.json should contain base config (no Python hooks)
+            settings_file = dest_dir / ".claude" / "settings.local.json"
+            assert settings_file.exists()
+            settings = json.loads(settings_file.read_text())
+            assert settings["hasPythonHooks"] is False
+
     def test_claude_files_skips_python_when_disabled(self):
         """ClaudeFilesStep skips Python files when install_python=False."""
         from installer.context import InstallContext
@@ -114,6 +187,9 @@ class TestClaudeFilesStep:
             source_hooks.mkdir(parents=True)
             (source_hooks / "file_checker_python.py").write_text("# python hook")
             (source_hooks / "other_hook.sh").write_text("# other hook")
+            # Add settings files (required by the step)
+            (source_claude / "settings.local.json").write_text('{"python": true}')
+            (source_claude / "settings.local.base.json").write_text('{"python": false}')
 
             dest_dir = Path(tmpdir) / "dest"
             dest_dir.mkdir()

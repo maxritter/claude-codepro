@@ -11,6 +11,10 @@ from installer.steps.base import BaseStep
 if TYPE_CHECKING:
     from installer.context import InstallContext
 
+# Settings file names in the repository
+SETTINGS_BASE_FILE = "settings.local.base.json"  # Without Python hooks
+SETTINGS_PYTHON_FILE = "settings.local.json"  # With Python hooks
+
 
 class ClaudeFilesStep(BaseStep):
     """Step that installs .claude directory files from the repository."""
@@ -61,6 +65,10 @@ class ClaudeFilesStep(BaseStep):
             "other": [],
         }
 
+        # Track settings files for special handling
+        settings_base_path: str | None = None
+        settings_python_path: str | None = None
+
         for file_path in claude_files:
             if not file_path:
                 continue
@@ -69,6 +77,14 @@ class ClaudeFilesStep(BaseStep):
                 continue
 
             if file_path.endswith(".pyc"):
+                continue
+
+            # Track settings files for later - don't add to categories yet
+            if SETTINGS_BASE_FILE in file_path:
+                settings_base_path = file_path
+                continue
+            if SETTINGS_PYTHON_FILE in file_path and SETTINGS_BASE_FILE not in file_path:
+                settings_python_path = file_path
                 continue
 
             if not ctx.install_python:
@@ -118,6 +134,29 @@ class ClaudeFilesStep(BaseStep):
                         installed_files.append(str(dest_file))
                     else:
                         failed_files.append(file_path)
+
+        # Install the appropriate settings file based on Python support
+        # When install_python=True: use settings.local.json (with Python hooks)
+        # When install_python=False: use settings.local.base.json (without Python hooks)
+        settings_source = settings_python_path if ctx.install_python else settings_base_path
+        settings_dest = ctx.project_dir / ".claude" / "settings.local.json"
+
+        if settings_source:
+            if ui:
+                with ui.spinner("Installing settings..."):
+                    if download_file(settings_source, settings_dest, config):
+                        file_count += 1
+                        installed_files.append(str(settings_dest))
+                        ui.success("Installed settings.local.json")
+                    else:
+                        failed_files.append(settings_source)
+                        ui.warning("Failed to install settings.local.json")
+            else:
+                if download_file(settings_source, settings_dest, config):
+                    file_count += 1
+                    installed_files.append(str(settings_dest))
+                else:
+                    failed_files.append(settings_source)
 
         ctx.config["installed_files"] = installed_files
 
