@@ -101,6 +101,45 @@ class TestProcessSettings:
         assert parsed["env"]["DISABLE_TELEMETRY"] == "true"
         assert parsed["permissions"]["allow"] == ["Read", "Write"]
 
+    def test_process_settings_handles_malformed_hooks(self):
+        """process_settings handles malformed hook entries gracefully."""
+        from installer.steps.claude_files import PYTHON_CHECKER_HOOK, process_settings
+
+        # Malformed settings with non-dict entries in hooks arrays
+        settings = {
+            "hooks": {
+                "PostToolUse": [
+                    "not a dict",  # Malformed: should be skipped
+                    None,  # Malformed: should be skipped
+                    {
+                        "matcher": "Write|Edit|MultiEdit",
+                        "hooks": [
+                            "string hook",  # Malformed: should be preserved
+                            None,  # Malformed: should be preserved
+                            {"type": "command", "command": "python3 .claude/hooks/file_checker_qlty.py"},
+                            {"type": "command", "command": PYTHON_CHECKER_HOOK},
+                        ],
+                    }
+                ]
+            }
+        }
+
+        # Should not raise an exception
+        result = process_settings(json.dumps(settings), install_python=False)
+        parsed = json.loads(result)
+
+        # The valid hook group should have Python hook removed but others preserved
+        valid_hook_group = parsed["hooks"]["PostToolUse"][2]  # Third entry is the valid dict
+        hooks = valid_hook_group["hooks"]
+
+        # Malformed entries should be preserved (we don't remove what we don't understand)
+        assert "string hook" in hooks
+        assert None in hooks
+        # Valid non-Python hook should be preserved
+        assert {"type": "command", "command": "python3 .claude/hooks/file_checker_qlty.py"} in hooks
+        # Python hook should be removed
+        assert {"type": "command", "command": PYTHON_CHECKER_HOOK} not in hooks
+
 
 class TestClaudeFilesStep:
     """Test ClaudeFilesStep class."""
