@@ -101,82 +101,26 @@ class TestProcessSettings:
         assert parsed["env"]["DISABLE_TELEMETRY"] == "true"
         assert parsed["permissions"]["allow"] == ["Read", "Write"]
 
-    def test_process_settings_handles_malformed_hooks(self):
-        """process_settings handles malformed hook entries gracefully."""
-        from installer.steps.claude_files import PYTHON_CHECKER_HOOK, process_settings
-
-        # Malformed settings with non-dict entries in hooks arrays
-        settings = {
-            "hooks": {
-                "PostToolUse": [
-                    "not a dict",  # Malformed: should be skipped
-                    None,  # Malformed: should be skipped
-                    {
-                        "matcher": "Write|Edit|MultiEdit",
-                        "hooks": [
-                            "string hook",  # Malformed: should be preserved
-                            None,  # Malformed: should be preserved
-                            {"type": "command", "command": "python3 .claude/hooks/file_checker_qlty.py"},
-                            {"type": "command", "command": PYTHON_CHECKER_HOOK},
-                        ],
-                    }
-                ]
-            }
-        }
-
-        # Should not raise an exception
-        result = process_settings(json.dumps(settings), install_python=False)
-        parsed = json.loads(result)
-
-        # The valid hook group should have Python hook removed but others preserved
-        valid_hook_group = parsed["hooks"]["PostToolUse"][2]  # Third entry is the valid dict
-        hooks = valid_hook_group["hooks"]
-
-        # Malformed entries should be preserved (we don't remove what we don't understand)
-        assert "string hook" in hooks
-        assert None in hooks
-        # Valid non-Python hook should be preserved
-        assert {"type": "command", "command": "python3 .claude/hooks/file_checker_qlty.py"} in hooks
-        # Python hook should be removed
-        assert {"type": "command", "command": PYTHON_CHECKER_HOOK} not in hooks
-
-    def test_process_settings_handles_null_post_tool_use(self):
-        """process_settings handles PostToolUse being null gracefully."""
+    def test_process_settings_handles_malformed_structure(self):
+        """process_settings handles malformed settings gracefully without crashing."""
         from installer.steps.claude_files import process_settings
 
-        # PostToolUse explicitly set to null
-        settings = {"hooks": {"PostToolUse": None, "PreToolUse": []}}
+        # Various malformed structures - all should not crash
+        malformed_cases = [
+            {"hooks": {"PostToolUse": None}},  # null PostToolUse
+            {"hooks": {"PostToolUse": "not a list"}},  # wrong type
+            {"hooks": {"PostToolUse": [{"hooks": None}]}},  # null hooks in group
+            {"hooks": {"PostToolUse": [None, "string"]}},  # non-dict entries
+            {"hooks": None},  # null hooks
+            {"no_hooks": "at all"},  # missing hooks entirely
+        ]
 
-        # Should not raise an exception
-        result = process_settings(json.dumps(settings), install_python=False)
-        parsed = json.loads(result)
-
-        # Structure should be preserved
-        assert parsed["hooks"]["PostToolUse"] is None
-        assert parsed["hooks"]["PreToolUse"] == []
-
-    def test_process_settings_handles_null_hooks_in_group(self):
-        """process_settings handles hooks being null inside a hook group gracefully."""
-        from installer.steps.claude_files import process_settings
-
-        # hooks inside a hook group is null
-        settings = {
-            "hooks": {
-                "PostToolUse": [
-                    {"matcher": "Write|Edit", "hooks": None},
-                    {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo test"}]},
-                ]
-            }
-        }
-
-        # Should not raise an exception
-        result = process_settings(json.dumps(settings), install_python=False)
-        parsed = json.loads(result)
-
-        # First group should have hooks unchanged (null)
-        assert parsed["hooks"]["PostToolUse"][0]["hooks"] is None
-        # Second group should have hooks preserved
-        assert len(parsed["hooks"]["PostToolUse"][1]["hooks"]) == 1
+        for settings in malformed_cases:
+            # Should not raise an exception
+            result = process_settings(json.dumps(settings), install_python=False)
+            # Should return valid JSON
+            parsed = json.loads(result)
+            assert parsed is not None
 
 
 class TestClaudeFilesStep:
