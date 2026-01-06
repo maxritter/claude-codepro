@@ -260,6 +260,33 @@ def install_pyright_lsp() -> bool:
     return _run_bash_with_retry("claude plugin install pyright-lsp")
 
 
+def _configure_claude_mem_defaults() -> bool:
+    """Configure Claude Mem with recommended defaults."""
+    import json
+
+    settings_dir = Path.home() / ".claude-mem"
+    settings_path = settings_dir / "settings.json"
+
+    try:
+        settings_dir.mkdir(parents=True, exist_ok=True)
+
+        if settings_path.exists():
+            settings = json.loads(settings_path.read_text())
+        else:
+            settings = {}
+
+        settings.update(
+            {
+                "CLAUDE_MEM_FOLDER_CLAUDEMD_ENABLED": "false",
+                "CLAUDE_MEM_MODEL": "opus",
+            }
+        )
+        settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+        return True
+    except Exception:
+        return False
+
+
 def install_claude_mem() -> bool:
     """Install claude-mem plugin via claude plugin marketplace."""
     try:
@@ -268,12 +295,17 @@ def install_claude_mem() -> bool:
             capture_output=True,
             text=True,
         )
-        if result.returncode != 0 and "already installed" not in result.stderr.lower():
+        output = (result.stdout + result.stderr).lower()
+        if result.returncode != 0 and "already installed" not in output:
             return False
     except Exception:
         return False
 
-    return _run_bash_with_retry("claude plugin install claude-mem")
+    if not _run_bash_with_retry("claude plugin install claude-mem"):
+        return False
+
+    _configure_claude_mem_defaults()
+    return True
 
 
 MILVUS_COMPOSE_URL = (

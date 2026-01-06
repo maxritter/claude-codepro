@@ -61,7 +61,7 @@ class TestProcessSettings:
         hooks = parsed["hooks"]["PostToolUse"][0]["hooks"]
         commands = [h["command"] for h in hooks]
         assert PYTHON_CHECKER_HOOK not in commands
-        assert "python3 .claude/hooks/file_checker_qlty.py" in commands
+        assert any("file_checker_qlty.py" in cmd for cmd in commands)
         assert len(hooks) == 1
 
     def test_process_settings_handles_missing_hooks(self):
@@ -260,10 +260,10 @@ class TestClaudeFilesStep:
             settings_file = dest_dir / ".claude" / "settings.local.json"
             assert settings_file.exists()
             settings = json.loads(settings_file.read_text())
-            # Python hook should be preserved
+            # Python hook should be preserved (with absolute path)
             hooks = settings["hooks"]["PostToolUse"][0]["hooks"]
             commands = [h["command"] for h in hooks]
-            assert PYTHON_CHECKER_HOOK in commands
+            assert any("file_checker_python.py" in cmd for cmd in commands)
 
     def test_claude_files_removes_python_hooks_when_python_disabled(self):
         """ClaudeFilesStep removes Python hooks when install_python=False."""
@@ -315,8 +315,8 @@ class TestClaudeFilesStep:
             hooks = settings["hooks"]["PostToolUse"][0]["hooks"]
             commands = [h["command"] for h in hooks]
             assert PYTHON_CHECKER_HOOK not in commands
-            # Other hooks should still be present
-            assert "python3 .claude/hooks/file_checker_qlty.py" in commands
+            # Other hooks should still be present (with absolute paths)
+            assert any("file_checker_qlty.py" in cmd for cmd in commands)
 
     def test_claude_files_skips_python_when_disabled(self):
         """ClaudeFilesStep skips Python files when install_python=False."""

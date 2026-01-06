@@ -2,7 +2,6 @@
   "env": {
     "ENABLE_EXPERIMENTAL_MCP_CLI": "true",
     "ENABLE_LSP_TOOL": "1",
-    "CLAUDE_MEM_MODEL": "opus",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "63999",
     "MAX_MCP_OUTPUT_TOKENS": "10000",
     "MAX_THINKING_TOKENS": "31999",
@@ -76,7 +75,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/tdd_enforcer.py"
+            "command": "python3 /workspaces/claude-codepro/.claude/hooks/tdd_enforcer.py"
           }
         ]
       }
@@ -87,11 +86,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/file_checker_qlty.py"
+            "command": "python3 /workspaces/claude-codepro/.claude/hooks/file_checker_qlty.py"
           },
           {
             "type": "command",
-            "command": "python3 .claude/hooks/file_checker_python.py"
+            "command": "python3 /workspaces/claude-codepro/.claude/hooks/file_checker_python.py"
           }
         ]
       },
@@ -100,7 +99,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/context_monitor.py"
+            "command": "python3 /workspaces/claude-codepro/.claude/hooks/context_monitor.py"
           }
         ]
       }

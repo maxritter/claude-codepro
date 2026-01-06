@@ -14,6 +14,24 @@ if TYPE_CHECKING:
 
 SETTINGS_FILE = "settings.local.json"
 PYTHON_CHECKER_HOOK = "python3 .claude/hooks/file_checker_python.py"
+HOOKS_PATH_PATTERN = ".claude/hooks/"
+SOURCE_REPO_PATH = "/workspaces/claude-codepro/.claude/hooks/"
+
+
+def patch_hook_paths(content: str, project_dir: Path) -> str:
+    """Patch hook paths to use absolute paths for the target project.
+
+    Handles both relative paths (.claude/hooks/) and existing absolute paths
+    from the source repo (/workspaces/claude-codepro/.claude/hooks/).
+    """
+    abs_hooks_path = str(project_dir / ".claude" / "hooks") + "/"
+
+    content = content.replace(SOURCE_REPO_PATH, abs_hooks_path)
+
+    content = content.replace(" " + HOOKS_PATH_PATTERN, " " + abs_hooks_path)
+    content = content.replace('"' + HOOKS_PATH_PATTERN, '"' + abs_hooks_path)
+
+    return content
 
 
 def process_settings(settings_content: str, install_python: bool) -> str:
@@ -156,7 +174,9 @@ class ClaudeFilesStep(BaseStep):
         if settings_path:
             if ui:
                 with ui.spinner("Installing settings..."):
-                    success = self._install_settings(settings_path, settings_dest, config, ctx.install_python)
+                    success = self._install_settings(
+                        settings_path, settings_dest, config, ctx.install_python, ctx.project_dir
+                    )
                     if success:
                         file_count += 1
                         installed_files.append(str(settings_dest))
@@ -165,7 +185,9 @@ class ClaudeFilesStep(BaseStep):
                         failed_files.append(settings_path)
                         ui.warning("Failed to install settings.local.json")
             else:
-                success = self._install_settings(settings_path, settings_dest, config, ctx.install_python)
+                success = self._install_settings(
+                    settings_path, settings_dest, config, ctx.install_python, ctx.project_dir
+                )
                 if success:
                     file_count += 1
                     installed_files.append(str(settings_dest))
@@ -210,14 +232,16 @@ class ClaudeFilesStep(BaseStep):
         dest_path: Path,
         config: DownloadConfig,
         install_python: bool,
+        project_dir: Path,
     ) -> bool:
-        """Download and process settings file, removing Python hooks if needed.
+        """Download and process settings file.
 
         Args:
             source_path: Path to settings file in repository
             dest_path: Local destination path
             config: Download configuration
             install_python: Whether Python support is being installed
+            project_dir: Project directory for absolute hook paths
 
         Returns:
             True if successful, False otherwise
@@ -232,6 +256,7 @@ class ClaudeFilesStep(BaseStep):
             try:
                 settings_content = temp_file.read_text()
                 processed_content = process_settings(settings_content, install_python)
+                processed_content = patch_hook_paths(processed_content, project_dir)
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
                 dest_path.write_text(processed_content)
                 return True
