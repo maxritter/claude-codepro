@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 SETTINGS_FILE = "settings.local.json"
 PYTHON_CHECKER_HOOK = "python3 .claude/hooks/file_checker_python.py"
+TYPESCRIPT_CHECKER_HOOK = "python3 .claude/hooks/file_checker_ts.py"
 HOOKS_PATH_PATTERN = ".claude/hooks/"
 SOURCE_REPO_PATH = "/workspaces/claude-codepro/.claude/hooks/"
 
@@ -34,22 +35,31 @@ def patch_hook_paths(content: str, project_dir: Path) -> str:
     return content
 
 
-def process_settings(settings_content: str, install_python: bool) -> str:
-    """Process settings JSON, optionally removing Python-specific hooks.
+def process_settings(settings_content: str, install_python: bool, install_typescript: bool) -> str:
+    """Process settings JSON, optionally removing Python/TypeScript-specific hooks.
 
     Args:
         settings_content: Raw JSON content of the settings file
         install_python: Whether Python support is being installed
+        install_typescript: Whether TypeScript support is being installed
 
     Returns:
-        Processed JSON string with Python hooks removed if install_python=False
+        Processed JSON string with hooks removed based on install flags
     """
     config: dict[str, Any] = json.loads(settings_content)
 
+    hooks_to_remove = []
     if not install_python:
+        hooks_to_remove.append(PYTHON_CHECKER_HOOK)
+    if not install_typescript:
+        hooks_to_remove.append(TYPESCRIPT_CHECKER_HOOK)
+
+    if hooks_to_remove:
         try:
             for hook_group in config["hooks"]["PostToolUse"]:
-                hook_group["hooks"] = [h for h in hook_group["hooks"] if h.get("command") != PYTHON_CHECKER_HOOK]
+                hook_group["hooks"] = [
+                    h for h in hook_group["hooks"] if h.get("command") not in hooks_to_remove
+                ]
         except (KeyError, TypeError, AttributeError):
             pass
 
@@ -127,6 +137,12 @@ class ClaudeFilesStep(BaseStep):
                 if "python-rules.md" in file_path:
                     continue
 
+            if not ctx.install_typescript:
+                if "file_checker_ts.py" in file_path:
+                    continue
+                if "typescript-rules.md" in file_path:
+                    continue
+
             if "/commands/" in file_path:
                 categories["commands"].append(file_path)
             elif "/rules/" in file_path:
@@ -175,7 +191,7 @@ class ClaudeFilesStep(BaseStep):
             if ui:
                 with ui.spinner("Installing settings..."):
                     success = self._install_settings(
-                        settings_path, settings_dest, config, ctx.install_python, ctx.project_dir
+                        settings_path, settings_dest, config, ctx.install_python, ctx.install_typescript, ctx.project_dir
                     )
                     if success:
                         file_count += 1
@@ -186,7 +202,7 @@ class ClaudeFilesStep(BaseStep):
                         ui.warning("Failed to install settings.local.json")
             else:
                 success = self._install_settings(
-                    settings_path, settings_dest, config, ctx.install_python, ctx.project_dir
+                    settings_path, settings_dest, config, ctx.install_python, ctx.install_typescript, ctx.project_dir
                 )
                 if success:
                     file_count += 1
@@ -232,6 +248,7 @@ class ClaudeFilesStep(BaseStep):
         dest_path: Path,
         config: DownloadConfig,
         install_python: bool,
+        install_typescript: bool,
         project_dir: Path,
     ) -> bool:
         """Download and process settings file.
@@ -241,6 +258,7 @@ class ClaudeFilesStep(BaseStep):
             dest_path: Local destination path
             config: Download configuration
             install_python: Whether Python support is being installed
+            install_typescript: Whether TypeScript support is being installed
             project_dir: Project directory for absolute hook paths
 
         Returns:
@@ -255,7 +273,7 @@ class ClaudeFilesStep(BaseStep):
 
             try:
                 settings_content = temp_file.read_text()
-                processed_content = process_settings(settings_content, install_python)
+                processed_content = process_settings(settings_content, install_python, install_typescript)
                 processed_content = patch_hook_paths(processed_content, project_dir)
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
                 dest_path.write_text(processed_content)

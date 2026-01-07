@@ -26,7 +26,7 @@ Run integration tests and fix any failures immediately.
 
 **Common issues:** Database connections, mock configuration, missing test data
 
-### Step 3: Execute the Actual Program (MANDATORY)
+### Step 3: Build and Execute the Actual Program (MANDATORY)
 
 **⚠️ CRITICAL: Tests passing ≠ Program works**
 
@@ -220,14 +220,14 @@ curl -X DELETE http://localhost:8000/api/resource/1
 
 **Run everything one more time:**
 - All tests
-- Program execution
+- Program build and execution
 - Diagnostics
 - Call chain validation
 
 **Success criteria:**
 - All tests passing
 - No diagnostics errors
-- Program executes successfully with correct output
+- Program builds and executes successfully with correct output
 - Coverage ≥ 80%
 - All Definition of Done criteria met
 - Code review checklist complete

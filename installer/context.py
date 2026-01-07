@@ -16,6 +16,7 @@ class InstallContext:
 
     project_dir: Path
     install_python: bool = True
+    install_typescript: bool = True
     non_interactive: bool = False
     skip_env: bool = False
     local_mode: bool = False

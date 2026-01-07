@@ -91,6 +91,10 @@
           {
             "type": "command",
             "command": "python3 /workspaces/claude-codepro/.claude/hooks/file_checker_python.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 /workspaces/claude-codepro/.claude/hooks/file_checker_ts.py"
           }
         ]
       },
