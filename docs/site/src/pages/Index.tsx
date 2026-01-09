@@ -24,10 +24,10 @@ const Index = () => {
       },
       {
         "@type": "Question",
-        "name": "How does /ccp work?",
+        "name": "What is Endless Mode?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "The /ccp command is your single entry point. It handles everything: auto-setup on first run, creates a detailed plan for your approval, implements with TDD enforcement, verifies completion, and manages context across sessions automatically."
+          "text": "Endless Mode removes the 200K context limit. When context nears the limit, it automatically saves state and continues in a new session - zero manual intervention. Works in both Spec-Driven and Quick modes."
         }
       },
       {
@@ -56,10 +56,10 @@ const Index = () => {
       },
       {
         "@type": "Question",
-        "name": "How is context managed?",
+        "name": "What are the two development modes?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Auto-compact is disabled during installation (saves 20% context). The /ccp command handles session clears automatically when context fills up. Claude Mem preserves relevant information across sessions."
+          "text": "Spec-Driven Mode (/spec) creates a plan for your approval before implementation - great for new features. Quick Mode lets you just chat for bug fixes and small changes. Both modes get Endless Mode and TDD enforcement."
         }
       }
     ]

@@ -253,6 +253,6 @@ curl -X DELETE http://localhost:8000/api/resource/1
 3. Inform user: "⚠️ Found issues. Fixing and re-verifying..."
 4. Automatically fix bugs one after another
 5. After fixing, **loop back to Step 1** and re-run verification
-6. **The /ccp workflow handles this automatically** - do not tell user to run another command
+6. **The /spec workflow handles this automatically** - do not tell user to run another command
 
 **Fix immediately | Test after each fix | No "should work" - verify it works | Keep fixing until green**

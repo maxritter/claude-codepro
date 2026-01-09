@@ -2,17 +2,18 @@
 
 <img src="docs/img/logo.png" alt="Claude CodePro" width="400">
 
-### 🛠️ Professional Development Environment for Claude Code (CC)
+### Professional Development Environment for Claude Code (CC)
 
-Start shipping systematically with Cross-Session Context Management, Spec-Driven Development, Skills, TDD, LSP, Semantic Search, Persistent Memory, Quality Hooks, Modular Rules System, and much more 🚀
+Start shipping systematically with Endless Mode, Spec-Driven Development, Skills, TDD, LSP, Semantic Search, Persistent Memory, Quality Hooks, Modular Rules System, and much more 🚀
+
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 ![Opus 4.5](https://img.shields.io/badge/Opus_4.5-Compatible-purple.svg)
-[![Modular Rules](https://img.shields.io/badge/Modular_Rules-Integrated-brightgreen.svg)](https://code.claude.com/docs/en/memory#modular-rules-with-claude/rules/)
-![Spec-Driven](https://img.shields.io/badge/Spec-Driven-orange.svg)
-![TDD](https://img.shields.io/badge/TDD-Test--Driven--Development-green.svg)
+![Endless Mode](https://img.shields.io/badge/Endless-Mode-red.svg)
+![Spec-Driven](https://img.shields.io/badge/Spec-Driven-yellow.svg)
+![TDD](https://img.shields.io/badge/TDD-Enforcement-green.svg)
 
-#### [⭐ Star this repository ](https://github.com/maxritter/claude-codepro) - [🌐 Visit the website](https://claude-code.pro)
+#### [Star this repository ](https://github.com/maxritter/claude-codepro) - [Visit the website](https://claude-code.pro)
 
 </div>
 
@@ -48,13 +49,40 @@ curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v3.5.4/ins
 
 ## 📦 What's Inside
 
-### 🚀 One-Command Workflow
+### ♾️ Endless Mode
 
-- **Context** - Intelligently handles context accross multiple session in `/ccp` mode via wrapper
-- **Setup** - Automated first-time initialization (creates project context and semantic search index)
+- **Unlimited Context** - Work on complex features across unlimited sessions automatically
+- **Zero Manual Intervention** - Context Monitor detects when nearing limits and triggers seamless handoffs
+- **Works Everywhere** - With `/spec` workflow or Quick Mode - both get unlimited context
+- **Claude Mem Integration** - Relevant observations flow across sessions automatically
+
+### 📋 Spec-Driven Development
+
 - **Planning** - Creates a detailed implementation plan for your review as markdown in `docs/plans/`
+- **Approval** - You review, edit if needed, and approve the plan before implementation
 - **Implementation** - Executes the plan with TDD enforcement and context management
 - **Verification** - Runs tests, quality checks, and validates completion based on the plan
+
+### 💡 Modular Rules System
+
+- **Standard Rules** - Best-Practices for TDD, Context Management, etc. in `.claude/rules/standard/`
+- **Custom Rules** - Project-specific rules in `.claude/rules/custom/` (never touched by updates)
+- **Command Skills** - Workflow-specific modes: `/spec`, `/setup`, `/plan`, `/implement`, `/verify`
+- **Standards Skills** - Best-Practices for Frontend, Backend, Testing, etc. automatically injected
+
+### 🔌 Enhanced Context Capabilities
+
+- **Claude Mem** - Cross-session persistent memory system that automatically ingest context
+- **Vexor** - Local vector store based semantic code search for token-efficient retrieval
+- **Context7 / Firecrawl** - External context retrieval for code and web search / scraping
+- **LSP Servers** - Python and TypeScript CC Language Servers for extended code intelligence
+
+### 🛠️ Quality Hooks Automation
+
+- **Python Quality** - Post-edit hook for ruff, mypy, basedpyright linting and type checking (optional)
+- **TypeScript Quality** - Post-edit hook for eslint, tsc, prettier checks (optional)
+- **General Quality** - Post-edit hook using QLTY for all languages for automated formatting and checking
+- **TDD Enforcer** - Pre-edit hook that warns when modifying code without failing tests first
 
 ### 🏗️ One-Command Installer
 
@@ -62,59 +90,59 @@ curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v3.5.4/ins
 - **Extended Language Support** - Optionally install extended support for Python & TypeScript
 - **Automated Setup Script** - Installs and configures everything in one installation command
 - **Shell Integration** - Auto-configures bash, fish and zsh with `ccp` alias
-- **IDE Compatible** - Works with VS Code, Cursor, Windsurf or Antigravity
-
-### 💡 Modular Rules System
-
-- **Auto Loading** - Claude Code automatically loads all `.claude/rules/*.md` files as project memory
-- **Standard Rules** - Best-Practices for TDD, Context Management, etc. in `.claude/rules/standard/`
-- **Custom Rules** - Project-specific rules in `.claude/rules/custom/` (never touched by updates)
-- **Command Skills** - Workflow-specific modes that are launched by `/ccp`: plan, implement, verify, setup
-- **Standards Skills** - Best-Practices for Frontend, Backend, Testing, etc. automatically injected
-
-### 🔌 Enhanced Context Capabilities
-
-- **Claude Mem** - Cross-session persistent memory system that automatically ingest context
-- **Vexor** - Local vector store based semantic code search for token-efficient retrieval
-- **Context7** - AI-powered code context retrieval installed as a plugin with wide support
-- **Firecrawl** - Various tools for searching and scraping the web and direct code fetching
-- **LSP Servers** - Python and TypeScript CC Language Servers for extended code intelligence
-
-### 🛠️ Intelligent Hook Automation
-
-- **Python Quality** - Post-edit hook for ruff, mypy, basedpyright linting and type checking (optional)
-- **TypeScript Quality** - Post-edit hook for eslint, tsc, prettier checks (optional)
-- **General Quality** - Post-edit hook for all languages for automated formatting and checking using qlty
-- **TDD Enforcer** - Pre-edit hook that warns when modifying code without failing tests first
-- **Context Monitor** - Post-tool hook that warns CC automatically at 85%/95% context usage
 
 ---
 
-## 📒 How-to-Use
+## ⚡ Quick Start
 
-### 👣 Quick Start
+### 🔧 First Time Setup
+
+Run `/setup` once to initialize project context and semantic search:
 
 ```bash
-ccp                         # Launch Claude CodePro inside your Dev Container with wrapper
-> /ccp "<YOUR TASK HERE>"   # Prove your detailed task description to the unified command
+ccp
+> /setup
 ```
 
-**The `/ccp` workflow:**
-1. **First run** - Automatically sets up project context and semantic search
-2. **Creates plan** - Explores codebase, asks clarifying questions, generates detailed spec
-3. **Waits for approval** - You review and approve (or edit) the markdown plan
-4. **Implements** - Executes tasks with TDD enforcement and quality hooks
-5. **Verifies** - Runs tests, quality checks and validates plan completion
+This is independent of which development mode you use - both modes benefit from the initialized context.
 
+### 🔁 Two Modes of Development
 
-### 📖 Context Management
+Claude CodePro supports two development modes. **Endless Mode works in both** - you get unlimited context regardless of which mode you choose.
 
-**Never use `/compact`** - Claude CodePro uses the full 200k context window and manages context automatically.
+| Mode | Command | Best For |
+|------|---------|----------|
+| **Spec-Driven** | `/spec "task"` | New features, major changes, complex work |
+| **Quick Mode** | Just chat | Quick fixes, bug fixes, small changes |
 
-- **Context is managed automatically** - `/ccp` handles session clears and continuity over a wrapper
-- **Auto-compact is automatically disabled** during installation and saves 20% of your total context window
-- **Ignore compact warnings** - they appear too early, look at the status bar for real context usage up to 95%
-- **Claude Mem preserves context** - relevant information is automatically ingested and flows across sessions
+#### 📋 Spec-Driven Mode (`/spec`)
+
+For structured development with planning and verification:
+
+```bash
+ccp
+> /spec "Describe your feature as detailed as possible"
+```
+
+**The workflow:**
+1. **Plan** - Explores codebase, asks questions, generates detailed spec in `docs/plans/`
+2. **Approve** - You review, edit if needed, and approve the plan
+3. **Implement** - Executes tasks with TDD enforcement and quality hooks
+4. **Verify** - Runs tests, quality checks, validates completion
+
+Use this mode when you want a spec to review before implementation, or when the task is complex enough to benefit from structured planning.
+
+#### ⏩ Quick Mode
+
+For quick work without a spec:
+
+```bash
+ccp
+> Fix the null pointer bug in user.py
+> Add a loading spinner to the submit button
+```
+
+Just describe what you need - no plan file, no approval gate. Claude CodePro still provides all the quality hooks, TDD enforcement, and context capabilities. Perfect for bug fixes, small improvements, and exploratory work.
 
 ### 🎯 Customizing Rules
 
@@ -132,6 +160,14 @@ paths: src/**/*.py
 ---
 # Python-specific rules for this project
 ```
+
+### ♾️ Endless Mode
+
+Both `/spec` and Quick Mode use the full 200K context window with automatic management via Endless Mode:
+
+- **Automatic handoffs** - When context nears the limit, state is saved and work continues in a new session
+- **Claude Mem preserves understanding** - Relevant observations flow across sessions
+- **Auto-compact disabled** - Installation disables auto-compact, giving you 20% more usable context
 
 ---
 

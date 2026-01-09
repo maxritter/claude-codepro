@@ -48,16 +48,17 @@ const HeroSection = () => {
 
         {/* Subtitle */}
         <p className="text-muted-foreground text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl max-w-[90%] xs:max-w-xl sm:max-w-2xl mx-auto mb-6 xs:mb-8 animate-fade-in animation-delay-200 leading-relaxed px-1">
-          Start shipping systematically with Automated Context Management, Spec-Driven Development,
-          Skills, TDD, LSP, Semantic Search, Persistent Memory, Quality Hooks, and more.
+          Spec-Driven Development with TDD Enforcement, Semantic Search, Persistent Memory, Quality Hooks, Endless Mode, and more.
         </p>
 
         {/* Feature badges */}
         <div className="flex flex-wrap justify-center gap-1.5 xs:gap-2 mb-6 xs:mb-8 animate-fade-in animation-delay-300 px-2">
-          <Badge variant="secondary" className="text-[10px] xs:text-xs">Opus 4.5 Compatible</Badge>
-          <Badge variant="secondary" className="text-[10px] xs:text-xs">Modular Rules</Badge>
+          <Badge variant="secondary" className="text-[10px] xs:text-xs">Opus 4.5</Badge>
+          <Badge variant="secondary" className="text-[10px] xs:text-xs">Endless Mode</Badge>
           <Badge variant="secondary" className="text-[10px] xs:text-xs">Spec-Driven</Badge>
           <Badge variant="secondary" className="text-[10px] xs:text-xs">TDD</Badge>
+          <Badge variant="secondary" className="text-[10px] xs:text-xs">LSP</Badge>
+          <Badge variant="secondary" className="text-[10px] xs:text-xs">Semantic Search</Badge>
         </div>
 
         {/* CTA Buttons */}

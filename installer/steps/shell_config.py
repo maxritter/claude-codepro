@@ -29,7 +29,7 @@ def get_alias_line(shell_type: str) -> str:
     The alias:
     - Uses nvm to set Node.js 22
     - Clears screen
-    - Runs Claude via wrapper.py for /ccp command support
+    - Runs Claude via wrapper.py for /spec command support
     - Falls back to direct claude if wrapper not found
 
     Note: Rules are now natively loaded by Claude Code from .claude/rules/*.md

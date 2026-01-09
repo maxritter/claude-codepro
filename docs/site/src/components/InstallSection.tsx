@@ -123,10 +123,10 @@ const InstallSection = () => {
               </div>
               <div>
                 <h4 className="text-foreground font-semibold text-sm sm:text-base mb-1">
-                  Start building with /ccp
+                  Start building
                 </h4>
                 <p className="text-muted-foreground text-xs sm:text-sm">
-                  Run <code className="text-primary text-xs">ccp</code> then <code className="text-primary text-xs">/ccp "your task"</code>
+                  Run <code className="text-primary text-xs">ccp</code>, then <code className="text-primary text-xs">/setup</code> once, then <code className="text-primary text-xs">/spec "task"</code> or just chat
                 </p>
               </div>
             </div>

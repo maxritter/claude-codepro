@@ -4,7 +4,7 @@ import {
   Plug2,
   ShieldCheck,
   Container,
-  Sparkles
+  Infinity as InfinityIcon
 } from "lucide-react";
 import { useInView } from "@/hooks/use-in-view";
 
@@ -12,17 +12,28 @@ interface InsideItem {
   icon: React.ElementType;
   title: string;
   items: string[];
+  highlight?: boolean;
 }
 
 const insideItems: InsideItem[] = [
   {
     icon: Terminal,
-    title: "One-Command Workflow",
+    title: "Two Development Modes",
     items: [
-      "/ccp - Single entry point for everything",
-      "Auto-setup on first run",
-      "Plan approval gate before implementation",
-      "TDD enforcement and verification",
+      "Spec-Driven: /spec for new features with planning",
+      "Quick Mode: Just chat for bug fixes and small changes",
+      "Both modes get unlimited context via Endless Mode",
+      "Choose structured planning or fast iteration",
+    ],
+  },
+  {
+    icon: InfinityIcon,
+    title: "Endless Mode",
+    items: [
+      "Removes 200K context limit entirely",
+      "Automatic session handoffs when nearing limit",
+      "Works in both Spec-Driven and Quick modes",
+      "Zero manual intervention required",
     ],
   },
   {
@@ -51,7 +62,7 @@ const insideItems: InsideItem[] = [
     items: [
       "Qlty - Post-edit formatting and linting",
       "TDD Enforcer - Pre-edit test requirement",
-      "Context Monitor - Usage warnings at 85%/95%",
+      "Context Monitor - Warns when context getting full",
       "LSP Servers - Python (Pyright) & TypeScript",
     ],
   },
@@ -63,16 +74,6 @@ const insideItems: InsideItem[] = [
       "Optional Python & TypeScript support",
       "Shell integration with ccp alias",
       "Works with VS Code, Cursor, Windsurf",
-    ],
-  },
-  {
-    icon: Sparkles,
-    title: "Context Management",
-    items: [
-      "Auto-compact disabled (saves 20% context)",
-      "Status bar shows real usage up to 95%",
-      "Automatic session clears when needed",
-      "Claude Mem preserves continuity",
     ],
   },
 ];
@@ -117,7 +118,9 @@ const WhatsInside = () => {
             return (
               <div
                 key={item.title}
-                className="glass rounded-2xl p-6 hover:border-primary/50 transition-all duration-300"
+                className={`glass rounded-2xl p-6 hover:border-primary/50 transition-all duration-300 ${
+                  item.highlight ? "border-red-500/50 bg-red-500/5" : ""
+                }`}
               >
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">

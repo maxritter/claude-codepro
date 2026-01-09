@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -105,15 +107,42 @@ def install(
 
     effective_local_repo_dir = local_repo_dir if local_repo_dir else (Path.cwd() if local else None)
 
+    # In local mode, skip all interactive prompts and use defaults
+    skip_prompts = non_interactive or local
+
+    claude_dir = Path.cwd() / ".claude"
+    if claude_dir.exists() and not skip_prompts:
+        console.print()
+        console.print("  [bold yellow]⚠️  Existing .claude folder detected[/bold yellow]")
+        console.print()
+        console.print("  The following will be [bold red]overwritten[/bold red] during installation:")
+        console.print("    • .claude/commands/")
+        console.print("    • .claude/hooks/")
+        console.print("    • .claude/skills/")
+        console.print("    • .claude/scripts/")
+        console.print("    • .claude/rules/standard/")
+        console.print("    • .claude/settings.json")
+        console.print()
+        console.print("  [dim]Your custom rules in .claude/rules/custom/ will NOT be touched.[/dim]")
+        console.print()
+        create_backup = console.confirm("Create backup before proceeding?", default=False)
+
+        if create_backup:
+            timestamp = datetime.now().strftime("%Y%m%d.%H%M%S")
+            backup_dir = Path.cwd() / f".claude.backup.{timestamp}"
+            console.status(f"Creating backup at {backup_dir}...")
+            shutil.copytree(claude_dir, backup_dir)
+            console.success(f"Backup created: {backup_dir}")
+
     install_python = not skip_python
-    if not skip_python and not non_interactive:
+    if not skip_python and not skip_prompts:
         console.print()
         console.print("  [bold]Do you want to install advanced Python features?[/bold]")
         console.print("  This includes: uv, ruff, mypy, basedpyright, and Python quality hooks")
         install_python = console.confirm("Install Python support?", default=True)
 
     install_typescript = not skip_typescript
-    if not skip_typescript and not non_interactive:
+    if not skip_typescript and not skip_prompts:
         console.print()
         console.print("  [bold]Do you want to install TypeScript features?[/bold]")
         console.print("  This includes: TypeScript quality hooks (eslint, tsc, prettier)")
@@ -148,12 +177,10 @@ def version() -> None:
 
 def find_wrapper_script() -> Path | None:
     """Find the wrapper.py script in .claude/scripts/."""
-    # Look relative to current working directory
     wrapper_path = Path.cwd() / ".claude" / "scripts" / "wrapper.py"
     if wrapper_path.exists():
         return wrapper_path
 
-    # Look relative to this module (for installed package)
     module_path = Path(__file__).parent.parent / ".claude" / "scripts" / "wrapper.py"
     if module_path.exists():
         return module_path
@@ -181,11 +208,9 @@ def launch(
     claude_args = args or []
 
     if no_wrapper:
-        # Run claude directly
         cmd = ["claude"] + claude_args
         exit_code = subprocess.call(cmd)
     else:
-        # Run via wrapper
         exit_code = run_with_wrapper(claude_args)
 
     raise typer.Exit(exit_code)

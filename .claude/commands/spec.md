@@ -1,31 +1,30 @@
 ---
-description: Claude CodePro workflow orchestration - plan, implement, verify, setup in one command
+description: Spec-driven development - plan, implement, verify workflow
 argument-hint: "<task description>" or "<path/to/plan.md>"
 model: opus
 allowed-tools: Skill
 ---
-# /ccp - Autonomous Workflow Orchestration
+# /spec - Spec-Driven Development
 
-**The single entry point for Claude CodePro.** Handles everything: setup → plan → implement → verify.
+**For new features, major changes, and complex work.** Creates a spec, gets your approval, implements with TDD, and verifies completion.
+
+**Prerequisite:** Run `/setup` once before first use to initialize project context.
 
 ## Arguments
 
 ```
-/ccp <task-description>           # Start new workflow from task
-/ccp <path/to/plan.md>            # Continue existing plan
-/ccp --continue <path/to/plan.md> # Resume after session clear
+/spec <task-description>           # Start new workflow from task
+/spec <path/to/plan.md>            # Continue existing plan
+/spec --continue <path/to/plan.md> # Resume after session clear
 ```
 
 ## CRITICAL: Use the Skill Tool
 
-**You MUST use the Skill tool to invoke /setup, /plan, /implement, and /verify.**
+**You MUST use the Skill tool to invoke /plan, /implement, and /verify.**
 
 Do NOT just describe what to do - actually invoke the tools like this:
 
 ```
-To run /setup:
-  Skill tool with: skill="setup"
-
 To run /plan:
   Skill tool with: skill="plan", args="task description here"
 
@@ -40,35 +39,16 @@ To run /verify:
 
 Parse the arguments: $ARGUMENTS
 
-### Step 0: ⚙️ Auto-Setup Check (ALWAYS RUN FIRST)
-
-**Before ANY other action, check if setup has been completed:**
-
-```bash
-# Check if project.md exists (indicates setup was run)
-ls .claude/rules/custom/project.md
-```
-
-**If the file does NOT exist:**
-1. Inform user: "First-time setup detected. Running /setup to initialize project..."
-2. Use Skill tool: `Skill(setup)`
-3. After setup completes, continue to Step 1
-
-**If the file exists:**
-- Skip setup, proceed directly to Step 1
-
-This ensures the project is always properly initialized before any workflow starts.
-
 ### Step 1: Determine Current State
 
 ```
 IF arguments start with "--continue":
     plan_path = extract path after "--continue"
 
-    ⚠️ IMPORTANT: Wait for Claude MEM to inject context
-    Run: sleep 5  (gives SessionStart hooks time to complete)
-
-    → Read plan file, check Status AND Approved fields, continue workflow
+    ⚠️ IMPORTANT: Check continuation file first
+    1. Read /tmp/claude-continuation.md if it exists (for session context)
+    2. Delete the continuation file after reading
+    3. Read plan file, check Status AND Approved fields, continue workflow
 
 ELIF arguments end with ".md" AND file exists:
     plan_path = arguments
@@ -80,16 +60,24 @@ ELSE:
     → After plan is created, STOP and wait for user approval (see Step 2a)
 ```
 
-### Session Resume Delay
+### Session Resume (--continue)
 
-**When `--continue` is detected, you MUST run this first:**
+**When `--continue` is detected, follow this sequence:**
 
-```bash
-# Wait for Claude MEM SessionStart hooks to inject context
-sleep 5
-```
+1. **Check for continuation file:**
+   ```bash
+   cat /tmp/claude-continuation.md 2>/dev/null
+   ```
+   If it exists, read it for context about what was happening before the clear.
 
-This ensures Claude MEM has time to load observations from the previous session before you continue work.
+2. **Clean up the continuation file:**
+   ```bash
+   rm -f /tmp/claude-continuation.md
+   ```
+
+3. **Read the plan file** and continue based on Status field.
+
+The continuation file provides guaranteed context even if Claude Mem injection is delayed.
 
 ### Step 2: Execute Based on Status
 
@@ -100,7 +88,7 @@ After reading the plan file's Status and Approved fields:
 | PENDING | No | **⛔ STOP** - Request user approval (Step 2a) |
 | PENDING | Yes | Use Skill tool to run /implement with plan-path |
 | COMPLETE | * | Use Skill tool to run /verify with plan-path |
-| VERIFIED | * | Report completion and ask follow-up (Step 4) |
+| VERIFIED | * | Report completion and ask follow-up (Step 3) |
 
 ### Step 2a: ⛔ MANDATORY User Approval Gate
 
@@ -134,16 +122,7 @@ After reading the plan file's Status and Approved fields:
 
 **This gate is NON-NEGOTIABLE. But Claude handles the file update - user never edits `Approved:` manually.**
 
-### Step 3: Continue Until Done
-
-After each phase completes:
-1. Re-read the plan file
-2. Check the Status AND Approved fields
-3. If approval gate needed, STOP and wait
-4. Otherwise, execute the next phase using Skill tool
-5. Repeat until Status is VERIFIED
-
-### Step 4: Post-Verification Follow-up
+### Step 3: Post-Verification Follow-up
 
 **When Status is VERIFIED, you MUST:**
 
@@ -168,21 +147,43 @@ After each major operation, check context:
 python3 .claude/scripts/helper.py check-context --json
 ```
 
-If response shows `"status": "CLEAR_NEEDED"` (context >= 95%):
+If response shows `"status": "CLEAR_NEEDED"` (context >= 90%):
 
-1. Trigger session clear:
-   ```bash
-   python3 .claude/scripts/helper.py send-clear <plan-path>
-   ```
-2. The wrapper will restart with `/ccp --continue <plan-path>`
-3. Claude Mem will inject context for the new session
+**Step 1: Write continuation file (GUARANTEED BACKUP)**
+
+Write to `/tmp/claude-continuation.md`:
+
+```markdown
+# Session Continuation (/spec)
+
+**Plan:** <plan-path>
+**Phase:** [plan|implement|verify]
+**Current Task:** Task N - [description]
+
+**Completed This Session:**
+- [x] [What was finished]
+
+**Next Steps:**
+1. [What to do immediately when resuming]
+
+**Context:**
+- [Key decisions or blockers]
+```
+
+**Step 2: Trigger session clear**
+
+```bash
+python3 .claude/scripts/helper.py send-clear <plan-path>
+```
+
+The wrapper will restart with `/spec --continue <plan-path>`
 
 ## Error Handling
 
 ### Wrapper Not Running
 
 If `send-clear` fails:
-- Tell user: "Context at X%. Please run `/clear` manually, then `/ccp --continue <plan-path>`"
+- Tell user: "Context at X%. Please run `/clear` manually, then `/spec --continue <plan-path>`"
 
 ### Plan File Not Found
 
@@ -192,13 +193,9 @@ If `send-clear` fails:
 ## Execution Flow Example
 
 ```
-User: /ccp "add calculator with tests"
+User: /spec "add calculator with tests"
 
 Claude:
-0. Check: Does .claude/rules/custom/project.md exist?
-   → NO: Run Skill(setup) first
-   → YES: Skip to step 1
-
 1. Use Skill(plan, "add calculator with tests")
    → Plan created at docs/plans/2026-01-07-calculator.md
 
@@ -222,7 +219,7 @@ User selects: "Yes, proceed with implementation"
 
 ## Important
 
-1. **Auto-setup on first run** - Automatically runs /setup if project.md missing
+1. **Run /setup first** - Use `/setup` command to initialize project before first /spec
 2. **Always use Skill tool** - don't just describe, actually invoke
 3. **NEVER skip user approval** - Use AskUserQuestion to get approval, then update `Approved: Yes` yourself
 4. **Continue automatically after approval** - Don't tell user to run another command

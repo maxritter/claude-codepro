@@ -191,7 +191,7 @@ Before marking complete:
    Status: PENDING  →  Status: COMPLETE
    ```
 4. Inform user: "✅ All tasks complete. Proceeding to verification..."
-5. **The /ccp workflow will automatically continue to /verify** - do not tell user to run another command
+5. **The /spec workflow will automatically continue to /verify** - do not tell user to run another command
 
 ### Migration Completion Checklist
 

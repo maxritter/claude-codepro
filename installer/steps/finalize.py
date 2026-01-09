@@ -69,6 +69,7 @@ class FinalizeStep(BaseStep):
             [
                 "Claude CodePro rules",
                 "Shell alias (ccp)",
+                "Endless Mode (unlimited context)",
             ]
         )
 
@@ -92,8 +93,12 @@ class FinalizeStep(BaseStep):
                 ("Start Claude CodePro", "Run: ccp"),
                 ("Connect IDE", "Run: /ide → Enables real-time diagnostics"),
                 (
-                    "Start building!",
-                    '/ccp "your task" → Handles setup, planning, implementation, and verification',
+                    "Spec-Driven Mode",
+                    '/spec "your task" → For new features with planning and verification',
+                ),
+                (
+                    "Quick Mode",
+                    "Just chat → For bug fixes and small changes without a spec",
                 ),
             ]
         )

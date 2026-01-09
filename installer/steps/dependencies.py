@@ -300,6 +300,12 @@ def _configure_claude_mem_defaults() -> bool:
         settings.update(
             {
                 "CLAUDE_MEM_FOLDER_CLAUDEMD_ENABLED": "false",
+                "CLAUDE_MEM_CONTEXT_SHOW_LAST_SUMMARY": "true",
+                "CLAUDE_MEM_CONTEXT_SHOW_LAST_MESSAGE": "true",
+                "CLAUDE_MEM_CONTEXT_OBSERVATIONS": "50",
+                "CLAUDE_MEM_CONTEXT_SESSION_COUNT": "10",
+                "CLAUDE_MEM_CONTEXT_FULL_COUNT": "10",
+                "CLAUDE_MEM_CONTEXT_FULL_FIELD": "facts",
                 "CLAUDE_MEM_MODEL": "opus",
             }
         )

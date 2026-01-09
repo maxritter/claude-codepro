@@ -5,7 +5,7 @@ description: Create a detailed implementation plan with exploration for Claude C
 # PLAN MODE: Five-Phase Planning Process
 
 > **WARNING: DO NOT use the built-in `ExitPlanMode` or `EnterPlanMode` tools.**
-> This project has its own planning workflow using `/plan`, `/implement`, and `/verify` skill commands that are automatically invoked via the `/ccp` slash-command.
+> This project has its own planning workflow using `/plan`, `/implement`, and `/verify` skill commands that are automatically invoked via the `/spec` slash-command.
 > The built-in Claude Code plan mode tools write to different paths and are incompatible.
 > When planning is complete, simply inform the user and wait for confirmation - no special tool needed.
 
@@ -257,9 +257,11 @@ Questions:
 
 ### Phase 3: Implementation Planning
 
-**CRITICAL: Task Count Limit**
-- **Maximum: 10-12 tasks per plan**
-- If breakdown exceeds 12 tasks, use AskUserQuestion to ask user to split into multiple features
+**Task Count Guidance**
+- **Aim for 10-12 tasks** as a general guideline for focused plans
+- Avoid bloating plans with unnecessary or overly granular tasks
+- If the work genuinely requires more tasks, that's fine - the `/spec` workflow handles multi-session execution, so longer plans will be executed across multiple context windows automatically
+- Focus on keeping tasks meaningful and necessary, not on hitting a specific number
 
 **Task Structure:**
 ```markdown
@@ -423,7 +425,7 @@ Approved: No
    **If user approves ("Yes, proceed..."):**
    - Edit the plan file to change `Approved: No` to `Approved: Yes`
    - Tell user: "Plan approved. Proceeding with implementation..."
-   - The /ccp workflow will continue to /implement automatically
+   - The /spec workflow will continue to /implement automatically
 
    **If user wants changes ("No, I need to make changes"):**
    - Tell user: "Please edit the plan file at `<plan-path>`, then say 'ready' when done"
@@ -450,7 +452,7 @@ These rules are non-negotiable:
 7. **⛔ NEVER proceed without user approval** - Use AskUserQuestion to get explicit approval, then update `Approved: Yes` yourself
 8. **ALWAYS re-read the plan after user edits** - If they chose to make changes, re-read before asking again
 9. **The plan must be detailed enough that another developer could follow it**
-10. **NEVER use built-in ExitPlanMode or EnterPlanMode tools** - This project uses custom `/plan`, `/implement`, `/verify` skill commands. The built-in plan mode tools are incompatible with this workflow. They are orchestrated by the `/ccp` slash command.
+10. **NEVER use built-in ExitPlanMode or EnterPlanMode tools** - This project uses custom `/plan`, `/implement`, `/verify` skill commands. The built-in plan mode tools are incompatible with this workflow. They are orchestrated by the `/spec` slash command.
 11. **FOR MIGRATIONS: Create Feature Inventory BEFORE tasks** - List every file, function, and class being replaced. Map each to a task. No unmapped features allowed.
 12. **"Out of Scope" ≠ "Don't implement"** - "Out of Scope: Changes to X" means migrate X as-is (still needs a task). Only "Out of Scope: Remove X" means no task needed (requires user confirmation).
-13. **Ask for approval after creating plan** - After Phase 5, use AskUserQuestion to get approval. If approved, update the file and let /ccp continue automatically.
+13. **Ask for approval after creating plan** - After Phase 5, use AskUserQuestion to get approval. If approved, update the file and let /spec continue automatically.

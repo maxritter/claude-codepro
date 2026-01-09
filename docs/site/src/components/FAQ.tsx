@@ -8,11 +8,15 @@ interface FaqItem {
 const faqs: FaqItem[] = [
   {
     question: "What is Claude CodePro?",
-    answer: "Claude CodePro is a professional development environment for Claude Code. It provides automated context management, spec-driven development, TDD enforcement, persistent memory, semantic search, quality hooks, and a modular rules system - all running inside a Dev Container.",
+    answer: "Claude CodePro is a professional development environment for Claude Code. It provides Endless Mode for unlimited context, spec-driven development, TDD enforcement, persistent memory, semantic search, quality hooks, and a modular rules system - all running inside a Dev Container.",
   },
   {
-    question: "How does /ccp work?",
-    answer: "The /ccp command is your single entry point. It handles everything: auto-setup on first run, creates a detailed plan for your approval, implements with TDD enforcement, verifies completion, and manages context across sessions automatically.",
+    question: "What is Endless Mode?",
+    answer: "Endless Mode removes the 200K context limit. When context nears the limit, it automatically saves state and continues in a new session - zero manual intervention required. Works in both Spec-Driven and Quick modes.",
+  },
+  {
+    question: "What are the two development modes?",
+    answer: "Spec-Driven Mode (/spec) creates a plan for your approval before implementation - great for new features. Quick Mode lets you just chat for bug fixes and small changes. Both modes get Endless Mode, TDD enforcement, and quality hooks.",
   },
   {
     question: "Is Claude CodePro free?",
@@ -24,11 +28,7 @@ const faqs: FaqItem[] = [
   },
   {
     question: "Do I need Docker?",
-    answer: "Yes, you need a container runtime like Docker Desktop or OrbStack (macOS). Claude CodePro runs inside a Dev Container to provide complete isolation, consistent tooling, and cross-platform compatibility on Windows, Mac and Linux.",
-  },
-  {
-    question: "How is context managed?",
-    answer: "Auto-compact is disabled during installation (saves 20% context). The /ccp command handles session clears automatically when context fills up. Claude Mem preserves relevant information across sessions for seamless continuity.",
+    answer: "Yes, you need a container runtime like Docker Desktop or OrbStack (macOS). Claude CodePro runs inside a Dev Container to provide complete isolation, consistent tooling, and cross-platform compatibility.",
   },
 ];
 

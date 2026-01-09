@@ -85,15 +85,15 @@ class TestCheckContext:
         assert result == "CLEAR_NEEDED"
 
     def test_check_context_uses_default_threshold(self) -> None:
-        """check_context uses 95% as default threshold."""
+        """check_context uses 90% as default threshold."""
         from scripts.helper import check_context
 
-        with patch("scripts.helper.get_context_percentage", return_value=94.0):
+        with patch("scripts.helper.get_context_percentage", return_value=89.0):
             result = check_context()
 
         assert result == "OK"
 
-        with patch("scripts.helper.get_context_percentage", return_value=95.0):
+        with patch("scripts.helper.get_context_percentage", return_value=90.0):
             result = check_context()
 
         assert result == "CLEAR_NEEDED"

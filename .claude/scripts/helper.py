@@ -11,7 +11,8 @@ import sys
 from pathlib import Path
 
 MAX_CONTEXT_TOKENS = 200_000
-DEFAULT_THRESHOLD = 95
+DEFAULT_THRESHOLD = 90
+PRE_CLEAR_DELAY_SECONDS = 10.0
 
 
 def get_current_session_id() -> str:
@@ -101,8 +102,14 @@ def check_context(threshold: int = DEFAULT_THRESHOLD) -> str:
     return "OK"
 
 
-def send_clear(plan_path: str | None = None) -> bool:
-    """Send clear command to wrapper via pipe."""
+def send_clear(plan_path: str | None = None, general: bool = False) -> bool:
+    """Send clear command to wrapper via pipe.
+
+    For continuation modes (general or plan_path), waits before sending
+    to give Claude Mem time to capture the session summary.
+    """
+    import time
+
     pipe_path = os.environ.get("WRAPPER_PIPE")
     if not pipe_path:
         return False
@@ -117,10 +124,16 @@ def send_clear(plan_path: str | None = None) -> bool:
     except OSError:
         return False
 
-    if plan_path:
+    if general:
+        cmd = "clear-continue-general\n"
+    elif plan_path:
         cmd = f"clear-continue {plan_path}\n"
     else:
         cmd = "clear\n"
+
+    if general or plan_path:
+        print(f"Waiting {PRE_CLEAR_DELAY_SECONDS}s for Claude Mem to capture session summary...")
+        time.sleep(PRE_CLEAR_DELAY_SECONDS)
 
     try:
         with open(pipe, "w") as f:
@@ -156,6 +169,7 @@ def main() -> int:
 
     clear_parser = subparsers.add_parser("send-clear", help="Send clear command to wrapper")
     clear_parser.add_argument("plan_path", nargs="?", help="Plan path for clear-continue")
+    clear_parser.add_argument("--general", action="store_true", help="General continuation (no plan file)")
 
     args = parser.parse_args()
 
@@ -165,7 +179,7 @@ def main() -> int:
         return 0 if "OK" in result else 1
 
     elif args.command == "send-clear":
-        success = send_clear(plan_path=args.plan_path)
+        success = send_clear(plan_path=args.plan_path, general=args.general)
         if success:
             print("Clear command sent")
             return 0

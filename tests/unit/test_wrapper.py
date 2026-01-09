@@ -89,7 +89,7 @@ class TestClaudeWrapper:
 
         # Supervisor pattern: flags are set with prompt, kill is called
         assert wrapper._restart_pending is True
-        assert wrapper._restart_prompt == "/ccp --continue docs/plans/test.md"
+        assert wrapper._restart_prompt == "/spec --continue docs/plans/test.md"
         wrapper._kill_claude.assert_called_once()
 
     def test_handle_exit_command(self, tmp_path: Path) -> None:

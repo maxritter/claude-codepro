@@ -105,9 +105,9 @@ const ComparisonSection = () => {
 
               {/* Terminal content */}
               <div className="bg-background/50 rounded-b-lg p-4 font-mono text-xs sm:text-sm space-y-2.5">
-                {/* /ccp command */}
+                {/* /spec command */}
                 <div>
-                  <span className="text-primary">/ccp</span>
+                  <span className="text-primary">/spec</span>
                   <span className="text-muted-foreground ml-2">"Add user authentication"</span>
                 </div>
                 {/* Context injection */}
@@ -157,7 +157,7 @@ const ComparisonSection = () => {
         {/* Bottom highlight */}
         <div className="mt-12 text-center">
           <p className="text-muted-foreground text-sm sm:text-base max-w-2xl mx-auto">
-            Claude CodePro transforms AI-assisted development from ad-hoc prompting
+            Claude CodePro transforms AI-assisted development from Quick Mode prompting
             into a <span className="text-primary font-medium">structured, repeatable process</span> with
             persistent memory, semantic search, enforced best practices, and automatic quality checks.
           </p>

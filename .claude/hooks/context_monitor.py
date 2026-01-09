@@ -8,8 +8,8 @@ import sys
 import time
 from pathlib import Path
 
-THRESHOLD_WARN = 85
-THRESHOLD_STOP = 95
+THRESHOLD_WARN = 80
+THRESHOLD_STOP = 90
 
 CACHE_FILE = Path("/tmp/.claude_context_cache.json")
 CACHE_TTL = 30
@@ -128,14 +128,15 @@ def run_context_monitor() -> int:
 
     if percentage >= THRESHOLD_STOP:
         print("", file=sys.stderr)
-        print(f"{RED}CONTEXT LIMIT: {percentage:.0f}% ({total_tokens:,}/200k){NC}", file=sys.stderr)
-        print(f"{RED}MANDATORY: Wrap up current development NOW and update plan!{NC}", file=sys.stderr)
+        print(f"{RED}⚠️  CONTEXT {percentage:.0f}% - SESSION HANDOFF REQUIRED{NC}", file=sys.stderr)
+        print(f"{RED}1. Write /tmp/claude-continuation.md (task, files, next steps){NC}", file=sys.stderr)
+        print(f"{RED}2. If /spec: helper.py send-clear <plan-path>{NC}", file=sys.stderr)
+        print(f"{RED}   If general: helper.py send-clear --general{NC}", file=sys.stderr)
         return 2
 
     if percentage >= THRESHOLD_WARN:
         print("", file=sys.stderr)
-        print(f"{YELLOW}Context: {percentage:.0f}% ({total_tokens:,}/200k){NC}", file=sys.stderr)
-        print(f"{YELLOW}Complete current task, no new feature work{NC}", file=sys.stderr)
+        print(f"{YELLOW}Context: {percentage:.0f}% - Wrap up soon{NC}", file=sys.stderr)
         return 2
 
     return 0

@@ -116,12 +116,12 @@ class Console:
         self._console.print()
 
         features = Text()
-        features.append("  🚀 ", style="yellow")
-        features.append("One-Command Workflow", style="bold green")
-        features.append(" — /ccp handles setup, planning, implementation, verification\n", style="white")
-        features.append("  🧠 ", style="yellow")
-        features.append("Context Management", style="bold green")
-        features.append(" — Auto session clears with Claude Mem continuity\n", style="white")
+        features.append("  ♾️  ", style="yellow")
+        features.append("Endless Mode", style="bold green")
+        features.append(" — Unlimited context across sessions, zero manual intervention\n", style="white")
+        features.append("  📋 ", style="yellow")
+        features.append("Two Development Modes", style="bold green")
+        features.append(" — /spec for planning, Quick Mode for fast fixes\n", style="white")
         features.append("  💡 ", style="yellow")
         features.append("Modular Rules System", style="bold green")
         features.append(" — Standards + custom rules loaded as project memory\n", style="white")
@@ -301,7 +301,7 @@ class Console:
 
         default_str = "Y/n" if default else "y/N"
         self._console.print()
-        self._console.print(f"  [bold cyan]?[/bold cyan] {message} [{default_str}]: ", end="")
+        self._console.print(f"  [bold cyan]?[/bold cyan] {message} \\[{default_str}]: ", end="")
 
         try:
             tty = self._get_input_stream()
