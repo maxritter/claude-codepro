@@ -6,7 +6,7 @@ import Logo from "@/components/Logo";
 
 const HeroSection = () => {
   const [copied, setCopied] = useState(false);
-  const installCommand = "curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v4.1.4/install.sh | bash";
+  const installCommand = "curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v4.1.5/install.sh | bash";
 
   const copyToClipboard = async () => {
     await navigator.clipboard.writeText(installCommand);
