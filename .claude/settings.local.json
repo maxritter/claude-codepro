@@ -86,7 +86,7 @@
         ]
       },
       {
-        "matcher": "Bash|Read|Grep|Glob",
+        "matcher": "Bash|Read|Grep|Glob|Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "command",
