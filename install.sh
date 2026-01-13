@@ -6,7 +6,7 @@
 set -e
 
 # Version updated by semantic-release
-VERSION="4.2.3"
+VERSION="4.2.4"
 
 REPO="maxritter/claude-codepro"
 REPO_RAW="https://raw.githubusercontent.com/${REPO}/v${VERSION}"
