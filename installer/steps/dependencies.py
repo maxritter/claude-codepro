@@ -460,10 +460,11 @@ class DependenciesStep(BaseStep):
         if _install_with_spinner(ui, "Node.js", install_nodejs):
             installed.append("nodejs")
 
-        if ctx.install_python:
-            if _install_with_spinner(ui, "uv", install_uv):
-                installed.append("uv")
+        # Always install uv - needed for Vexor regardless of Python support
+        if _install_with_spinner(ui, "uv", install_uv):
+            installed.append("uv")
 
+        if ctx.install_python:
             if _install_with_spinner(ui, "Python tools", install_python_tools):
                 installed.append("python_tools")
 

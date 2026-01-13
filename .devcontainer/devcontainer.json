@@ -47,6 +47,11 @@
       "upgradePackages": true,
       "configureZshAsDefaultShell": true
     },
+    /* https://github.com/devcontainers/features/tree/main/src/python */
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12",
+      "installTools": false
+    },
     /* https://github.com/devcontainers/features/tree/main/src/node */
     "ghcr.io/devcontainers/features/node:1": {
       "version": "22",
@@ -77,8 +82,6 @@
     "ghcr.io/devcontainers/features/git:1": {
       "version": "latest"
     },
-    /* https://github.com/meaningful-ooo/devcontainer-features/tree/main/src/homebrew */
-    "ghcr.io/meaningful-ooo/devcontainer-features/homebrew:2": {},
     /* https://github.com/devcontainers/features/tree/main/src/go */
     "ghcr.io/devcontainers/features/go:1": {},
     /* https://github.com/michidk/devcontainers-features/tree/main/src/bun */
