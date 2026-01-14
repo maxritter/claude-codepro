@@ -17,7 +17,7 @@ const SectionHeader = ({ title, subtitle }: { title: string; subtitle?: string }
 
 const InstallSection = () => {
   const [copied, setCopied] = useState(false);
-  const installCommand = "curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v4.3.2/install.sh | bash";
+  const installCommand = "curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v4.3.3/install.sh | bash";
 
   const copyToClipboard = async () => {
     await navigator.clipboard.writeText(installCommand);
