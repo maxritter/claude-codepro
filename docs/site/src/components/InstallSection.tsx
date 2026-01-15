@@ -121,7 +121,7 @@ const StepsCard = ({ title, icon: Icon, steps, note }: StepsCardProps) => (
 
 const InstallSection = () => {
   const [copied, setCopied] = useState(false);
-  const installCommand = "curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v4.4.4/install.sh | bash";
+  const installCommand = "curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v4.4.5/install.sh | bash";
 
   const copyToClipboard = async () => {
     await navigator.clipboard.writeText(installCommand);
