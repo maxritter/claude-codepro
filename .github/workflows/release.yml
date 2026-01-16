@@ -43,6 +43,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Install git-crypt
+        run: sudo apt-get update && sudo apt-get install -y git-crypt
+
+      - name: Unlock repository
+        env:
+          GIT_CRYPT_KEY: ${{ secrets.GIT_CRYPT_KEY }}
+        run: bash .github/workflows/scripts/setup-git-crypt.sh
+
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
         with:
@@ -57,7 +65,7 @@ jobs:
       - name: Run unit tests with coverage
         run: |
           python3 -m pytest tests/unit/ -v \
-            --cov=installer \
+            --cov=installer --cov=ccp \
             --cov-report=term --cov-report=xml
 
   release:
@@ -73,6 +81,14 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Install git-crypt
+        run: sudo apt-get update && sudo apt-get install -y git-crypt
+
+      - name: Unlock repository
+        env:
+          GIT_CRYPT_KEY: ${{ secrets.GIT_CRYPT_KEY }}
+        run: bash .github/workflows/scripts/setup-git-crypt.sh
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -96,7 +112,7 @@ jobs:
           echo "Version: ${{ steps.semantic.outputs.new_release_version }}"
 
   build-x86:
-    name: Build Linux x86_64
+    name: Build Installer Linux x86_64
     runs-on: ubuntu-latest
     needs: release
     if: |
@@ -144,7 +160,7 @@ jobs:
             installer/dist/ccp-installer-linux-x86_64 --clobber
 
   build-arm64:
-    name: Build Linux arm64
+    name: Build Installer Linux arm64
     runs-on: ubuntu-24.04-arm
     needs: release
     if: |
@@ -192,7 +208,7 @@ jobs:
             installer/dist/ccp-installer-linux-arm64 --clobber
 
   build-darwin-x86:
-    name: Build Darwin x86_64
+    name: Build Installer Darwin x86_64
     runs-on: macos-15-intel
     needs: release
     if: |
@@ -233,7 +249,7 @@ jobs:
             installer/dist/ccp-installer-darwin-x86_64 --clobber
 
   build-darwin-arm64:
-    name: Build Darwin arm64
+    name: Build Installer Darwin arm64
     runs-on: macos-14
     needs: release
     if: |
