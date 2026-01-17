@@ -37,15 +37,14 @@ def test_install_sh_downloads_installer_files():
     assert ".py" in content, "Must filter for Python files"
 
 
-def test_install_sh_downloads_ccp_binary():
-    """Verify install.sh downloads the CCP binary."""
+def test_install_sh_runs_installer():
+    """Verify install.sh runs the Python installer (which downloads CCP binary)."""
     install_sh = Path(__file__).parent.parent.parent / "install.sh"
     content = install_sh.read_text()
 
-    # Must download CCP binary
-    assert "download_ccp_binary" in content, "install.sh must have download_ccp_binary function"
-    assert "ccp-" in content, "Must reference ccp binary name"
-    assert ".claude/bin/ccp" in content, "Must install to .claude/bin/ccp"
+    # Must run installer which handles CCP binary download
+    assert "run_installer" in content, "install.sh must have run_installer function"
+    assert "python -m installer" in content, "Must run Python installer"
 
 
 def test_install_sh_ensures_uv_available():

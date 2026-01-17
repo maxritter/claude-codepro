@@ -152,64 +152,6 @@ download_installer() {
     echo "  [OK] Installer downloaded"
 }
 
-download_ccp_binary() {
-    local arch
-    arch="$(uname -m)"
-    case "$arch" in
-    x86_64 | amd64) arch="x86_64" ;;
-    arm64 | aarch64) arch="arm64" ;;
-    *)
-        echo "Error: Unsupported architecture: $arch"
-        echo "Supported: x86_64, arm64"
-        exit 1
-        ;;
-    esac
-
-    local os
-    os="$(uname -s)"
-    case "$os" in
-    Linux) os="linux" ;;
-    Darwin) os="darwin" ;;
-    *)
-        echo "Error: Unsupported operating system: $os"
-        echo "Supported: Linux, macOS (Darwin)"
-        exit 1
-        ;;
-    esac
-
-    local ccp_name="ccp-${os}-${arch}"
-    local ccp_url="https://github.com/${REPO}/releases/download/v${VERSION}/${ccp_name}"
-    local ccp_path=".claude/bin/ccp"
-
-    mkdir -p .claude/bin
-
-    if [ -f "$ccp_path" ]; then
-        if ! rm -f "$ccp_path" 2>/dev/null; then
-            echo "Error: Cannot update CCP binary - it may be in use."
-            echo ""
-            echo "Please quit Claude CodePro first (Ctrl+C or /exit), then run this installer again."
-            exit 1
-        fi
-    fi
-
-    echo "  [..] Downloading ccp binary..."
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$ccp_url" -o "$ccp_path"
-    elif command -v wget >/dev/null 2>&1; then
-        wget -q "$ccp_url" -O "$ccp_path"
-    else
-        echo "Error: Neither curl nor wget found. Please install one of them."
-        exit 1
-    fi
-    chmod +x "$ccp_path"
-
-    if [ "$(uname -s)" = "Darwin" ]; then
-        xattr -cr "$ccp_path" 2>/dev/null || true
-    fi
-
-    echo "  [OK] CCP binary downloaded"
-}
-
 install_dependencies() {
     echo "  [..] Installing dependencies..."
 
@@ -292,8 +234,6 @@ if check_uv; then
 else
     install_uv
 fi
-
-download_ccp_binary
 
 download_installer
 

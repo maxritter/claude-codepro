@@ -224,6 +224,13 @@ def install(
     project_dir = Path.cwd()
     saved_config = load_config(project_dir)
 
+    from installer.steps.ccp_binary import CcpBinaryStep
+
+    ccp_step = CcpBinaryStep()
+    ccp_ctx = InstallContext(project_dir=project_dir, ui=console)
+    if not ccp_step.check(ccp_ctx):
+        ccp_step.run(ccp_ctx)
+
     license_info = _get_license_info(project_dir, local, effective_local_repo_dir)
     license_acknowledged = license_info is not None and license_info.get("tier") in ("free", "trial", "commercial")
 
