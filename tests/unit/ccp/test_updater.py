@@ -236,32 +236,35 @@ class TestRunInstaller:
 
     @patch("subprocess.run")
     def test_run_installer_calls_python_module(self, mock_run):
-        """run_installer calls python3 -m installer."""
+        """run_installer calls uv run python -m installer."""
         from ccp.updater import run_installer
 
         mock_run.return_value = MagicMock(returncode=0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             project_dir = Path(tmpdir)
-            result = run_installer(project_dir)
+            success, error = run_installer(project_dir)
 
-        assert result is True
+        assert success is True
+        assert error == ""
         mock_run.assert_called_once()
 
         call_args = mock_run.call_args[0][0]
-        assert "python3" in call_args
+        assert "uv" in call_args
+        assert "python" in call_args
         assert "-m" in call_args
         assert "installer" in call_args
 
     @patch("subprocess.run")
     def test_run_installer_returns_false_on_failure(self, mock_run):
-        """run_installer returns False on subprocess failure."""
+        """run_installer returns False with error message on subprocess failure."""
         from ccp.updater import run_installer
 
-        mock_run.return_value = MagicMock(returncode=1)
+        mock_run.return_value = MagicMock(returncode=1, stderr="Some error", stdout="")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             project_dir = Path(tmpdir)
-            result = run_installer(project_dir)
+            success, error = run_installer(project_dir)
 
-        assert result is False
+        assert success is False
+        assert "Some error" in error

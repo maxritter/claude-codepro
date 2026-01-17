@@ -142,7 +142,7 @@ This is independent of which development mode you use - both modes benefit from 
 
 ### Two Modes of Development
 
-Claude CodePro supports two development modes. **Endless Mode works in both** - you get unlimited context regardless of which mode you choose.
+Claude CodePro supports two development modes:
 
 | Mode | Command | Best For |
 |------|---------|----------|

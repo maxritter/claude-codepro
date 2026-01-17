@@ -231,6 +231,7 @@ tmp/
 
 # Build artifacts
 .claude/bin/
+.claude/installer/
 docs/plans
 
 # Kiro

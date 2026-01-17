@@ -71,7 +71,8 @@ class TestPrerequisitesStep:
             with patch("installer.steps.prerequisites.is_in_devcontainer", return_value=False):
                 with patch("installer.steps.prerequisites.is_homebrew_available", return_value=True):
                     with patch("installer.steps.prerequisites.command_exists", return_value=True):
-                        assert step.check(ctx) is True
+                        with patch("installer.steps.prerequisites._is_nvm_installed", return_value=True):
+                            assert step.check(ctx) is True
 
     def test_prerequisites_step_skips_when_not_local_install(self):
         """PrerequisitesStep.check returns True when not a local install."""
@@ -158,9 +159,10 @@ class TestPrerequisitesStepRun:
 
     @patch("installer.steps.prerequisites._install_homebrew_package")
     @patch("installer.steps.prerequisites._add_bun_tap")
+    @patch("installer.steps.prerequisites._is_nvm_installed")
     @patch("installer.steps.prerequisites.command_exists")
     def test_prerequisites_run_skips_installed_packages(
-        self, mock_cmd_exists, mock_tap, mock_install
+        self, mock_cmd_exists, mock_nvm_installed, mock_tap, mock_install
     ):
         """PrerequisitesStep.run skips packages that are already installed."""
         from installer.context import InstallContext
@@ -168,6 +170,7 @@ class TestPrerequisitesStepRun:
         from installer.ui import Console
 
         mock_cmd_exists.return_value = True
+        mock_nvm_installed.return_value = True
         mock_tap.return_value = True
         mock_install.return_value = True
 

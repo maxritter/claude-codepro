@@ -282,14 +282,16 @@ class TestWrapperUpdateCheck:
         pipe_dir = tmp_path / "pipes"
         wrapper = ClaudeWrapper(claude_args=[], pipe_dir=pipe_dir, skip_update_check=False)
 
-        with patch("ccp.updater.check_for_update") as mock_check:
-            mock_check.return_value = (True, "4.5.8", "4.6.0")
-            # Mock the /dev/tty open to simulate TTY with "n" response
-            mock_tty = MagicMock()
-            mock_tty.__enter__ = MagicMock(return_value=StringIO("n\n"))
-            mock_tty.__exit__ = MagicMock(return_value=False)
-            with patch("builtins.open", return_value=mock_tty):
-                result = wrapper._check_and_prompt_update()
+        with patch.object(wrapper, "_load_ccp_config", return_value={"auto_update": True, "declined_version": None}):
+            with patch.object(wrapper, "_save_ccp_config"):
+                with patch("ccp.updater.check_for_update") as mock_check:
+                    mock_check.return_value = (True, "4.5.8", "4.6.0")
+                    # Mock the /dev/tty open to simulate TTY with "n" response then "1" for skip choice
+                    mock_tty = MagicMock()
+                    mock_tty.__enter__ = MagicMock(return_value=StringIO("n\n1\n"))
+                    mock_tty.__exit__ = MagicMock(return_value=False)
+                    with patch("builtins.open", return_value=mock_tty):
+                        result = wrapper._check_and_prompt_update()
 
         mock_check.assert_called_once()
         assert result is False  # User declined
@@ -314,10 +316,11 @@ class TestWrapperUpdateCheck:
         pipe_dir = tmp_path / "pipes"
         wrapper = ClaudeWrapper(claude_args=[], pipe_dir=pipe_dir, skip_update_check=False)
 
-        with patch("ccp.updater.check_for_update") as mock_check:
-            mock_check.return_value = (False, "4.5.8", "4.5.8")
-            with patch("builtins.input") as mock_input:
-                result = wrapper._check_and_prompt_update()
+        with patch.object(wrapper, "_load_ccp_config", return_value={"auto_update": True, "declined_version": None}):
+            with patch("ccp.updater.check_for_update") as mock_check:
+                mock_check.return_value = (False, "4.5.8", "4.5.8")
+                with patch("builtins.input") as mock_input:
+                    result = wrapper._check_and_prompt_update()
 
         mock_check.assert_called_once()
         mock_input.assert_not_called()  # No prompt for up-to-date
@@ -330,10 +333,11 @@ class TestWrapperUpdateCheck:
         pipe_dir = tmp_path / "pipes"
         wrapper = ClaudeWrapper(claude_args=[], pipe_dir=pipe_dir, skip_update_check=False)
 
-        with patch("ccp.updater.check_for_update") as mock_check:
-            mock_check.return_value = (None, "4.5.8", None)  # Network error
-            with patch("builtins.input") as mock_input:
-                result = wrapper._check_and_prompt_update()
+        with patch.object(wrapper, "_load_ccp_config", return_value={"auto_update": True, "declined_version": None}):
+            with patch("ccp.updater.check_for_update") as mock_check:
+                mock_check.return_value = (None, "4.5.8", None)  # Network error
+                with patch("builtins.input") as mock_input:
+                    result = wrapper._check_and_prompt_update()
 
         mock_check.assert_called_once()
         mock_input.assert_not_called()  # No prompt on network error
@@ -348,18 +352,20 @@ class TestWrapperUpdateCheck:
         pipe_dir = tmp_path / "pipes"
         wrapper = ClaudeWrapper(claude_args=[], pipe_dir=pipe_dir, skip_update_check=False)
 
-        with patch("ccp.updater.check_for_update") as mock_check:
-            mock_check.return_value = (True, "4.5.8", "4.6.0")
-            with patch("ccp.updater.download_installer") as mock_download:
-                mock_download.return_value = True
-                with patch("ccp.updater.run_installer") as mock_run:
-                    mock_run.return_value = True
-                    # Mock /dev/tty with "y" response to accept update
-                    mock_tty = MagicMock()
-                    mock_tty.__enter__ = MagicMock(return_value=StringIO("y\n"))
-                    mock_tty.__exit__ = MagicMock(return_value=False)
-                    with patch("builtins.open", return_value=mock_tty):
-                        result = wrapper._check_and_prompt_update()
+        with patch.object(wrapper, "_load_ccp_config", return_value={"auto_update": True, "declined_version": None}):
+            with patch.object(wrapper, "_save_ccp_config"):
+                with patch("ccp.updater.check_for_update") as mock_check:
+                    mock_check.return_value = (True, "4.5.8", "4.6.0")
+                    with patch("ccp.updater.download_installer") as mock_download:
+                        mock_download.return_value = True
+                        with patch("ccp.updater.run_installer") as mock_run:
+                            mock_run.return_value = (True, "")
+                            # Mock /dev/tty with "y" response to accept update
+                            mock_tty = MagicMock()
+                            mock_tty.__enter__ = MagicMock(return_value=StringIO("y\n"))
+                            mock_tty.__exit__ = MagicMock(return_value=False)
+                            with patch("builtins.open", return_value=mock_tty):
+                                result = wrapper._check_and_prompt_update()
 
         mock_download.assert_called_once()
         mock_run.assert_called_once()

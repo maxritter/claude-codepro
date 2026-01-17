@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from installer.platform_utils import command_exists, is_homebrew_available, is_in_devcontainer
@@ -22,6 +23,18 @@ HOMEBREW_PACKAGES = [
     "bun",
     "uv",
 ]
+
+
+def _is_nvm_installed() -> bool:
+    """Check if nvm is installed (it's a shell function, not a binary)."""
+    nvm_dir = Path.home() / ".nvm"
+    if (nvm_dir / "nvm.sh").exists():
+        return True
+    try:
+        result = subprocess.run(["brew", "list", "nvm"], capture_output=True, check=False)
+        return result.returncode == 0
+    except (subprocess.SubprocessError, OSError):
+        return False
 
 
 def _install_homebrew() -> bool:
@@ -114,9 +127,13 @@ class PrerequisitesStep(BaseStep):
             return False
 
         for package in HOMEBREW_PACKAGES:
-            cmd = _get_command_for_package(package)
-            if not command_exists(cmd):
-                return False
+            if package == "nvm":
+                if not _is_nvm_installed():
+                    return False
+            else:
+                cmd = _get_command_for_package(package)
+                if not command_exists(cmd):
+                    return False
 
         return True
 
@@ -142,9 +159,13 @@ class PrerequisitesStep(BaseStep):
         _add_bun_tap()
 
         for package in HOMEBREW_PACKAGES:
-            cmd = _get_command_for_package(package)
+            if package == "nvm":
+                is_installed = _is_nvm_installed()
+            else:
+                cmd = _get_command_for_package(package)
+                is_installed = command_exists(cmd)
 
-            if command_exists(cmd):
+            if is_installed:
                 if ui:
                     ui.info(f"{package} already installed")
                 continue
