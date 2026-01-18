@@ -2,7 +2,7 @@
 
 set -e
 
-VERSION="4.5.21"
+VERSION="4.5.22"
 
 REPO="maxritter/claude-codepro"
 REPO_RAW="https://raw.githubusercontent.com/${REPO}/v${VERSION}"

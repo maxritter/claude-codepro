@@ -50,7 +50,7 @@ Choose your installation method:
 Run the following command in your **project folder root**:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v4.5.21/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v4.5.22/install.sh | bash
 ```
 
 You'll be asked to choose between **Dev Container** or **Local Installation**.

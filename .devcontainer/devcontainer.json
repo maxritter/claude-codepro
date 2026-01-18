@@ -83,7 +83,7 @@
     /* https://github.com/braun-daniel/devcontainer-features/blob/main/src/fzf */
     "ghcr.io/braun-daniel/devcontainer-features/fzf:1": {}
   },
-  "postCreateCommand": "curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v4.5.21/install.sh | bash",
+  "postCreateCommand": "curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v4.5.22/install.sh | bash",
   "remoteUser": "root",
   "containerUser": "root"
 }
