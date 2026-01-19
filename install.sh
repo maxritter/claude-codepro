@@ -222,7 +222,7 @@ if ! is_in_container; then
     if [ "$saved_mode" = "local" ]; then
         echo "  Using saved preference: Local Installation"
         echo ""
-        confirm_local_install
+        # Skip confirmation - user already confirmed when they first chose local
     elif [ "$saved_mode" = "container" ]; then
         echo "  Using saved preference: Dev Container"
         echo ""
