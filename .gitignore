@@ -228,6 +228,7 @@ CLAUDE.md
 !.claude/rules/custom/typescript-rules.md
 .claude/config/
 tmp/
+context/
 
 # Build artifacts
 .claude/bin/
