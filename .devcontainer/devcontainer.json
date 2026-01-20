@@ -3,6 +3,9 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
+  "hostRequirements": {
+    "gpu": "optional"
+  },
   "runArgs": [
     "--name",
     "{{PROJECT_SLUG}}"
