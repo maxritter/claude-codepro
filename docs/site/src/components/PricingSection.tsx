@@ -69,7 +69,7 @@ const PricingSection = () => {
               </div>
               <div>
                 <h3 className="text-xl font-bold text-foreground">Standard</h3>
-                <p className="text-sm text-muted-foreground">$29.90/month</p>
+                <p className="text-sm text-muted-foreground">$24.90/month</p>
               </div>
             </div>
 
@@ -105,7 +105,7 @@ const PricingSection = () => {
               </div>
               <div>
                 <h3 className="text-xl font-bold text-foreground">Enterprise</h3>
-                <p className="text-sm text-muted-foreground">$59.90/month</p>
+                <p className="text-sm text-muted-foreground">$49.90/month</p>
               </div>
             </div>
 
