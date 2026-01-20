@@ -398,6 +398,41 @@ def _get_vexor_pip_path() -> Path | None:
     return vexor_pip if vexor_pip.exists() else None
 
 
+def _is_vexor_in_project_venv() -> bool:
+    """Check if vexor is installed in the project's .venv (not as uv tool)."""
+    cwd = Path.cwd()
+    venv_paths = [cwd / ".venv", cwd / "venv"]
+    for venv_path in venv_paths:
+        vexor_bin = venv_path / "bin" / "vexor"
+        if vexor_bin.exists():
+            return True
+    return False
+
+
+def _upgrade_venv_vexor_cuda() -> bool:
+    """Upgrade vexor in project .venv with CUDA extras and fix onnxruntime conflict."""
+    try:
+        subprocess.run(
+            ["uv", "pip", "install", "vexor[local-cuda]"],
+            check=True,
+            capture_output=True,
+        )
+        result = subprocess.run(
+            ["uv", "pip", "list"],
+            capture_output=True,
+            text=True,
+        )
+        packages = result.stdout.lower()
+        if "onnxruntime-gpu" in packages and "onnxruntime " in packages:
+            subprocess.run(
+                ["uv", "pip", "uninstall", "onnxruntime"],
+                capture_output=True,
+            )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
 def _fix_vexor_onnxruntime_conflict() -> bool:
     """Remove CPU-only onnxruntime from vexor to fix CUDA provider conflict."""
     vexor_pip = _get_vexor_pip_path()
@@ -504,6 +539,12 @@ def install_vexor(
     if provider_mode is None:
         gpu_available = has_nvidia_gpu()
         provider_mode = "cuda" if gpu_available else "cpu"
+
+    if _is_vexor_in_project_venv():
+        if provider_mode == "cuda":
+            _upgrade_venv_vexor_cuda()
+        _configure_vexor_defaults(provider_mode, api_key)
+        return True
 
     if command_exists("vexor"):
         if provider_mode == "cuda":

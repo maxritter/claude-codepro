@@ -546,12 +546,14 @@ class TestVexorInstall:
 
     @patch("installer.steps.dependencies._configure_vexor_defaults")
     @patch("installer.steps.dependencies._fix_vexor_onnxruntime_conflict")
+    @patch("installer.steps.dependencies._is_vexor_in_project_venv")
     @patch("installer.steps.dependencies.command_exists")
-    def test_install_vexor_cuda_mode_fixes_onnxruntime(self, mock_cmd_exists, mock_fix, mock_config):
-        """install_vexor in cuda mode calls _fix_vexor_onnxruntime_conflict."""
+    def test_install_vexor_cuda_mode_fixes_onnxruntime(self, mock_cmd_exists, mock_is_venv, mock_fix, mock_config):
+        """install_vexor in cuda mode calls _fix_vexor_onnxruntime_conflict for uv tool vexor."""
         from installer.steps.dependencies import install_vexor
 
-        mock_cmd_exists.return_value = True
+        mock_is_venv.return_value = False  # Not in project .venv
+        mock_cmd_exists.return_value = True  # Installed as uv tool
         mock_fix.return_value = True
         mock_config.return_value = True
 
@@ -563,12 +565,16 @@ class TestVexorInstall:
 
     @patch("installer.steps.dependencies._configure_vexor_defaults")
     @patch("subprocess.run")
+    @patch("installer.steps.dependencies._is_vexor_in_project_venv")
     @patch("installer.steps.dependencies.command_exists")
-    def test_install_vexor_installs_correct_package_for_cuda(self, mock_cmd_exists, mock_run, mock_config):
+    def test_install_vexor_installs_correct_package_for_cuda(
+        self, mock_cmd_exists, mock_is_venv, mock_run, mock_config
+    ):
         """install_vexor installs vexor[local-cuda] for cuda mode."""
         from installer.steps.dependencies import install_vexor
 
-        mock_cmd_exists.return_value = False
+        mock_is_venv.return_value = False  # Not in project .venv
+        mock_cmd_exists.return_value = False  # Not installed anywhere
         mock_run.return_value = MagicMock(returncode=0)
         mock_config.return_value = True
 
@@ -583,12 +589,16 @@ class TestVexorInstall:
 
     @patch("installer.steps.dependencies._configure_vexor_defaults")
     @patch("subprocess.run")
+    @patch("installer.steps.dependencies._is_vexor_in_project_venv")
     @patch("installer.steps.dependencies.command_exists")
-    def test_install_vexor_installs_correct_package_for_openai(self, mock_cmd_exists, mock_run, mock_config):
+    def test_install_vexor_installs_correct_package_for_openai(
+        self, mock_cmd_exists, mock_is_venv, mock_run, mock_config
+    ):
         """install_vexor installs vexor for openai mode."""
         from installer.steps.dependencies import install_vexor
 
-        mock_cmd_exists.return_value = False
+        mock_is_venv.return_value = False  # Not in project .venv
+        mock_cmd_exists.return_value = False  # Not installed anywhere
         mock_run.return_value = MagicMock(returncode=0)
         mock_config.return_value = True
 
@@ -915,3 +925,240 @@ class TestDependenciesStepGpuDetection:
             mock_vexor.assert_called_once()
             call_args = mock_vexor.call_args[0]
             assert call_args[0] == "cpu"
+
+
+class TestVexorVenvDetection:
+    """Test _is_vexor_in_project_venv() function."""
+
+    def test_is_vexor_in_project_venv_returns_true_when_exists_in_venv(self):
+        """_is_vexor_in_project_venv returns True when vexor exists in .venv."""
+        from installer.steps.dependencies import _is_vexor_in_project_venv
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create .venv/bin/vexor
+            venv_bin = Path(tmpdir) / ".venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            vexor_bin = venv_bin / "vexor"
+            vexor_bin.touch()
+
+            # Change cwd to tmpdir
+            import os
+
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(tmpdir)
+                result = _is_vexor_in_project_venv()
+                assert result is True
+            finally:
+                os.chdir(original_cwd)
+
+    def test_is_vexor_in_project_venv_returns_true_when_exists_in_venv_dir(self):
+        """_is_vexor_in_project_venv returns True when vexor exists in venv/ (not .venv)."""
+        from installer.steps.dependencies import _is_vexor_in_project_venv
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create venv/bin/vexor (alternative location)
+            venv_bin = Path(tmpdir) / "venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            vexor_bin = venv_bin / "vexor"
+            vexor_bin.touch()
+
+            import os
+
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(tmpdir)
+                result = _is_vexor_in_project_venv()
+                assert result is True
+            finally:
+                os.chdir(original_cwd)
+
+    def test_is_vexor_in_project_venv_returns_false_when_missing(self):
+        """_is_vexor_in_project_venv returns False when vexor not in .venv."""
+        from installer.steps.dependencies import _is_vexor_in_project_venv
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create .venv/bin but no vexor
+            venv_bin = Path(tmpdir) / ".venv" / "bin"
+            venv_bin.mkdir(parents=True)
+
+            import os
+
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(tmpdir)
+                result = _is_vexor_in_project_venv()
+                assert result is False
+            finally:
+                os.chdir(original_cwd)
+
+    def test_is_vexor_in_project_venv_returns_false_when_no_venv(self):
+        """_is_vexor_in_project_venv returns False when no .venv directory exists."""
+        from installer.steps.dependencies import _is_vexor_in_project_venv
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import os
+
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(tmpdir)
+                result = _is_vexor_in_project_venv()
+                assert result is False
+            finally:
+                os.chdir(original_cwd)
+
+
+class TestVexorVenvUpgrade:
+    """Test _upgrade_venv_vexor_cuda() function."""
+
+    @patch("subprocess.run")
+    def test_upgrade_venv_vexor_cuda_calls_uv_pip_install(self, mock_run):
+        """_upgrade_venv_vexor_cuda calls uv pip install vexor[local-cuda]."""
+        from installer.steps.dependencies import _upgrade_venv_vexor_cuda
+
+        # Mock pip list to show no conflict
+        mock_run.return_value = MagicMock(returncode=0, stdout="onnxruntime-gpu 1.16.0")
+
+        result = _upgrade_venv_vexor_cuda()
+
+        assert result is True
+        # First call should be uv pip install
+        first_call = mock_run.call_args_list[0]
+        assert first_call[0][0] == ["uv", "pip", "install", "vexor[local-cuda]"]
+
+    @patch("subprocess.run")
+    def test_upgrade_venv_vexor_cuda_removes_conflicting_onnxruntime(self, mock_run):
+        """_upgrade_venv_vexor_cuda removes CPU onnxruntime when conflict exists."""
+        from installer.steps.dependencies import _upgrade_venv_vexor_cuda
+
+        def side_effect(*args, **kwargs):
+            cmd = args[0]
+            if cmd == ["uv", "pip", "list"]:
+                # Simulate both packages installed (conflict)
+                return MagicMock(stdout="onnxruntime-gpu 1.16.0\nonnxruntime 1.16.0")
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = side_effect
+
+        result = _upgrade_venv_vexor_cuda()
+
+        assert result is True
+        # Should have called uninstall to remove the conflict
+        uninstall_calls = [c for c in mock_run.call_args_list if "uninstall" in str(c)]
+        assert len(uninstall_calls) == 1
+        assert "onnxruntime" in str(uninstall_calls[0])
+
+    @patch("subprocess.run")
+    def test_upgrade_venv_vexor_cuda_skips_uninstall_when_no_conflict(self, mock_run):
+        """_upgrade_venv_vexor_cuda skips uninstall when no conflict exists."""
+        from installer.steps.dependencies import _upgrade_venv_vexor_cuda
+
+        def side_effect(*args, **kwargs):
+            cmd = args[0]
+            if cmd == ["uv", "pip", "list"]:
+                # Only GPU version installed (no conflict)
+                return MagicMock(stdout="onnxruntime-gpu 1.16.0\nnumpy 1.24.0")
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = side_effect
+
+        result = _upgrade_venv_vexor_cuda()
+
+        assert result is True
+        # Should NOT have called uninstall
+        uninstall_calls = [c for c in mock_run.call_args_list if "uninstall" in str(c)]
+        assert len(uninstall_calls) == 0
+
+    @patch("subprocess.run")
+    def test_upgrade_venv_vexor_cuda_returns_false_on_failure(self, mock_run):
+        """_upgrade_venv_vexor_cuda returns False when subprocess fails."""
+        import subprocess
+
+        from installer.steps.dependencies import _upgrade_venv_vexor_cuda
+
+        mock_run.side_effect = subprocess.CalledProcessError(1, "uv")
+
+        result = _upgrade_venv_vexor_cuda()
+
+        assert result is False
+
+
+class TestVexorInstallVenvUpgrade:
+    """Test install_vexor() .venv upgrade behavior."""
+
+    @patch("installer.steps.dependencies._configure_vexor_defaults")
+    @patch("installer.steps.dependencies._upgrade_venv_vexor_cuda")
+    @patch("installer.steps.dependencies._is_vexor_in_project_venv")
+    def test_install_vexor_upgrades_venv_vexor_when_cuda_detected(self, mock_is_venv, mock_upgrade, mock_config):
+        """install_vexor upgrades .venv vexor with CUDA extras when GPU detected."""
+        from installer.steps.dependencies import install_vexor
+
+        mock_is_venv.return_value = True
+        mock_upgrade.return_value = True
+        mock_config.return_value = True
+
+        result = install_vexor(provider_mode="cuda")
+
+        assert result is True
+        mock_is_venv.assert_called_once()
+        mock_upgrade.assert_called_once()
+        mock_config.assert_called_once_with("cuda", None)
+
+    @patch("installer.steps.dependencies._configure_vexor_defaults")
+    @patch("installer.steps.dependencies._upgrade_venv_vexor_cuda")
+    @patch("installer.steps.dependencies._is_vexor_in_project_venv")
+    def test_install_vexor_skips_upgrade_when_no_cuda(self, mock_is_venv, mock_upgrade, mock_config):
+        """install_vexor skips upgrade when not in CUDA mode."""
+        from installer.steps.dependencies import install_vexor
+
+        mock_is_venv.return_value = True
+        mock_config.return_value = True
+
+        result = install_vexor(provider_mode="cpu")
+
+        assert result is True
+        mock_is_venv.assert_called_once()
+        mock_upgrade.assert_not_called()
+        mock_config.assert_called_once_with("cpu", None)
+
+    @patch("installer.steps.dependencies._configure_vexor_defaults")
+    @patch("installer.steps.dependencies._upgrade_venv_vexor_cuda")
+    @patch("installer.steps.dependencies._is_vexor_in_project_venv")
+    @patch("installer.steps.dependencies.command_exists")
+    def test_install_vexor_checks_venv_before_command_exists(
+        self, mock_cmd_exists, mock_is_venv, mock_upgrade, mock_config
+    ):
+        """install_vexor checks .venv vexor first, before command_exists."""
+        from installer.steps.dependencies import install_vexor
+
+        mock_is_venv.return_value = True
+        mock_upgrade.return_value = True
+        mock_config.return_value = True
+
+        result = install_vexor(provider_mode="cuda")
+
+        assert result is True
+        # command_exists should NOT be called if venv vexor found
+        mock_cmd_exists.assert_not_called()
+
+    @patch("installer.steps.dependencies._configure_vexor_defaults")
+    @patch("installer.steps.dependencies._fix_vexor_onnxruntime_conflict")
+    @patch("installer.steps.dependencies._is_vexor_in_project_venv")
+    @patch("installer.steps.dependencies.command_exists")
+    def test_install_vexor_falls_back_to_uv_tool_when_no_venv(
+        self, mock_cmd_exists, mock_is_venv, mock_fix, mock_config
+    ):
+        """install_vexor falls back to uv tool check when no .venv vexor."""
+        from installer.steps.dependencies import install_vexor
+
+        mock_is_venv.return_value = False
+        mock_cmd_exists.return_value = True
+        mock_fix.return_value = True
+        mock_config.return_value = True
+
+        result = install_vexor(provider_mode="cuda")
+
+        assert result is True
+        mock_is_venv.assert_called_once()
+        mock_cmd_exists.assert_called_once_with("vexor")
+        mock_fix.assert_called_once()  # Should call onnxruntime fix for uv tool vexor
