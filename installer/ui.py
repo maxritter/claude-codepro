@@ -168,7 +168,10 @@ class Console:
                 license_text.append("  ⚠ ", style="red")
                 license_text.append("Trial Expired", style="bold red")
                 license_text.append(" — Subscribe: ", style="dim white")
-                license_text.append("https://license.claude-code.pro", style="cyan")
+                license_text.append("https://license.claude-code.pro\n", style="cyan")
+                license_text.append("     Use code ", style="dim white")
+                license_text.append("TRIAL50OFF", style="bold green")
+                license_text.append(" for 50% off first month", style="dim white")
             else:
                 license_text.append("  ⏳ ", style="yellow")
                 license_text.append(f"Trial ({days} days remaining)", style="bold yellow")

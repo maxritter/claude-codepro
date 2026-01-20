@@ -394,6 +394,9 @@ def install(
             console.print("  [bold yellow]Trial has expired on this machine.[/bold yellow]")
             console.print("  Please enter a license key to continue.")
             console.print()
+            console.print("  [bold green]Use code TRIAL50OFF for 50% off your first month![/bold green]")
+            console.print("  [dim](Regular pricing applies after first month)[/dim]")
+            console.print()
 
             for attempt in range(3):
                 license_key = console.input("Enter your license key").strip()
