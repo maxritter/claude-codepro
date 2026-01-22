@@ -263,9 +263,7 @@ class TestEnvironmentStepOAuth:
             non_interactive=False,
         )
 
-    def test_environment_prompts_for_oauth_when_not_set(
-        self, install_context: InstallContext, tmp_path: Path
-    ) -> None:
+    def test_environment_prompts_for_oauth_when_not_set(self, install_context: InstallContext, tmp_path: Path) -> None:
         """Should prompt for OAuth token when neither .env nor credentials exist."""
         step = EnvironmentStep()
 
@@ -289,9 +287,7 @@ class TestEnvironmentStepOAuth:
         # Should have shown success message about existing credentials
         install_context.ui.success.assert_called()
 
-    def test_environment_restores_credentials_from_env(
-        self, install_context: InstallContext, tmp_path: Path
-    ) -> None:
+    def test_environment_restores_credentials_from_env(self, install_context: InstallContext, tmp_path: Path) -> None:
         """Should restore credentials file when token in .env but credentials missing."""
         step = EnvironmentStep()
         env_file = tmp_path / ".env"
@@ -336,3 +332,117 @@ class TestEnvironmentStepOAuth:
         assert creds_file.exists()
         content = json.loads(creds_file.read_text())
         assert content["claudeAiOauth"]["accessToken"] == "new-oauth-token"
+
+    def test_e2e_workflow_existing_token_in_env_skips_prompt(
+        self, install_context: InstallContext, tmp_path: Path
+    ) -> None:
+        """E2E: When token exists in .env, auto-restore credentials without prompting."""
+        step = EnvironmentStep()
+        env_file = tmp_path / ".env"
+        env_file.write_text("CLAUDE_CODE_OAUTH_TOKEN=existing-token\n")
+        original_env_content = env_file.read_text()
+
+        with patch("installer.steps.environment.Path.home", return_value=tmp_path):
+            with patch("installer.steps.environment.credentials_exist", return_value=False):
+                with patch(
+                    "installer.steps.environment.key_is_set",
+                    side_effect=lambda k, _: k == "CLAUDE_CODE_OAUTH_TOKEN",
+                ):
+                    step.run(install_context)
+
+        # POSITIVE ASSERTIONS: What SHOULD be called
+        install_context.ui.status.assert_called()
+        install_context.ui.success.assert_called()
+
+        # NEGATIVE ASSERTIONS: What should NOT be called
+        install_context.ui.confirm.assert_not_called()
+        install_context.ui.input.assert_not_called()
+        install_context.ui.info.assert_not_called()
+
+        # FILE ASSERTIONS: Credentials file created with correct token
+        creds_file = tmp_path / ".claude" / ".credentials.json"
+        assert creds_file.exists(), "Credentials file should be created"
+        content = json.loads(creds_file.read_text())
+        assert content["claudeAiOauth"]["accessToken"] == "existing-token"
+
+        # Original .env unchanged
+        assert env_file.read_text() == original_env_content
+
+    def test_e2e_workflow_no_token_user_says_yes_creates_all(
+        self, install_context: InstallContext, tmp_path: Path
+    ) -> None:
+        """E2E: When no token exists and user says YES, create all files."""
+        step = EnvironmentStep()
+        env_file = tmp_path / ".env"
+        env_file.write_text("")  # Empty .env
+
+        # User accepts OAuth and provides token
+        install_context.ui.confirm.return_value = True
+        install_context.ui.input.return_value = "user-entered-token"
+
+        with patch("installer.steps.environment.Path.home", return_value=tmp_path):
+            with patch("installer.steps.environment.credentials_exist", return_value=False):
+                with patch("installer.steps.environment.key_is_set", return_value=False):
+                    step.run(install_context)
+
+        # POSITIVE ASSERTIONS: What SHOULD be called
+        install_context.ui.rule.assert_called()
+        install_context.ui.confirm.assert_called_once()
+        install_context.ui.input.assert_called_once()
+        install_context.ui.success.assert_called()
+
+        # NEGATIVE ASSERTIONS: What should NOT be called
+        install_context.ui.info.assert_not_called()
+
+        # FILE ASSERTIONS: .env file contains the token
+        env_content = env_file.read_text()
+        assert "CLAUDE_CODE_OAUTH_TOKEN=user-entered-token" in env_content
+
+        # FILE ASSERTIONS: Credentials file exists with correct token
+        creds_file = tmp_path / ".claude" / ".credentials.json"
+        assert creds_file.exists(), "Credentials file should be created"
+        creds_content = json.loads(creds_file.read_text())
+        assert creds_content["claudeAiOauth"]["accessToken"] == "user-entered-token"
+
+        # FILE ASSERTIONS: Config file exists with hasCompletedOnboarding
+        config_file = tmp_path / ".claude.json"
+        assert config_file.exists(), "Config file should be created"
+        config_content = json.loads(config_file.read_text())
+        assert config_content["hasCompletedOnboarding"] is True
+
+    def test_e2e_workflow_no_token_user_says_no_skips_all(
+        self, install_context: InstallContext, tmp_path: Path
+    ) -> None:
+        """E2E: When no token exists and user says NO, create nothing."""
+        step = EnvironmentStep()
+        env_file = tmp_path / ".env"
+        env_file.write_text("")  # Empty .env
+        original_env_content = env_file.read_text()
+
+        # User declines OAuth
+        install_context.ui.confirm.return_value = False
+
+        with patch("installer.steps.environment.Path.home", return_value=tmp_path):
+            with patch("installer.steps.environment.credentials_exist", return_value=False):
+                with patch("installer.steps.environment.key_is_set", return_value=False):
+                    step.run(install_context)
+
+        # POSITIVE ASSERTIONS: What SHOULD be called
+        install_context.ui.rule.assert_called()
+        install_context.ui.confirm.assert_called_once()
+        install_context.ui.info.assert_called_once()
+
+        # NEGATIVE ASSERTIONS: What should NOT be called
+        install_context.ui.input.assert_not_called()
+        install_context.ui.success.assert_not_called()
+
+        # FILE ASSERTIONS: .env file is unchanged (empty)
+        assert env_file.read_text() == original_env_content
+
+        # FILE ASSERTIONS: Credentials file does NOT exist
+        creds_file = tmp_path / ".claude" / ".credentials.json"
+        assert not creds_file.exists(), "Credentials file should NOT be created"
+
+        # FILE ASSERTIONS: Config file does NOT exist
+        config_file = tmp_path / ".claude.json"
+        assert not config_file.exists(), "Config file should NOT be created"
