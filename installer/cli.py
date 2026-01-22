@@ -23,7 +23,7 @@ from installer.steps.dependencies import DependenciesStep
 from installer.steps.environment import EnvironmentStep
 from installer.steps.finalize import FinalizeStep
 from installer.steps.git_setup import GitSetupStep
-from installer.steps.license_activation import LicenseActivationStep
+from installer.steps.license_activation import LicenseActivationStep, get_license_key
 from installer.steps.prerequisites import PrerequisitesStep
 from installer.steps.shell_config import ShellConfigStep
 from installer.steps.vscode_extensions import VSCodeExtensionsStep
@@ -388,14 +388,37 @@ def install(
                 console.print()
                 raise typer.Exit(1)
         else:
-            started = _start_trial(console, project_dir, local, effective_local_repo_dir)
-            if started:
-                console.print()
-                console.success("Your 7-day trial has started!")
-                console.print("  All features are unlocked for 7 days.")
-                console.print()
-                console.print("  [bold]Subscribe after trial:[/bold] [cyan]https://license.claude-code.pro[/cyan]")
-                console.print()
+            env_file = project_dir / ".env"
+            env_license_key = get_license_key(env_file)
+            if env_license_key:
+                validated = _validate_license_key(
+                    console, project_dir, env_license_key, local, effective_local_repo_dir
+                )
+                if validated:
+                    console.print()
+                    console.success("License activated from .env file!")
+                    console.print()
+                else:
+                    console.warning("License key in .env file is invalid")
+                    started = _start_trial(console, project_dir, local, effective_local_repo_dir)
+                    if started:
+                        console.print()
+                        console.success("Your 7-day trial has started!")
+                        console.print("  All features are unlocked for 7 days.")
+                        console.print()
+                        console.print(
+                            "  [bold]Subscribe after trial:[/bold] [cyan]https://license.claude-code.pro[/cyan]"
+                        )
+                        console.print()
+            else:
+                started = _start_trial(console, project_dir, local, effective_local_repo_dir)
+                if started:
+                    console.print()
+                    console.success("Your 7-day trial has started!")
+                    console.print("  All features are unlocked for 7 days.")
+                    console.print()
+                    console.print("  [bold]Subscribe after trial:[/bold] [cyan]https://license.claude-code.pro[/cyan]")
+                    console.print()
 
     claude_dir = Path.cwd() / ".claude"
     if claude_dir.exists() and not skip_prompts:
