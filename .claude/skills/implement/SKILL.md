@@ -177,7 +177,7 @@ If you notice ANY of these, STOP and report to user:
     **You MUST do this BEFORE proceeding to the next task.**
     **Failure to update = incomplete implementation.**
 
-11. **Check context usage** - Run `.claude/bin/ccp check-context --json`
+11. **Check context usage** - Run `$PWD/.claude/bin/ccp check-context --json`
 
 ## Critical Task Rules
 

@@ -31,7 +31,7 @@ def get_alias_line(shell_type: str) -> str:
             f"{CCP_ALIAS_MARKER}\n"
             "function ccp\n"
             "    if test -f .claude/bin/ccp\n"
-            "        .claude/bin/ccp $argv\n"
+            '        "$PWD/.claude/bin/ccp" $argv\n'
             "    else if test -d /workspaces\n"
             '        set ccp_dir ""\n'
             "        for d in /workspaces/*/\n"
@@ -41,7 +41,7 @@ def get_alias_line(shell_type: str) -> str:
             "            end\n"
             "        end\n"
             '        if test -n "$ccp_dir"\n'
-            '            cd "$ccp_dir" && .claude/bin/ccp $argv\n'
+            '            cd "$ccp_dir" && "$PWD/.claude/bin/ccp" $argv\n'
             "        else\n"
             '            echo "Error: No CCP project found in /workspaces"\n'
             "        end\n"
@@ -55,14 +55,14 @@ def get_alias_line(shell_type: str) -> str:
             f"{CCP_ALIAS_MARKER}\n"
             "ccp() {\n"
             "    if [ -f .claude/bin/ccp ]; then\n"
-            '        .claude/bin/ccp "$@"\n'
+            '        "$PWD/.claude/bin/ccp" "$@"\n'
             "    elif [ -d /workspaces ]; then\n"
             '        ccp_dir=""\n'
             "        for d in /workspaces/*/; do\n"
             '            [ -f "$d.claude/bin/ccp" ] && ccp_dir="$d" && break\n'
             "        done\n"
             '        if [ -n "$ccp_dir" ]; then\n'
-            '            cd "$ccp_dir" && .claude/bin/ccp "$@"\n'
+            '            cd "$ccp_dir" && "$PWD/.claude/bin/ccp" "$@"\n'
             "        else\n"
             '            echo "Error: No CCP project found in /workspaces"\n'
             "        fi\n"

@@ -162,6 +162,47 @@ Run actual pipeline, verify:
 - Data quality checks pass
 - Logs show expected flow
 
+### ⛔ CRITICAL: Mandatory Mocking in Unit Tests
+
+**Unit tests MUST mock ALL external calls. No exceptions.**
+
+| Call Type | MUST Mock | Example |
+|-----------|-----------|---------|
+| HTTP/Network | `httpx`, `urllib`, `requests` | `@patch("module.httpx.Client")` |
+| Subprocess | `subprocess.run`, `subprocess.Popen` | `@patch("module.subprocess.run")` |
+| File I/O | `open`, `Path.read_text` | `@patch("builtins.open")` or use `tmp_path` |
+| Database | SQLite, PostgreSQL connections | Use test fixtures |
+| External APIs | Any third-party service | Mock the client |
+
+**Why this is non-negotiable:**
+- Real network calls make tests slow (5+ seconds vs milliseconds)
+- Real calls cause flaky tests (network failures, rate limits)
+- Tests must work offline and in CI without credentials
+- Hanging tests waste developer time and CI resources
+
+**Pattern - Mock at module level:**
+```python
+# GOOD - mock where imported, not where defined
+@patch("mymodule.httpx.Client")
+def test_fetch_data(mock_client):
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"data": "test"}
+    mock_client.return_value.__enter__.return_value.get.return_value = mock_response
+
+    result = fetch_data()  # Uses mocked httpx
+    assert result == {"data": "test"}
+
+# BAD - no mock, makes real network call
+def test_fetch_data():
+    result = fetch_data()  # HANGS or fails without network
+```
+
+**Detecting unmocked calls:**
+- Test takes > 1 second → likely unmocked I/O
+- Test fails with "Connection refused" → unmocked network
+- Test hangs indefinitely → unmocked blocking call
+
 ### Common Mistakes
 
 **Dependent tests:**
@@ -193,6 +234,7 @@ def test_process_increments_total():
 - Time-dependent assertions (causes flakiness)
 - Relying on external services in unit tests
 - Missing cleanup between tests
+- **Making real network/subprocess calls in unit tests (NEVER)**
 
 ### ⛔ MANDATORY: Fix ALL Errors (Tests, Types, Lint)
 

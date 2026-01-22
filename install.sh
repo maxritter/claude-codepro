@@ -78,7 +78,7 @@ show_macos_gatekeeper_help() {
     fi
 
     # Check if ccp binary exists and can run
-    local ccp_path=".claude/bin/ccp"
+    local ccp_path="$PWD/.claude/bin/ccp"
     if [ -f "$ccp_path" ]; then
         if ! "$ccp_path" --version >/dev/null 2>&1; then
             echo ""
@@ -91,7 +91,7 @@ show_macos_gatekeeper_help() {
             echo "    4. Run 'ccp' once in terminal, then click 'Open' when prompted"
             echo ""
             echo "  Or run this command to remove the quarantine flag:"
-            echo "    xattr -cr .claude/bin"
+            echo "    xattr -cr $PWD/.claude/bin"
             echo ""
         fi
     fi

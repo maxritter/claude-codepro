@@ -135,18 +135,39 @@ def _check_macos_gatekeeper(bin_dir: Path, ui: Any = None) -> bool:
     return False
 
 
-def _download_file(url: str, dest_path: Path, executable: bool = True) -> bool:
-    """Download a file from URL to destination path."""
-    try:
-        with httpx.Client(timeout=60.0, follow_redirects=True) as client:
-            response = client.get(url)
-            if response.status_code != 200:
-                return False
+def _download_file(
+    url: str,
+    dest_path: Path,
+    executable: bool = True,
+    progress_callback: Any | None = None,
+) -> bool:
+    """Download a file from URL to destination path with optional progress callback.
 
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-            if dest_path.exists():
-                dest_path.unlink()
-            dest_path.write_bytes(response.content)
+    Args:
+        url: URL to download from
+        dest_path: Destination file path
+        executable: Whether to make the file executable
+        progress_callback: Optional callback (downloaded_bytes, total_bytes) for progress display
+    """
+    try:
+        with httpx.Client(timeout=240.0, follow_redirects=True) as client:
+            with client.stream("GET", url) as response:
+                if response.status_code != 200:
+                    return False
+
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                if dest_path.exists():
+                    dest_path.unlink()
+
+                total = int(response.headers.get("content-length", 0))
+                downloaded = 0
+
+                with open(dest_path, "wb") as f:
+                    for chunk in response.iter_bytes(chunk_size=8192):
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if progress_callback and total > 0:
+                            progress_callback(downloaded, total)
 
             if executable:
                 dest_path.chmod(dest_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -162,7 +183,7 @@ def _download_file(url: str, dest_path: Path, executable: bool = True) -> bool:
         return False
 
 
-def _download_ccp_artifacts(version: str, bin_dir: Path) -> bool:
+def _download_ccp_artifacts(version: str, bin_dir: Path, ui: Any = None) -> bool:
     """Download the CCP .so module and wrapper for the current platform."""
     platform_suffix = _get_platform_suffix()
     if not platform_suffix:
@@ -174,16 +195,38 @@ def _download_ccp_artifacts(version: str, bin_dir: Path) -> bool:
     local_so_name = _get_local_so_name()
     so_path = bin_dir / local_so_name
 
-    if not _download_file(so_url, so_path, executable=True):
-        return False
+    if ui:
+        with ui.progress(100, "Downloading CCP module") as progress:
+
+            def so_progress(downloaded: int, total: int) -> None:
+                pct = int((downloaded / total) * 100) if total > 0 else 0
+                progress.update(pct)
+
+            if not _download_file(so_url, so_path, executable=True, progress_callback=so_progress):
+                return False
+    else:
+        if not _download_file(so_url, so_path, executable=True):
+            return False
 
     wrapper_url = f"{base_url}/ccp-wrapper"
     wrapper_path = bin_dir / "ccp"
 
-    if not _download_file(wrapper_url, wrapper_path, executable=True):
-        if so_path.exists():
-            so_path.unlink()
-        return False
+    if ui:
+        with ui.progress(100, "Downloading CCP wrapper") as progress:
+
+            def wrapper_progress(downloaded: int, total: int) -> None:
+                pct = int((downloaded / total) * 100) if total > 0 else 0
+                progress.update(pct)
+
+            if not _download_file(wrapper_url, wrapper_path, executable=True, progress_callback=wrapper_progress):
+                if so_path.exists():
+                    so_path.unlink()
+                return False
+    else:
+        if not _download_file(wrapper_url, wrapper_path, executable=True):
+            if so_path.exists():
+                so_path.unlink()
+            return False
 
     return True
 
@@ -247,8 +290,8 @@ class CcpBinaryStep(BaseStep):
 
         action = "Updating" if ccp_path.exists() else "Downloading"
         if ui:
-            with ui.spinner(f"{action} CCP binary to v{target_version}..."):
-                success = _download_ccp_artifacts(target_version, bin_dir)
+            ui.status(f"{action} CCP binary to v{target_version}...")
+            success = _download_ccp_artifacts(target_version, bin_dir, ui)
             if success:
                 ui.success(f"CCP binary updated to v{target_version}")
                 if ctx.is_local_install:

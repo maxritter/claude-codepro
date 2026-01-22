@@ -113,11 +113,16 @@ class TestDownloadFile:
         self, mock_client_class: MagicMock, mock_platform: MagicMock, tmp_path: Path
     ) -> None:
         mock_platform.system.return_value = "Linux"
+
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.content = b"binary content"
+        mock_response.headers = {"content-length": "14"}
+        mock_response.iter_bytes.return_value = iter([b"binary content"])
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=None)
+
         mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
+        mock_client.stream.return_value = mock_response
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=None)
         mock_client_class.return_value = mock_client
@@ -133,8 +138,11 @@ class TestDownloadFile:
     def test_failed_download_404(self, mock_client_class: MagicMock, tmp_path: Path) -> None:
         mock_response = MagicMock()
         mock_response.status_code = 404
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=None)
+
         mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
+        mock_client.stream.return_value = mock_response
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=None)
         mock_client_class.return_value = mock_client

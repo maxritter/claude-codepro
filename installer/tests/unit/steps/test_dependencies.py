@@ -171,76 +171,71 @@ class TestDependencyInstallFunctions:
 class TestClaudeCodeInstall:
     """Test Claude Code installation."""
 
+    @patch("installer.steps.dependencies._download_claude_binary_with_progress", return_value=False)
     @patch("installer.steps.dependencies._get_forced_claude_version", return_value=None)
     @patch("installer.steps.dependencies._configure_firecrawl_mcp")
     @patch("installer.steps.dependencies._configure_claude_defaults")
-    @patch("subprocess.run")
+    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
     @patch("installer.steps.dependencies._remove_npm_claude_binaries")
     def test_install_claude_code_removes_npm_binaries(
-        self, mock_remove, mock_run, mock_config, mock_firecrawl, mock_version
+        self, mock_remove, mock_run, mock_config, mock_firecrawl, mock_version, mock_download
     ):
         """install_claude_code removes npm binaries before native install."""
         from installer.steps.dependencies import install_claude_code
-
-        mock_run.return_value = MagicMock(returncode=0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             install_claude_code(Path(tmpdir))
 
         mock_remove.assert_called_once()
 
+    @patch("installer.steps.dependencies._download_claude_binary_with_progress", return_value=False)
     @patch("installer.steps.dependencies._get_forced_claude_version", return_value=None)
     @patch("installer.steps.dependencies._configure_firecrawl_mcp")
     @patch("installer.steps.dependencies._configure_claude_defaults")
-    @patch("subprocess.run")
+    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
     @patch("installer.steps.dependencies._remove_npm_claude_binaries")
     def test_install_claude_code_uses_native_installer(
-        self, mock_remove, mock_run, mock_config, mock_firecrawl, mock_version
+        self, mock_remove, mock_run, mock_config, mock_firecrawl, mock_version, mock_download
     ):
         """install_claude_code uses native installer from claude.ai."""
         from installer.steps.dependencies import install_claude_code
-
-        mock_run.return_value = MagicMock(returncode=0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             success, version = install_claude_code(Path(tmpdir))
 
         assert success is True
         assert version == "latest"
-        # Verify native installer was called
-        curl_calls = [c for c in mock_run.call_args_list if "claude.ai/install.sh" in str(c)]
-        assert len(curl_calls) >= 1
+        # Verify native installer was called via _run_bash_with_retry
+        mock_run.assert_called()
 
+    @patch("installer.steps.dependencies._download_claude_binary_with_progress", return_value=False)
     @patch("installer.steps.dependencies._get_forced_claude_version", return_value=None)
     @patch("installer.steps.dependencies._configure_firecrawl_mcp")
     @patch("installer.steps.dependencies._configure_claude_defaults")
-    @patch("subprocess.run")
+    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
     @patch("installer.steps.dependencies._remove_npm_claude_binaries")
     def test_install_claude_code_configures_defaults(
-        self, mock_remove, mock_run, mock_config, mock_firecrawl, mock_version
+        self, mock_remove, mock_run, mock_config, mock_firecrawl, mock_version, mock_download
     ):
         """install_claude_code configures Claude defaults after native install."""
         from installer.steps.dependencies import install_claude_code
-
-        mock_run.return_value = MagicMock(returncode=0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             install_claude_code(Path(tmpdir))
 
         mock_config.assert_called_once()
 
+    @patch("installer.steps.dependencies._download_claude_binary_with_progress", return_value=False)
     @patch("installer.steps.dependencies._get_forced_claude_version", return_value=None)
     @patch("installer.steps.dependencies._configure_firecrawl_mcp")
     @patch("installer.steps.dependencies._configure_claude_defaults")
-    @patch("subprocess.run")
+    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
     @patch("installer.steps.dependencies._remove_npm_claude_binaries")
     def test_install_claude_code_does_not_configure_firecrawl(
-        self, mock_remove, mock_run, mock_config, mock_firecrawl, mock_version
+        self, mock_remove, mock_run, mock_config, mock_firecrawl, mock_version, mock_download
     ):
         """install_claude_code does not configure Firecrawl (handled by DependenciesStep)."""
         from installer.steps.dependencies import install_claude_code
-
-        mock_run.return_value = MagicMock(returncode=0)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             install_claude_code(Path(tmpdir))

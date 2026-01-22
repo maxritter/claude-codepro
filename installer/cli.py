@@ -51,43 +51,6 @@ def get_all_steps() -> list[BaseStep]:
     ]
 
 
-def _register_email(
-    console: Console,
-    project_dir: Path,
-    email: str,
-    tier: str,
-    subscribe: bool,
-    local_mode: bool,
-    local_repo_dir: Path | None,
-) -> bool:
-    """Register email for free/trial license using ccp binary."""
-    bin_path = project_dir / ".claude" / "bin" / "ccp"
-
-    if local_mode and local_repo_dir:
-        local_bin = local_repo_dir / ".claude" / "bin" / "ccp"
-        if local_bin.exists():
-            bin_path = local_bin
-
-    if not bin_path.exists():
-        console.error("CCP binary not found - cannot register")
-        return False
-
-    cmd = [str(bin_path), "register", email, "--tier", tier, "--json"]
-    if not subscribe:
-        cmd.append("--no-subscribe")
-
-    with console.spinner("Registering..."):
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-
-    if result.returncode == 0:
-        return True
-    else:
-        console.error("Registration failed")
-        if result.stderr:
-            console.print(f"  [dim]{result.stderr.strip()}[/dim]")
-        return False
-
-
 def _validate_license_key(
     console: Console,
     project_dir: Path,
@@ -511,7 +474,6 @@ def install(
             console.print()
             console.print("  [bold]Do you want to install agent-browser?[/bold]")
             console.print("  This includes: Headless Chromium browser for web automation and testing")
-            console.print("  [dim]Note: Installation takes 1-2 minutes[/dim]")
             enable_agent_browser = console.confirm("Install agent-browser?", default=True)
 
     from installer.steps.environment import add_env_key, key_is_set

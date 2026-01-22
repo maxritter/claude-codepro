@@ -63,8 +63,8 @@ Then check the Status field in the most recent plan file(s). An **active plan** 
 **Decision Tree:**
 | Situation | Command to Use |
 |-----------|----------------|
-| Active plan exists (PENDING/COMPLETE) | `.claude/bin/ccp send-clear docs/plans/YYYY-MM-DD-name.md` |
-| No active plan (all VERIFIED or none exist) | `.claude/bin/ccp send-clear --general` |
+| Active plan exists (PENDING/COMPLETE) | `$PWD/.claude/bin/ccp send-clear docs/plans/YYYY-MM-DD-name.md` |
+| No active plan (all VERIFIED or none exist) | `$PWD/.claude/bin/ccp send-clear --general` |
 
 **NEVER use `--general` when there's an active plan file. This loses the plan context!**
 
@@ -122,10 +122,10 @@ Triggering session restart...
 
 ```bash
 # If active plan exists (PREFERRED - preserves plan context):
-.claude/bin/ccp send-clear docs/plans/YYYY-MM-DD-name.md
+$PWD/.claude/bin/ccp send-clear docs/plans/YYYY-MM-DD-name.md
 
 # ONLY if NO active plan exists:
-.claude/bin/ccp send-clear --general
+$PWD/.claude/bin/ccp send-clear --general
 ```
 
 This triggers session continuation in Endless Mode:
@@ -189,16 +189,16 @@ If you're in general development (no plan file):
 
 ```bash
 # Check context percentage
-.claude/bin/ccp check-context --json
+$PWD/.claude/bin/ccp check-context --json
 
 # Trigger session continuation (no continuation prompt)
-.claude/bin/ccp send-clear
+$PWD/.claude/bin/ccp send-clear
 
 # Trigger continuation WITH plan (PREFERRED when plan exists):
-.claude/bin/ccp send-clear docs/plans/YYYY-MM-DD-name.md
+$PWD/.claude/bin/ccp send-clear docs/plans/YYYY-MM-DD-name.md
 
 # Trigger continuation WITHOUT plan (ONLY when no active plan):
-.claude/bin/ccp send-clear --general
+$PWD/.claude/bin/ccp send-clear --general
 ```
 
 **⚠️ ALWAYS check for active plans before using `--general`. See Step 2 above.**

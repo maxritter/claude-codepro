@@ -16,12 +16,19 @@ from installer.steps.base import BaseStep
 MAX_RETRIES = 3
 RETRY_DELAY = 2
 
-ANSI_ESCAPE_PATTERN = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07")
+ANSI_ESCAPE_PATTERN = re.compile(
+    r"\x1b\[\??[0-9;]*[a-zA-Z]"
+    r"|\x1b\].*?\x07"
+    r"|\x1b[PX^_][^\x1b]*\x1b\\\\"
+    r"|\r"
+)
 
 
 def _strip_ansi(text: str) -> str:
     """Strip ANSI escape codes from text."""
-    return ANSI_ESCAPE_PATTERN.sub("", text)
+    result = ANSI_ESCAPE_PATTERN.sub("", text)
+    result = "".join(c for c in result if c == "\n" or (ord(c) >= 32 and ord(c) != 127))
+    return result.strip()
 
 
 def _run_bash_with_retry(command: str, cwd: Path | None = None) -> bool:
@@ -303,11 +310,177 @@ def _get_installed_claude_version() -> str | None:
     return None
 
 
-def install_claude_code(project_dir: Path) -> tuple[bool, str]:
-    """Install/upgrade Claude Code CLI via native installer and configure defaults.
+GCS_BUCKET = "https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases"
 
-    Returns (success, version_installed).
+
+def _get_claude_platform() -> str | None:
+    """Get the platform string for Claude Code binary downloads."""
+    import platform as plat
+
+    system = plat.system().lower()
+    machine = plat.machine().lower()
+
+    if system == "darwin":
+        os_name = "darwin"
+    elif system == "linux":
+        os_name = "linux"
+    else:
+        return None
+
+    if machine in ("x86_64", "amd64"):
+        arch = "x64"
+    elif machine in ("arm64", "aarch64"):
+        arch = "arm64"
+    else:
+        return None
+
+    if os_name == "linux":
+        libc_path_x86 = Path("/lib/libc.musl-x86_64.so.1")
+        libc_path_arm = Path("/lib/libc.musl-aarch64.so.1")
+        if libc_path_x86.exists() or libc_path_arm.exists():
+            return f"linux-{arch}-musl"
+        return f"linux-{arch}"
+
+    return f"{os_name}-{arch}"
+
+
+def _download_claude_binary_with_progress(
+    version: str,
+    dest_path: Path,
+    ui: Any = None,
+) -> bool:
+    """Download Claude Code binary with progress display.
+
+    Args:
+        version: Version to download (e.g., "1.0.33")
+        dest_path: Where to save the binary
+        ui: Optional UI instance for progress display
+
+    Returns:
+        True if successful, False otherwise
     """
+    import hashlib
+
+    import httpx
+
+    platform_str = _get_claude_platform()
+    if not platform_str:
+        return False
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            manifest_url = f"{GCS_BUCKET}/{version}/manifest.json"
+            response = client.get(manifest_url)
+            if response.status_code != 200:
+                return False
+
+            manifest = response.json()
+            platform_info = manifest.get("platforms", {}).get(platform_str)
+            if not platform_info:
+                return False
+
+            expected_checksum = platform_info.get("checksum", "")
+
+        binary_url = f"{GCS_BUCKET}/{version}/{platform_str}/claude"
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with httpx.Client(timeout=240.0, follow_redirects=True) as client:
+            with client.stream("GET", binary_url) as response:
+                if response.status_code != 200:
+                    return False
+
+                total = int(response.headers.get("content-length", 0))
+                downloaded = 0
+                sha256_hash = hashlib.sha256()
+
+                if ui and total > 0:
+                    with ui.progress(100, "Downloading Claude Code") as progress:
+                        with open(dest_path, "wb") as f:
+                            for chunk in response.iter_bytes(chunk_size=8192):
+                                f.write(chunk)
+                                sha256_hash.update(chunk)
+                                downloaded += len(chunk)
+                                pct = int((downloaded / total) * 100)
+                                progress.update(pct)
+                else:
+                    with open(dest_path, "wb") as f:
+                        for chunk in response.iter_bytes(chunk_size=8192):
+                            f.write(chunk)
+                            sha256_hash.update(chunk)
+
+        actual_checksum = sha256_hash.hexdigest()
+        if expected_checksum and actual_checksum != expected_checksum:
+            dest_path.unlink(missing_ok=True)
+            return False
+
+        dest_path.chmod(dest_path.stat().st_mode | 0o755)
+        return True
+
+    except (httpx.HTTPError, httpx.TimeoutException, OSError):
+        dest_path.unlink(missing_ok=True)
+        return False
+
+
+def _run_claude_installer(binary_path: Path, version: str, ui: Any = None) -> bool:
+    """Run the Claude Code installer binary with clean output."""
+    env = os.environ.copy()
+    env["NO_COLOR"] = "1"
+    env["TERM"] = "dumb"
+
+    process: subprocess.Popen[str] | None = None
+    try:
+        process = subprocess.Popen(
+            [str(binary_path), "install", "--force", version],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=env,
+        )
+
+        if process.stdout:
+            for line in process.stdout:
+                cleaned = _strip_ansi(line)
+                if cleaned and ui:
+                    ui.print(f"  {cleaned}")
+
+        process.wait(timeout=120)
+        binary_path.unlink(missing_ok=True)
+        return process.returncode == 0
+    except subprocess.TimeoutExpired:
+        if ui:
+            ui.warning("Installer timed out after 120s")
+        if process:
+            process.kill()
+        binary_path.unlink(missing_ok=True)
+    except (subprocess.SubprocessError, OSError) as e:
+        if ui:
+            ui.warning(f"Installer error: {e}")
+        binary_path.unlink(missing_ok=True)
+    return False
+
+
+def _fetch_latest_claude_version(ui: Any = None) -> str | None:
+    """Fetch the latest Claude Code version from GCS bucket."""
+    import httpx
+
+    if ui:
+        ui.status("Fetching latest Claude Code version...")
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.get(f"{GCS_BUCKET}/latest")
+            if response.status_code == 200:
+                version = response.text.strip()
+                if ui:
+                    ui.info(f"Latest version: v{version}")
+                return version
+    except (httpx.HTTPError, httpx.TimeoutException):
+        if ui:
+            ui.warning("Could not fetch latest version, using fallback installer")
+    return None
+
+
+def install_claude_code(project_dir: Path, ui: Any = None) -> tuple[bool, str]:
+    """Install/upgrade Claude Code CLI via native installer and configure defaults."""
     _remove_npm_claude_binaries()
 
     forced_version = _get_forced_claude_version(project_dir)
@@ -318,6 +491,30 @@ def install_claude_code(project_dir: Path) -> tuple[bool, str]:
         if installed_version == version:
             _configure_claude_defaults()
             return True, version
+
+    actual_version = version if version != "latest" else _fetch_latest_claude_version(ui)
+
+    if actual_version:
+        download_dir = Path.home() / ".claude" / "downloads"
+        download_dir.mkdir(parents=True, exist_ok=True)
+        binary_path = download_dir / f"claude-{actual_version}"
+
+        if ui:
+            ui.status(f"Downloading Claude Code v{actual_version}...")
+
+        if _download_claude_binary_with_progress(actual_version, binary_path, ui):
+            if ui:
+                ui.status(f"Running Claude Code installer (v{actual_version})...")
+            if _run_claude_installer(binary_path, actual_version, ui):
+                _configure_claude_defaults()
+                return True, actual_version
+            elif ui:
+                ui.warning("Installer failed, falling back to curl installer")
+        elif ui:
+            ui.warning("Download failed, falling back to curl installer")
+
+    if ui:
+        ui.status("Running fallback installer (curl)...")
 
     if not _run_bash_with_retry(f"curl -fsSL https://claude.ai/install.sh | bash -s {version}"):
         return False, version
@@ -520,7 +717,7 @@ def _configure_vexor_local() -> bool:
 def _setup_vexor_local_model(ui: Any = None) -> bool:
     """Download and setup the local embedding model for Vexor."""
     if ui:
-        ui.print("  [dim]Downloading local embedding model (this may take a few minutes)...[/dim]")
+        ui.status("Downloading local embedding model...")
 
     try:
         process = subprocess.Popen(
@@ -763,7 +960,7 @@ def _is_agent_browser_ready() -> bool:
 def install_agent_browser(ui: Any = None) -> bool:
     """Install agent-browser CLI for headless browser automation.
 
-    Shows verbose output during installation since it takes 1-2 minutes.
+    Shows verbose output during installation with download progress.
     Skips verbose output if already installed.
     """
     if _is_agent_browser_ready():
@@ -776,7 +973,7 @@ def install_agent_browser(ui: Any = None) -> bool:
         return True
 
     if ui:
-        ui.print("  [dim]Downloading Chromium browser (this may take 1-2 minutes)...[/dim]")
+        ui.status("Downloading Chromium browser...")
 
     try:
         process = subprocess.Popen(
@@ -833,8 +1030,8 @@ def _install_claude_mem_with_deps(ui: Any) -> bool:
 def _install_claude_code_with_ui(ui: Any, project_dir: Path) -> bool:
     """Install Claude Code with UI feedback."""
     if ui:
-        ui.status("Installing Claude Code via native installer (this may take 1-2 minutes)...")
-        success, version = install_claude_code(project_dir)
+        ui.status("Installing Claude Code via native installer...")
+        success, version = install_claude_code(project_dir, ui)
         if success:
             if version != "latest":
                 ui.success(f"Claude Code installed (pinned to v{version})")

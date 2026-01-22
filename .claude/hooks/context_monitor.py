@@ -133,7 +133,8 @@ def run_context_monitor() -> int:
         print(f"{RED}1. Check for active plan: ls docs/plans/*.md | sort -r | head -1{NC}", file=sys.stderr)
         print(f"{RED}2. Write /tmp/claude-continuation.md (include Active Plan path){NC}", file=sys.stderr)
         print(
-            f"{RED}3. Run: .claude/bin/ccp send-clear <plan-path>  (or --general ONLY if no plan){NC}", file=sys.stderr
+            f"{RED}3. Run: $PWD/.claude/bin/ccp send-clear <plan-path>  (or --general ONLY if no plan){NC}",
+            file=sys.stderr,
         )
         print(f"{RED}⚠️  NEVER use --general when a plan exists!{NC}", file=sys.stderr)
         return 2
