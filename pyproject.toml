@@ -108,6 +108,7 @@ max-statements = 60
 [tool.ruff.lint.per-file-ignores]
 "ccp/tests/*" = ["D", "UP", "PLR0913", "PLR0915"]
 "installer/tests/*" = ["D", "UP", "PLR0913", "PLR0915"]
+"installer/cli.py" = ["PLR0913", "PLR0915"]  # CLI entry point has complex orchestration
 
 [tool.vulture]
 exclude = [".venv/**", "target/**", "**/.tox/**", "**/build/**"]
