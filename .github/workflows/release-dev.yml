@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install git-crypt
         run: sudo apt-get update && sudo apt-get install -y git-crypt
@@ -53,6 +55,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install git-crypt
         run: sudo apt-get update && sudo apt-get install -y git-crypt
@@ -90,6 +94,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install git-crypt
         run: sudo apt-get update && sudo apt-get install -y git-crypt
@@ -125,6 +131,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install git-crypt
         run: brew install git-crypt
@@ -165,6 +173,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install git-crypt
         run: brew install git-crypt
@@ -211,13 +221,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # For PRs: checkout the actual PR head commit (dev branch), not the merge commit
+          # For workflow_dispatch: checkout the branch being run on
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Generate version
         id: version
         run: |
-          VERSION="dev-$(echo ${{ github.sha }} | cut -c1-7)-$(date +%Y%m%d)"
+          # For PRs: use the PR head SHA (dev branch commit)
+          # For workflow_dispatch: use github.sha
+          COMMIT_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          VERSION="dev-$(echo $COMMIT_SHA | cut -c1-7)-$(date +%Y%m%d)"
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Generated version: $VERSION"
+          echo "COMMIT_SHA=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
+          echo "Generated version: $VERSION (from commit $COMMIT_SHA)"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -251,10 +269,12 @@ jobs:
           This is a development pre-release for testing. Not for production use."
           fi
 
+          # Use --target to ensure tag is created at the correct commit
           gh release create "$VERSION" \
             --title "Dev Pre-release $VERSION" \
             --notes "$NOTES" \
             --prerelease \
+            --target "${{ steps.version.outputs.COMMIT_SHA }}" \
             artifacts/ccp-linux-x86_64/ccp-linux-x86_64.so \
             artifacts/ccp-linux-arm64/ccp-linux-arm64.so \
             artifacts/ccp-darwin-x86_64/ccp-darwin-x86_64.so \
