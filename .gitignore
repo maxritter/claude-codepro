@@ -221,6 +221,7 @@ __marimo__/
 
 # Claude Code
 CLAUDE.md
+CLAUDE.local.md
 .claude.backup.*
 *.backup
 .claude/rules/custom/*
@@ -228,6 +229,7 @@ CLAUDE.md
 !.claude/rules/custom/typescript-rules.md
 .claude/config/
 tmp/
+context/
 
 # Build artifacts
 .claude/bin/
