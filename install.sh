@@ -50,7 +50,8 @@ get_latest_prerelease() {
 		return 1
 	fi
 
-	echo "$releases" | grep -o '"tag_name": *"dev-[^"]*"' | head -1 | sed 's/.*"dev-/dev-/; s/"//'
+	# Extract all dev-* tags, sort by date suffix (YYYYMMDD), get latest
+	echo "$releases" | grep -o '"tag_name": *"dev-[^"]*"' | sed 's/.*"dev-/dev-/; s/"//' | sort -t'-' -k3 -rn | head -1
 }
 
 if [ "$INSTALL_DEV" = true ]; then
