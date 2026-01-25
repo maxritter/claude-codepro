@@ -277,6 +277,110 @@ download_installer() {
 	echo "  [OK] Installer downloaded"
 }
 
+get_platform_suffix() {
+	local os_name=""
+	local arch=""
+
+	case "$(uname -s)" in
+	Linux) os_name="linux" ;;
+	Darwin) os_name="darwin" ;;
+	*) return 1 ;;
+	esac
+
+	case "$(uname -m)" in
+	x86_64 | amd64) arch="x86_64" ;;
+	arm64 | aarch64) arch="arm64" ;;
+	*) return 1 ;;
+	esac
+
+	echo "${os_name}-${arch}"
+}
+
+get_local_so_name() {
+	local platform_tag=""
+	case "$(uname -s)" in
+	Linux)
+		case "$(uname -m)" in
+		x86_64 | amd64) platform_tag="x86_64-linux-gnu" ;;
+		arm64 | aarch64) platform_tag="aarch64-linux-gnu" ;;
+		esac
+		;;
+	Darwin) platform_tag="darwin" ;;
+	esac
+
+	# Assumes Python 3.12 which is what uv provides
+	echo "ccp.cpython-312-${platform_tag}.so"
+}
+
+download_ccp_binary() {
+	local bin_dir=".claude/bin"
+	local platform_suffix
+	local so_name
+	local base_url
+
+	platform_suffix=$(get_platform_suffix) || {
+		echo "  [!!] Unsupported platform for CCP binary"
+		return 1
+	}
+
+	so_name=$(get_local_so_name)
+
+	# Build download URL based on version type
+	case "$VERSION" in
+	dev-*) base_url="https://github.com/${REPO}/releases/download/${VERSION}" ;;
+	*) base_url="https://github.com/${REPO}/releases/download/v${VERSION}" ;;
+	esac
+
+	mkdir -p "$bin_dir"
+
+	echo "  [..] Downloading CCP binary (${platform_suffix})..."
+
+	# Download .so file
+	local so_url="${base_url}/ccp-${platform_suffix}.so"
+	local so_path="${bin_dir}/${so_name}"
+
+	if command -v curl >/dev/null 2>&1; then
+		if ! curl -fsSL "$so_url" -o "$so_path" 2>/dev/null; then
+			echo "  [!!] Failed to download CCP module"
+			return 1
+		fi
+	elif command -v wget >/dev/null 2>&1; then
+		if ! wget -q "$so_url" -O "$so_path" 2>/dev/null; then
+			echo "  [!!] Failed to download CCP module"
+			return 1
+		fi
+	fi
+
+	chmod +x "$so_path"
+
+	# Download wrapper script
+	local wrapper_url="${base_url}/ccp"
+	local wrapper_path="${bin_dir}/ccp"
+
+	if command -v curl >/dev/null 2>&1; then
+		if ! curl -fsSL "$wrapper_url" -o "$wrapper_path" 2>/dev/null; then
+			echo "  [!!] Failed to download CCP wrapper"
+			rm -f "$so_path"
+			return 1
+		fi
+	elif command -v wget >/dev/null 2>&1; then
+		if ! wget -q "$wrapper_url" -O "$wrapper_path" 2>/dev/null; then
+			echo "  [!!] Failed to download CCP wrapper"
+			rm -f "$so_path"
+			return 1
+		fi
+	fi
+
+	chmod +x "$wrapper_path"
+
+	# Remove quarantine on macOS
+	if [ "$(uname -s)" = "Darwin" ]; then
+		xattr -cr "$bin_dir" 2>/dev/null || true
+	fi
+
+	echo "  [OK] CCP binary installed (${VERSION})"
+}
+
 run_installer() {
 	local installer_dir=".claude/installer"
 	local saved_mode
@@ -368,8 +472,9 @@ else
 fi
 
 download_installer
+download_ccp_binary
 
-# shellcheck disable=SC2086 -- intentional word splitting for multiple args
+# shellcheck disable=SC2086
 run_installer $INSTALLER_ARGS
 
 saved_mode=$(get_saved_install_mode)
