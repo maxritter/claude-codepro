@@ -2,13 +2,7 @@ import { ExternalLink, Check, Building2, Clock, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
-const SectionHeader = ({
-  title,
-  subtitle,
-}: {
-  title: string;
-  subtitle?: string;
-}) => (
+const SectionHeader = ({ title, subtitle }: { title: string; subtitle?: string }) => (
   <div className="text-center mb-12">
     <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-4">
       {title}
@@ -23,11 +17,7 @@ const SectionHeader = ({
 
 const PricingSection = () => {
   return (
-    <section
-      id="pricing"
-      className="py-12 lg:py-16 px-4 sm:px-6"
-      aria-labelledby="pricing-heading"
-    >
+    <section id="pricing" className="py-12 lg:py-16 px-4 sm:px-6" aria-labelledby="pricing-heading">
       <div className="max-w-6xl mx-auto">
         <SectionHeader
           title="Pricing"
@@ -51,26 +41,22 @@ const PricingSection = () => {
             <ul className="space-y-3 mb-6">
               <li className="flex items-start gap-3">
                 <Check className="h-5 w-5 text-cyan-500 flex-shrink-0 mt-0.5" />
-                <span className="text-muted-foreground text-sm">
-                  Full features for 7 days
-                </span>
+                <span className="text-muted-foreground text-sm">Full features for 7 days</span>
               </li>
               <li className="flex items-start gap-3">
                 <Check className="h-5 w-5 text-cyan-500 flex-shrink-0 mt-0.5" />
-                <span className="text-muted-foreground text-sm">
-                  No credit card required
-                </span>
+                <span className="text-muted-foreground text-sm">No credit card required</span>
               </li>
               <li className="flex items-start gap-3">
                 <Check className="h-5 w-5 text-cyan-500 flex-shrink-0 mt-0.5" />
-                <span className="text-muted-foreground text-sm">
-                  Starts automatically on install
-                </span>
+                <span className="text-muted-foreground text-sm">Starts automatically on install</span>
               </li>
             </ul>
 
             <Button asChild variant="outline" className="w-full">
-              <a href="#installation">Start Free Trial</a>
+              <a href="#installation">
+                Start Free Trial
+              </a>
             </Button>
           </Card>
 
@@ -90,30 +76,20 @@ const PricingSection = () => {
             <ul className="space-y-3 mb-6">
               <li className="flex items-start gap-3">
                 <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-muted-foreground text-sm">
-                  All features included
-                </span>
+                <span className="text-muted-foreground text-sm">All features included</span>
               </li>
               <li className="flex items-start gap-3">
                 <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-muted-foreground text-sm">
-                  Latest learnings from daily usage
-                </span>
+                <span className="text-muted-foreground text-sm">Latest learnings from daily usage</span>
               </li>
               <li className="flex items-start gap-3">
                 <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-muted-foreground text-sm">
-                  Support via GitHub
-                </span>
+                <span className="text-muted-foreground text-sm">Support via GitHub</span>
               </li>
             </ul>
 
             <Button asChild className="w-full">
-              <a
-                href="https://license.claude-code.pro"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a href="https://license.claude-code.pro" target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Subscribe
               </a>
@@ -128,9 +104,7 @@ const PricingSection = () => {
                 <Building2 className="h-6 w-6 text-purple-500" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-foreground">
-                  Enterprise
-                </h3>
+                <h3 className="text-xl font-bold text-foreground">Enterprise</h3>
                 <p className="text-sm text-muted-foreground">$49.90/month</p>
               </div>
             </div>
@@ -138,34 +112,20 @@ const PricingSection = () => {
             <ul className="space-y-3 mb-6">
               <li className="flex items-start gap-3">
                 <Sparkles className="h-5 w-5 text-purple-500 flex-shrink-0 mt-0.5" />
-                <span className="text-muted-foreground text-sm">
-                  Everything in Standard
-                </span>
+                <span className="text-muted-foreground text-sm">Everything in Standard</span>
               </li>
               <li className="flex items-start gap-3">
                 <Check className="h-5 w-5 text-purple-500 flex-shrink-0 mt-0.5" />
-                <span className="text-muted-foreground text-sm">
-                  Dedicated email support
-                </span>
+                <span className="text-muted-foreground text-sm">Dedicated email support</span>
               </li>
               <li className="flex items-start gap-3">
                 <Check className="h-5 w-5 text-purple-500 flex-shrink-0 mt-0.5" />
-                <span className="text-muted-foreground text-sm">
-                  Priority feature requests
-                </span>
+                <span className="text-muted-foreground text-sm">Priority feature requests</span>
               </li>
             </ul>
 
-            <Button
-              asChild
-              variant="outline"
-              className="w-full border-purple-500/50 hover:bg-purple-500/10"
-            >
-              <a
-                href="https://license.claude-code.pro"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+            <Button asChild variant="outline" className="w-full border-purple-500/50 hover:bg-purple-500/10">
+              <a href="https://license.claude-code.pro" target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Subscribe
               </a>

@@ -4,8 +4,7 @@ import { Button } from "@/components/ui/button";
 
 const InstallSection = () => {
   const [copied, setCopied] = useState(false);
-  const installCommand =
-    "curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v5.1.12/install.sh | bash";
+  const installCommand = "curl -fsSL https://raw.githubusercontent.com/maxritter/claude-codepro/v5.1.12/install.sh | bash";
 
   const copyToClipboard = async () => {
     await navigator.clipboard.writeText(installCommand);

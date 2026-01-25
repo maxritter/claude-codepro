@@ -3,7 +3,7 @@
 
 This is a NON-BLOCKING reminder (PostToolUse hook) - edits always complete,
 then a reminder is shown to encourage TDD practices when appropriate.
-Returns exit code 0 so it never blocks edits.
+Returns exit code 2 to show TDD reminders to Claude.
 """
 
 from __future__ import annotations
@@ -147,12 +147,11 @@ def has_typescript_test_file(impl_path: str) -> bool:
 
 
 def warn(message: str, suggestion: str) -> int:
-    """Show warning and return exit code 0 (non-blocking reminder)."""
+    """Show warning and return exit code 2 (blocking)."""
     print("", file=sys.stderr)
     print(f"{YELLOW}TDD Reminder: {message}{NC}", file=sys.stderr)
     print(f"{YELLOW}    {suggestion}{NC}", file=sys.stderr)
-    print(f"{YELLOW}    (Edit completed - this is a reminder, not a blocker){NC}", file=sys.stderr)
-    return 0
+    return 2
 
 
 def run_tdd_enforcer() -> int:

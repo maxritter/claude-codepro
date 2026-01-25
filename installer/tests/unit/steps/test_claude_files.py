@@ -65,6 +65,64 @@ class TestPatchClaudePaths:
         assert "/workspaces/claude-codepro" not in result
 
 
+class TestPatchClaudePaths:
+    """Test the patch_claude_paths function."""
+
+    def test_patch_claude_paths_replaces_hooks_source_repo_path(self):
+        """patch_claude_paths replaces source repo hooks path with target project path."""
+        from installer.steps.claude_files import patch_claude_paths
+
+        content = '{"command": "uv run python /workspaces/claude-codepro/.claude/hooks/file_checker.py"}'
+        result = patch_claude_paths(content, Path("/home/user/myproject"))
+
+        assert "/workspaces/claude-codepro/.claude/hooks/" not in result
+        assert "/home/user/myproject/.claude/hooks/file_checker.py" in result
+
+    def test_patch_claude_paths_replaces_bin_source_repo_path(self):
+        """patch_claude_paths replaces source repo bin path with target project path."""
+        from installer.steps.claude_files import patch_claude_paths
+
+        content = '{"command": "/workspaces/claude-codepro/.claude/bin/ccp statusline"}'
+        result = patch_claude_paths(content, Path("/home/user/myproject"))
+
+        assert "/workspaces/claude-codepro/.claude/bin/" not in result
+        assert "/home/user/myproject/.claude/bin/ccp statusline" in result
+
+    def test_patch_claude_paths_replaces_relative_hooks_path(self):
+        """patch_claude_paths replaces relative .claude/hooks/ paths."""
+        from installer.steps.claude_files import patch_claude_paths
+
+        content = '{"command": "uv run python .claude/hooks/file_checker.py"}'
+        result = patch_claude_paths(content, Path("/home/user/myproject"))
+
+        assert '".claude/hooks/' not in result
+        assert "/home/user/myproject/.claude/hooks/file_checker.py" in result
+
+    def test_patch_claude_paths_replaces_relative_bin_path(self):
+        """patch_claude_paths replaces relative .claude/bin/ paths."""
+        from installer.steps.claude_files import patch_claude_paths
+
+        content = '{"command": ".claude/bin/ccp statusline"}'
+        result = patch_claude_paths(content, Path("/home/user/myproject"))
+
+        assert '".claude/bin/' not in result
+        assert "/home/user/myproject/.claude/bin/ccp statusline" in result
+
+    def test_patch_claude_paths_handles_both_hooks_and_bin(self):
+        """patch_claude_paths replaces both hooks and bin paths in same content."""
+        from installer.steps.claude_files import patch_claude_paths
+
+        content = """{
+            "hooks": {"command": "/workspaces/claude-codepro/.claude/hooks/checker.py"},
+            "statusLine": {"command": "/workspaces/claude-codepro/.claude/bin/ccp statusline"}
+        }"""
+        result = patch_claude_paths(content, Path("/target"))
+
+        assert "/target/.claude/hooks/checker.py" in result
+        assert "/target/.claude/bin/ccp statusline" in result
+        assert "/workspaces/claude-codepro" not in result
+
+
 class TestProcessSettings:
     """Test the process_settings function."""
 

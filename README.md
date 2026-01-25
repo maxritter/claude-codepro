@@ -229,9 +229,9 @@ Claude CodePro extends Claude Code with a modular system of rules, commands, and
 
 After your trial, choose the tier that fits your needs [here](https://license.claude-code.pro):
 
-| Tier           | Includes                                                               |
-| :------------- | :--------------------------------------------------------------------- |
-| **Standard**   | All features, continuous updates with latest learnings, GitHub support |
-| **Enterprise** | Standard + dedicated email support and priority feature requests       |
+| Tier | Includes |
+|:-----|:---------|
+| **Standard** | All features, continuous updates with latest learnings, GitHub support |
+| **Enterprise** | Standard + dedicated email support and priority feature requests |
 
 See the [LICENSE](LICENSE) file for full terms.
