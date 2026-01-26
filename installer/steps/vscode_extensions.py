@@ -31,10 +31,6 @@ CONTAINER_EXTENSIONS = [
     "tamasfe.even-better-toml",
 ]
 
-OPTIONAL_EXTENSIONS = [
-    "kaleidoscope-app.vscode-ksdiff",
-]
-
 LOCAL_EXTENSIONS = [
     "dkodr.claudeboard",
 ]
@@ -111,9 +107,8 @@ class VSCodeExtensionsStep(BaseStep):
             ui.status(f"Using {cli} CLI for extension management")
 
         installed = _get_installed_extensions(cli)
-        all_extensions = CONTAINER_EXTENSIONS + OPTIONAL_EXTENSIONS
-        missing = [ext for ext in all_extensions if ext.lower() not in installed]
-        already_installed = [ext for ext in all_extensions if ext.lower() in installed]
+        missing = [ext for ext in CONTAINER_EXTENSIONS if ext.lower() not in installed]
+        already_installed = [ext for ext in CONTAINER_EXTENSIONS if ext.lower() in installed]
 
         if not missing:
             if ui:
@@ -130,7 +125,6 @@ class VSCodeExtensionsStep(BaseStep):
 
         installed_count = 0
         failed: list[str] = []
-        optional_set = {ext.lower() for ext in OPTIONAL_EXTENSIONS}
 
         for ext in missing:
             if _install_extension(cli, ext):
@@ -138,14 +132,9 @@ class VSCodeExtensionsStep(BaseStep):
                 if ui:
                     ui.print(f"  [green]✓[/green] {ext}")
             else:
-                is_optional = ext.lower() in optional_set
-                if not is_optional:
-                    failed.append(ext)
+                failed.append(ext)
                 if ui:
-                    if is_optional:
-                        ui.print(f"  [dim]⊘ {ext} (optional, skipped)[/dim]")
-                    else:
-                        ui.print(f"  [yellow]✗[/yellow] {ext}")
+                    ui.print(f"  [yellow]✗[/yellow] {ext}")
 
         if ui:
             if installed_count > 0:

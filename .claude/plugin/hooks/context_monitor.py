@@ -136,7 +136,7 @@ def run_context_monitor() -> int:
         )
         print(f"{RED}2. Write /tmp/claude-continuation.md (include Active Plan path if found){NC}", file=sys.stderr)
         print(
-            f"{RED}3. Run: $PWD/.claude/bin/ccp send-clear <plan-path>  (or --general if no active plan){NC}",
+            f"{RED}3. Run: $CLAUDE_PROJECT_ROOT/.claude/bin/ccp send-clear <plan-path>  (or --general if no active plan){NC}",
             file=sys.stderr,
         )
         return 2

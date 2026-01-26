@@ -1,13 +1,12 @@
-"""CLI entry point and step orchestration using Typer."""
+"""CLI entry point and step orchestration using argparse."""
 
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
-from typing import Optional
-
-import typer
 
 from installer import __build__
 from installer.config import load_config, save_config
@@ -24,12 +23,6 @@ from installer.steps.prerequisites import PrerequisitesStep
 from installer.steps.shell_config import ShellConfigStep
 from installer.steps.vscode_extensions import VSCodeExtensionsStep
 from installer.ui import Console
-
-app = typer.Typer(
-    name="installer",
-    help="Claude CodePro Installer",
-    add_completion=False,
-)
 
 
 def get_all_steps() -> list[BaseStep]:
@@ -249,35 +242,48 @@ def run_installation(ctx: InstallContext) -> None:
         ctx.mark_completed(step.name)
 
 
-@app.command()
-def install(
-    non_interactive: bool = typer.Option(False, "--non-interactive", "-n", help="Run without interactive prompts"),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output (for updates)"),
-    skip_env: bool = typer.Option(False, "--skip-env", help="Skip environment setup (API keys)"),
-    local: bool = typer.Option(False, "--local", help="Use local files instead of downloading"),
-    local_repo_dir: Optional[Path] = typer.Option(None, "--local-repo-dir", help="Local repository directory"),
-    skip_python: bool = typer.Option(False, "--skip-python", help="Skip Python support installation"),
-    skip_typescript: bool = typer.Option(False, "--skip-typescript", help="Skip TypeScript support installation"),
-    skip_golang: bool = typer.Option(False, "--skip-golang", help="Skip Go support installation"),
-    local_system: bool = typer.Option(False, "--local-system", help="Local installation (not in container)"),
-    target_version: Optional[str] = typer.Option(
-        None, "--target-version", help="Target version/tag for downloads (e.g., dev-abc1234-20260124)"
-    ),
-) -> None:
-    """Install Claude CodePro."""
-    console = Console(non_interactive=non_interactive, quiet=quiet)
+def _prompt_license_key(
+    console: Console,
+    project_dir: Path,
+    local_mode: bool,
+    local_repo_dir: Path | None,
+    max_attempts: int = 3,
+) -> bool:
+    """Prompt user for license key with retry logic."""
+    for attempt in range(max_attempts):
+        license_key = console.input("Enter your license key").strip()
+        if not license_key:
+            console.error("License key is required")
+            if attempt < max_attempts - 1:
+                console.print("  [dim]Please try again.[/dim]")
+            continue
 
-    effective_local_repo_dir = local_repo_dir if local_repo_dir else (Path.cwd() if local else None)
-    skip_prompts = non_interactive
-    project_dir = Path.cwd()
-    saved_config = load_config(project_dir)
+        validated = _validate_license_key(console, project_dir, license_key, local_mode, local_repo_dir)
+        if validated:
+            return True
+        if attempt < max_attempts - 1:
+            console.print()
+            console.print("  [dim]Please check your license key and try again.[/dim]")
+            console.print("  [dim]Subscribe: https://license.claude-code.pro[/dim]")
+            console.print()
 
-    license_info = _get_license_info(project_dir, local, effective_local_repo_dir, console)
-    license_acknowledged = license_info is not None and license_info.get("tier") in ("trial", "standard", "enterprise")
+    console.print()
+    console.error(f"License validation failed after {max_attempts} attempts.")
+    console.print("  [bold]Subscribe at:[/bold] [cyan]https://license.claude-code.pro[/cyan]")
+    console.print()
+    return False
 
-    console.banner(license_info=license_info)
 
-    if not skip_prompts and license_acknowledged and license_info:
+def _handle_license_flow(
+    console: Console,
+    project_dir: Path,
+    local_mode: bool,
+    local_repo_dir: Path | None,
+    license_info: dict | None,
+    license_acknowledged: bool,
+) -> int | None:
+    """Handle license verification flow. Returns exit code if should exit, None to continue."""
+    if license_acknowledged and license_info:
         tier = license_info.get("tier", "unknown")
         is_expired = license_info.get("is_expired", False)
 
@@ -285,97 +291,71 @@ def install(
             console.print()
             console.print("  [bold]Enter your license key to continue:[/bold]")
             console.print()
-
-            for attempt in range(3):
-                license_key = console.input("License key").strip()
-                if not license_key:
-                    console.error("License key is required")
-                    continue
-
-                validated = _validate_license_key(console, project_dir, license_key, local, effective_local_repo_dir)
-                if validated:
-                    license_info = _get_license_info(project_dir, local, effective_local_repo_dir)
-                    break
-                if attempt < 2:
-                    console.print("  [dim]Please check your license key and try again.[/dim]")
-            else:
-                console.error("License validation failed after 3 attempts.")
-                console.print("  [bold]Subscribe at:[/bold] [cyan]https://license.claude-code.pro[/cyan]")
-                raise typer.Exit(1)
-
+            if not _prompt_license_key(console, project_dir, local_mode, local_repo_dir):
+                return 1
             console.print()
+        return None
 
-    elif not skip_prompts and not license_acknowledged:
-        console.print()
-        console.print("  [bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold cyan]")
-        console.print("  [bold]📜 License Agreement[/bold]")
-        console.print("  [bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold cyan]")
-        console.print()
-        console.print("  [bold green]7-day free trial[/bold green] to explore all features")
-        console.print()
-        console.print("  [bold]After trial, choose a plan:[/bold]")
-        console.print("    • [bold]Standard[/bold]")
-        console.print("    • [bold]Enterprise[/bold] (priority support + feature requests)")
-        console.print()
-        console.print("  [bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold cyan]")
-        console.print()
-        console.print("  [dim]Subscribe: https://license.claude-code.pro[/dim]")
-        console.print()
-        console.print("  [bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold cyan]")
-        console.print()
+    console.print()
+    console.print("  [bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold cyan]")
+    console.print("  [bold]📜 License Agreement[/bold]")
+    console.print("  [bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold cyan]")
+    console.print()
+    console.print("  [bold green]7-day free trial[/bold green] to explore all features")
+    console.print()
+    console.print("  [bold]After trial, choose a plan:[/bold]")
+    console.print("    • [bold]Standard[/bold]")
+    console.print("    • [bold]Enterprise[/bold] (priority support + feature requests)")
+    console.print()
+    console.print("  [bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold cyan]")
+    console.print()
+    console.print("  [dim]Subscribe: https://license.claude-code.pro[/dim]")
+    console.print()
+    console.print("  [bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold cyan]")
+    console.print()
 
-        with console.spinner("Checking trial eligibility..."):
-            trial_used, can_reactivate = _check_trial_used(project_dir, local, effective_local_repo_dir)
-        if trial_used is None:
-            trial_used = False
+    with console.spinner("Checking trial eligibility..."):
+        trial_used, can_reactivate = _check_trial_used(project_dir, local_mode, local_repo_dir)
+    if trial_used is None:
+        trial_used = False
 
-        if trial_used and not can_reactivate:
-            console.print("  [bold yellow]Trial has expired on this machine.[/bold yellow]")
-            console.print("  Please enter a license key to continue.")
+    if trial_used and not can_reactivate:
+        console.print("  [bold yellow]Trial has expired on this machine.[/bold yellow]")
+        console.print("  Please enter a license key to continue.")
+        console.print()
+        console.print("  [bold green]Use code TRIAL50OFF for 50% off your first month![/bold green]")
+        console.print("  [dim](Regular pricing applies after first month)[/dim]")
+        console.print()
+        if not _prompt_license_key(console, project_dir, local_mode, local_repo_dir):
+            return 1
+    else:
+        started = _start_trial(console, project_dir, local_mode, local_repo_dir)
+        if started:
             console.print()
-            console.print("  [bold green]Use code TRIAL50OFF for 50% off your first month![/bold green]")
-            console.print("  [dim](Regular pricing applies after first month)[/dim]")
+            console.success("Your 7-day trial has started!")
+            console.print("  All features are unlocked for 7 days.")
             console.print()
-
-            for attempt in range(3):
-                license_key = console.input("Enter your license key").strip()
-                if not license_key:
-                    console.error("License key is required")
-                    if attempt < 2:
-                        console.print("  [dim]Please try again.[/dim]")
-                    continue
-
-                validated = _validate_license_key(console, project_dir, license_key, local, effective_local_repo_dir)
-                if validated:
-                    break
-                else:
-                    if attempt < 2:
-                        console.print()
-                        console.print("  [dim]Please check your license key and try again.[/dim]")
-                        console.print("  [dim]Subscribe: https://license.claude-code.pro[/dim]")
-                        console.print()
-            else:
-                console.print()
-                console.error("License validation failed after 3 attempts.")
-                console.print("  [bold]Subscribe at:[/bold] [cyan]https://license.claude-code.pro[/cyan]")
-                console.print()
-                raise typer.Exit(1)
+            console.print("  [bold]Subscribe after trial:[/bold] [cyan]https://license.claude-code.pro[/cyan]")
+            console.print()
         else:
-            started = _start_trial(console, project_dir, local, effective_local_repo_dir)
-            if started:
-                console.print()
-                console.success("Your 7-day trial has started!")
-                console.print("  All features are unlocked for 7 days.")
-                console.print()
-                console.print("  [bold]Subscribe after trial:[/bold] [cyan]https://license.claude-code.pro[/cyan]")
-                console.print()
-            else:
-                console.print()
-                console.error("Could not start trial. Please enter a license key.")
-                console.print("  [bold]Subscribe at:[/bold] [cyan]https://license.claude-code.pro[/cyan]")
-                console.print()
-                raise typer.Exit(1)
+            console.print()
+            console.error("Could not start trial. Please enter a license key.")
+            console.print("  [bold]Subscribe at:[/bold] [cyan]https://license.claude-code.pro[/cyan]")
+            console.print()
+            return 1
 
+    return None
+
+
+def _prompt_for_features(
+    console: Console,
+    saved_config: dict,
+    skip_python: bool,
+    skip_typescript: bool,
+    skip_golang: bool,
+    skip_prompts: bool,
+) -> tuple[bool, bool, bool, bool]:
+    """Prompt for feature installation preferences. Returns (python, typescript, golang, browser)."""
     enable_python = not skip_python
     if not skip_python and not skip_prompts:
         if "enable_python" in saved_config:
@@ -421,6 +401,34 @@ def install(
             console.print("  This includes: Headless Chromium browser for web automation and testing")
             enable_agent_browser = console.confirm("Install agent-browser?", default=True)
 
+    return enable_python, enable_typescript, enable_golang, enable_agent_browser
+
+
+def cmd_install(args: argparse.Namespace) -> int:
+    """Install Claude CodePro."""
+    console = Console(non_interactive=args.non_interactive, quiet=args.quiet)
+
+    effective_local_repo_dir = args.local_repo_dir if args.local_repo_dir else (Path.cwd() if args.local else None)
+    skip_prompts = args.non_interactive
+    project_dir = Path.cwd()
+    saved_config = load_config(project_dir)
+
+    license_info = _get_license_info(project_dir, args.local, effective_local_repo_dir, console)
+    license_acknowledged = license_info is not None and license_info.get("tier") in ("trial", "standard", "enterprise")
+
+    console.banner(license_info=license_info)
+
+    if not skip_prompts:
+        exit_code = _handle_license_flow(
+            console, project_dir, args.local, effective_local_repo_dir, license_info, license_acknowledged
+        )
+        if exit_code is not None:
+            return exit_code
+
+    enable_python, enable_typescript, enable_golang, enable_agent_browser = _prompt_for_features(
+        console, saved_config, args.skip_python, args.skip_typescript, args.skip_golang, skip_prompts
+    )
+
     if not skip_prompts:
         saved_config["enable_python"] = enable_python
         saved_config["enable_typescript"] = enable_typescript
@@ -434,12 +442,12 @@ def install(
         enable_typescript=enable_typescript,
         enable_golang=enable_golang,
         enable_agent_browser=enable_agent_browser,
-        non_interactive=non_interactive,
-        skip_env=skip_env,
-        local_mode=local,
+        non_interactive=args.non_interactive,
+        skip_env=args.skip_env,
+        local_mode=args.local,
         local_repo_dir=effective_local_repo_dir,
-        is_local_install=local_system,
-        target_version=target_version,
+        is_local_install=args.local_system,
+        target_version=args.target_version,
         ui=console,
     )
 
@@ -447,20 +455,22 @@ def install(
         run_installation(ctx)
     except FatalInstallError as e:
         console.error(f"Installation failed: {e}")
-        raise typer.Exit(1) from e
+        return 1
     except InstallationCancelled as e:
         console.warning(f"Installation cancelled during: {e.step_name}")
         console.info("Run the installer again to resume from where you left off")
-        raise typer.Exit(130) from None
+        return 130
     except KeyboardInterrupt:
         console.warning("Installation cancelled")
-        raise typer.Exit(130) from None
+        return 130
+
+    return 0
 
 
-@app.command()
-def version() -> None:
+def cmd_version(_args: argparse.Namespace) -> int:
     """Show version information."""
-    typer.echo(f"ccp-installer (build: {__build__})")
+    print(f"ccp-installer (build: {__build__})")
+    return 0
 
 
 def find_ccp_binary() -> Path | None:
@@ -471,12 +481,9 @@ def find_ccp_binary() -> Path | None:
     return None
 
 
-@app.command()
-def launch(
-    args: Optional[list[str]] = typer.Argument(None, help="Arguments to pass to claude"),
-) -> None:
+def cmd_launch(args: argparse.Namespace) -> int:
     """Launch Claude Code via ccp binary."""
-    claude_args = args or []
+    claude_args = args.args or []
 
     ccp_path = find_ccp_binary()
     if ccp_path:
@@ -484,13 +491,99 @@ def launch(
     else:
         cmd = ["claude"] + claude_args
 
-    exit_code = subprocess.call(cmd)
-    raise typer.Exit(exit_code)
+    return subprocess.call(cmd)
+
+
+def create_parser() -> argparse.ArgumentParser:
+    """Create the argument parser."""
+    parser = argparse.ArgumentParser(
+        prog="installer",
+        description="Claude CodePro Installer",
+    )
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    install_parser = subparsers.add_parser("install", help="Install Claude CodePro")
+    install_parser.add_argument(
+        "-n",
+        "--non-interactive",
+        action="store_true",
+        help="Run without interactive prompts",
+    )
+    install_parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Minimal output (for updates)",
+    )
+    install_parser.add_argument(
+        "--skip-env",
+        action="store_true",
+        help="Skip environment setup (API keys)",
+    )
+    install_parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Use local files instead of downloading",
+    )
+    install_parser.add_argument(
+        "--local-repo-dir",
+        type=Path,
+        default=None,
+        help="Local repository directory",
+    )
+    install_parser.add_argument(
+        "--skip-python",
+        action="store_true",
+        help="Skip Python support installation",
+    )
+    install_parser.add_argument(
+        "--skip-typescript",
+        action="store_true",
+        help="Skip TypeScript support installation",
+    )
+    install_parser.add_argument(
+        "--skip-golang",
+        action="store_true",
+        help="Skip Go support installation",
+    )
+    install_parser.add_argument(
+        "--local-system",
+        action="store_true",
+        help="Local installation (not in container)",
+    )
+    install_parser.add_argument(
+        "--target-version",
+        type=str,
+        default=None,
+        help="Target version/tag for downloads (e.g., dev-abc1234-20260124)",
+    )
+
+    subparsers.add_parser("version", help="Show version information")
+
+    launch_parser = subparsers.add_parser("launch", help="Launch Claude Code via ccp binary")
+    launch_parser.add_argument(
+        "args",
+        nargs="*",
+        help="Arguments to pass to claude",
+    )
+
+    return parser
 
 
 def main() -> None:
     """Main entry point."""
-    app()
+    parser = create_parser()
+    args = parser.parse_args()
+
+    if args.command == "install":
+        sys.exit(cmd_install(args))
+    elif args.command == "version":
+        sys.exit(cmd_version(args))
+    elif args.command == "launch":
+        sys.exit(cmd_launch(args))
+    else:
+        parser.print_help()
+        sys.exit(0)
 
 
 if __name__ == "__main__":

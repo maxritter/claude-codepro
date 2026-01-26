@@ -98,13 +98,12 @@ You'll be asked to choose between **Dev Container** or **Local Installation**.
 ### 📚 Modular Rules, Commands & Skills
 
 - **Rules** - Best practices for TDD, debugging, context management, and more
-- **Commands** - Slash commands like `/spec`, `/sync`, `/plan`, `/implement`, `/verify`
+- **Commands** - `/spec` for Spec-Driven Development and `/sync` updating rules
 - **Skills** - Coding standards for Python, TypeScript, Go, testing, and components
 - **Customizable** - Add your own rules, commands, and skills that survive updates
 
 ### 🧠 Enhanced Context Capabilities
 
-- **Zero API Keys** - Web search and scraping work out of the box, no external API keys needed
 - **Persistent Memory** - Cross-session memory system that automatically ingests context
 - **Semantic Search** - Local vector store based semantic code search for token-efficient retrieval
 - **External Context** - Library docs via Context7, web search and scraping via MCP tools
@@ -114,7 +113,7 @@ You'll be asked to choose between **Dev Container** or **Local Installation**.
 
 - **TDD Enforcer** - Pre-edit hook that warns when modifying code without failing tests first
 - **Quality Hooks** - Language-specific hooks for Python, TypeScript and Go that auto-fix issues
-- **Context Monitor** - Tracks context usage and triggers automatic session handoffs
+- **LSP Integration** - Language servers installed for real-time diagnostics and go-to-definitions
 - **Status Line** - Live display of context usage, memory status, usage limits, and license info
 
 ### 🛠️ One-Command Installer
@@ -193,15 +192,15 @@ Claude CodePro extends Claude Code with a modular system of rules, commands, and
 
 **Managed by CCP** (updated on install):
 
+- `.claude/commands/` - `spec` and `sync` commands are managed by CCP
 - `.claude/rules/standard/` - Best practices and workflows
-- `.claude/commands/` - `spec`, `sync`, `plan`, `implement`, `verify`
-- `.claude/skills/standards-*/` - Coding standards for languages and frameworks
+- `.claude/plugin/skills/` - Coding standards for languages and frameworks
 
 **Yours to customize** (never touched by updates):
 
-- `.claude/rules/custom/` - Project-specific rules
 - `.claude/commands/` - Any command besides the standard ones
-- `.claude/skills/` - Any skill not prefixed with `standards-`
+- `.claude/rules/custom/` - Project-specific rules
+- `.claude/skills/` - Any skill besides the standards-* from CCP plugin
 
 **When to use what:**
 

@@ -13,8 +13,6 @@ requires-python = ">=3.12,<3.13"
 readme = "README.md"
 dependencies = [
     "rich>=14.0.0",
-    "httpx>=0.28.1",
-    "typer>=0.21.1",
     "platformdirs>=4.3.6",
     "Cython>=3.0.0",
     "setuptools>=61.0",

@@ -162,7 +162,7 @@ show_macos_gatekeeper_warning() {
 confirm_local_install() {
 	echo ""
 	echo "  Local installation will:"
-	echo "    • Install Homebrew packages: python, node, nvm, pnpm, bun, uv, go, git, gh"
+	echo "    • Install Homebrew packages: python, node, nvm, pnpm, bun, uv, go, gopls, git, gh"
 	echo "    • Add 'ccp' command to your shell config (~/.bashrc, ~/.zshrc, fish)"
 	echo "    • Configure Claude Code (~/.claude.json) according to CCP best-practices"
 	echo ""
@@ -411,10 +411,10 @@ run_installer() {
 	fi
 
 	if ! is_in_container && [ "$saved_mode" = "local" ]; then
-		uv run --python 3.12 --no-project --with rich --with httpx --with typer --with platformdirs \
+		uv run --python 3.12 --no-project --with rich \
 			python -m installer install --local-system $version_arg "$@"
 	else
-		uv run --python 3.12 --no-project --with rich --with httpx --with typer --with platformdirs \
+		uv run --python 3.12 --no-project --with rich \
 			python -m installer install $version_arg "$@"
 	fi
 }

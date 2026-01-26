@@ -33,60 +33,6 @@ def _run_bash_with_retry(command: str, cwd: Path | None = None) -> bool:
     return False
 
 
-def _is_plugin_installed(plugin_name: str, marketplace: str | None = None) -> bool:
-    """Check if a Claude plugin is already installed.
-
-    Args:
-        plugin_name: The plugin name (e.g., "claude-mem", "context7")
-        marketplace: Optional marketplace name (e.g., "customable", "claude-plugins-official")
-
-    Returns:
-        True if the plugin is installed, False otherwise.
-    """
-    import json
-
-    installed_path = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-    if not installed_path.exists():
-        return False
-
-    try:
-        data = json.loads(installed_path.read_text())
-        plugins = data.get("plugins", {})
-
-        if marketplace:
-            key = f"{plugin_name}@{marketplace}"
-            return key in plugins and len(plugins[key]) > 0
-
-        for key in plugins:
-            if key.startswith(f"{plugin_name}@") and len(plugins[key]) > 0:
-                return True
-        return False
-    except (json.JSONDecodeError, OSError):
-        return False
-
-
-def _is_marketplace_installed(marketplace_name: str) -> bool:
-    """Check if a Claude marketplace is already installed.
-
-    Args:
-        marketplace_name: The marketplace name (e.g., "claude-plugins-official", "customable")
-
-    Returns:
-        True if the marketplace is installed, False otherwise.
-    """
-    import json
-
-    marketplaces_path = Path.home() / ".claude" / "plugins" / "known_marketplaces.json"
-    if not marketplaces_path.exists():
-        return False
-
-    try:
-        data = json.loads(marketplaces_path.read_text())
-        return marketplace_name in data
-    except (json.JSONDecodeError, OSError):
-        return False
-
-
 def _get_nvm_source_cmd() -> str:
     """Get the command to source NVM for nvm-specific commands.
 
@@ -236,21 +182,81 @@ def install_claude_code(project_dir: Path, ui: Any = None) -> tuple[bool, str]:
     return True, version
 
 
-def _ensure_official_marketplace() -> bool:
-    """Ensure official Claude plugins marketplace is installed."""
-    if _is_marketplace_installed("claude-plugins-official"):
-        return True
+def _migrate_legacy_plugins(ui: Any = None) -> None:
+    """Remove legacy plugins and marketplaces installed by previous CCP versions.
 
-    try:
-        result = subprocess.run(
-            ["bash", "-c", "claude plugin marketplace add anthropics/claude-plugins-official"],
-            capture_output=True,
-            text=True,
-        )
-        output = (result.stdout + result.stderr).lower()
-        return result.returncode == 0 or "already installed" in output
-    except Exception:
-        return False
+    MCP servers are now defined in plugin/.mcp.json, so we clean up:
+    - Context7 from official marketplace
+    - claude-mem from thedotmack marketplace
+    - claude-mem from customable (maxritter) marketplace
+    - LSP plugins (basedpyright, typescript-lsp, gopls) from claude-code-lsps
+    - thedotmack marketplace
+    - customable marketplace
+
+    Uses 'claude plugin uninstall' CLI for proper cleanup.
+    """
+    import json
+    import shutil
+    import subprocess
+
+    removed_plugins: list[str] = []
+    removed_marketplaces: list[str] = []
+
+    plugins_to_remove = [
+        "context7",
+        "claude-mem",
+        "basedpyright",
+        "typescript-lsp",
+        "vtsls",
+        "gopls",
+        "pyright-lsp",
+        "gopls-lsp",
+    ]
+
+    for plugin_name in plugins_to_remove:
+        try:
+            result = subprocess.run(
+                ["claude", "plugin", "uninstall", plugin_name],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                removed_plugins.append(plugin_name)
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            pass
+
+    cache_dir = Path.home() / ".claude" / "plugins" / "cache"
+    marketplaces_to_clean = ["thedotmack", "customable", "claude-code-lsps"]
+    for marketplace in marketplaces_to_clean:
+        marketplace_cache = cache_dir / marketplace
+        if marketplace_cache.exists():
+            shutil.rmtree(marketplace_cache, ignore_errors=True)
+
+    marketplaces_path = Path.home() / ".claude" / "plugins" / "known_marketplaces.json"
+    if marketplaces_path.exists():
+        try:
+            data = json.loads(marketplaces_path.read_text())
+            modified = False
+            for marketplace in ["thedotmack", "customable", "claude-code-lsps"]:
+                if marketplace in data:
+                    del data[marketplace]
+                    removed_marketplaces.append(marketplace)
+                    modified = True
+            if modified:
+                marketplaces_path.write_text(json.dumps(data, indent=2))
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    marketplaces_dir = Path.home() / ".claude" / "plugins" / "marketplaces"
+    for marketplace in ["thedotmack", "customable", "claude-code-lsps"]:
+        marketplace_dir = marketplaces_dir / marketplace
+        if marketplace_dir.exists():
+            shutil.rmtree(marketplace_dir, ignore_errors=True)
+
+    if ui and (removed_plugins or removed_marketplaces):
+        total = len(removed_plugins) + len(removed_marketplaces)
+        ui.success(f"Cleaned up {total} legacy plugins")
 
 
 def _configure_claude_mem_defaults() -> bool:
@@ -270,9 +276,11 @@ def _configure_claude_mem_defaults() -> bool:
 
         settings.update(
             {
+                "PROCESSING_MODE": "normal",
                 "CLAUDEMD_ENABLED": "false",
                 "CLAUDE_MEM_FOLDER_CLAUDEMD_ENABLED": "false",
                 "RETENTION_ENABLED": "true",
+                "CLEANUP_AUTO_ENABLED": "true",
                 "CLAUDE_MEM_RETENTION_ENABLED": "true",
                 "RETENTION_MAX_COUNT": "1000",
                 "MAX_WORKERS": "1",
@@ -398,220 +406,17 @@ def install_vexor(use_local: bool = False, ui: Any = None) -> bool:
         return True
 
 
-def _ensure_maxritter_marketplace() -> bool:
-    """Ensure claude-mem marketplace points to maxritter repo.
-
-    Checks known_marketplaces.json for customable entry. If it exists
-    with maxritter URL, returns True. If it exists with wrong URL, removes it.
-    """
-    import json
-
-    marketplaces_path = Path.home() / ".claude" / "plugins" / "known_marketplaces.json"
-
-    if marketplaces_path.exists():
-        try:
-            data = json.loads(marketplaces_path.read_text())
-            customable = data.get("customable", {})
-            source = customable.get("source", {})
-            url = source.get("url", "")
-
-            if customable and "maxritter" in url:
-                return True
-
-            if customable and "maxritter" not in url:
-                subprocess.run(
-                    ["bash", "-c", "claude plugin marketplace rm customable"],
-                    capture_output=True,
-                )
-        except (json.JSONDecodeError, KeyError):
-            pass
-
-    try:
-        result = subprocess.run(
-            ["bash", "-c", "claude plugin marketplace add https://github.com/maxritter/claude-mem.git"],
-            capture_output=True,
-            text=True,
-        )
-        output = (result.stdout + result.stderr).lower()
-        return result.returncode == 0 or "already installed" in output
-    except Exception:
-        return False
-
-
-def _migrate_from_thedotmack() -> None:
-    """Remove old thedotmack marketplace and its plugins.
-
-    This handles migration from the old marketplace name to customable.
-    """
-    import shutil
-
-    if _is_plugin_installed("claude-mem", "thedotmack"):
-        subprocess.run(
-            ["bash", "-c", "claude plugin rm claude-mem"],
-            capture_output=True,
-        )
-
-    if _is_marketplace_installed("thedotmack"):
-        subprocess.run(
-            ["bash", "-c", "claude plugin marketplace rm thedotmack"],
-            capture_output=True,
-        )
-
-    old_dir = Path.home() / ".claude" / "plugins" / "marketplaces" / "thedotmack"
-    if old_dir.exists():
-        shutil.rmtree(old_dir, ignore_errors=True)
-
-
-def install_claude_mem() -> bool:
-    """Install claude-mem plugin via claude plugin marketplace.
-
-    If already installed, updates marketplace and plugin to latest version.
-    Migrates from old thedotmack marketplace if present.
-    """
-    _migrate_from_thedotmack()
-
-    marketplace_existed = _is_marketplace_installed("customable")
-
-    if not _ensure_maxritter_marketplace():
-        return False
-
-    if marketplace_existed:
-        subprocess.run(
-            ["bash", "-c", "claude plugin marketplace update customable"],
-            capture_output=True,
-        )
-
-    if _is_plugin_installed("claude-mem", "customable"):
-        subprocess.run(
-            ["bash", "-c", "claude plugin update claude-mem"],
-            capture_output=True,
-        )
-    else:
-        if not _run_bash_with_retry("claude plugin install claude-mem"):
-            return False
-
-    _configure_claude_mem_defaults()
-    return True
-
-
-def _is_claude_mem_deps_installed() -> bool:
-    """Check if claude-mem bun dependencies are already installed."""
-    import json
-
-    plugin_dir = Path.home() / ".claude" / "plugins" / "marketplaces" / "customable"
-    node_modules = plugin_dir / "node_modules"
-    marker_file = plugin_dir / ".install-version"
-
-    if not node_modules.exists():
-        return False
-
-    if not marker_file.exists():
-        return False
-
-    try:
-        pkg_path = plugin_dir / "package.json"
-        if not pkg_path.exists():
-            return False
-
-        pkg = json.loads(pkg_path.read_text())
-        marker = json.loads(marker_file.read_text())
-
-        return pkg.get("version") == marker.get("version")
-    except (json.JSONDecodeError, OSError):
-        return False
-
-
-def preinstall_claude_mem_deps(ui: Any = None) -> bool:
-    """Pre-install bun dependencies for claude-mem to speed up first start.
-
-    This runs `bun install` in the plugin directory and creates the version
-    marker file, so the smart-install.js hook skips installation on first start.
-    """
-    import datetime
-    import json
-
-    plugin_dir = Path.home() / ".claude" / "plugins" / "marketplaces" / "customable"
-
-    if not plugin_dir.exists():
-        return False
-
-    if _is_claude_mem_deps_installed():
-        return True
-
-    if not command_exists("bun"):
-        return False
-
-    if ui:
-        ui.print("  [dim]Pre-installing claude-mem dependencies...[/dim]")
-
-    try:
-        process = subprocess.Popen(
-            ["bun", "install"],
-            cwd=plugin_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-
-        if process.stdout:
-            for line in process.stdout:
-                line = line.rstrip()
-                if line and ui:
-                    if any(kw in line.lower() for kw in ["install", "package", "done", "+"]):
-                        ui.print(f"  {line}")
-
-        process.wait()
-
-        if process.returncode != 0:
-            return False
-
-        pkg_path = plugin_dir / "package.json"
-        marker_path = plugin_dir / ".install-version"
-
-        if pkg_path.exists():
-            pkg = json.loads(pkg_path.read_text())
-
-            bun_version = None
-            try:
-                result = subprocess.run(
-                    ["bun", "--version"],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode == 0:
-                    bun_version = result.stdout.strip()
-            except Exception:
-                pass
-
-            marker_data = {
-                "version": pkg.get("version"),
-                "bun": bun_version,
-                "installedAt": datetime.datetime.now().isoformat(),
-            }
-            marker_path.write_text(json.dumps(marker_data))
-
-        return True
-    except Exception:
-        return False
-
-
-def install_context7() -> bool:
-    """Install context7 plugin via claude plugin."""
-    if _is_plugin_installed("context7", "claude-plugins-official"):
-        return True
-
-    if not _ensure_official_marketplace():
-        return False
-
-    return _run_bash_with_retry("claude plugin install context7")
-
-
 def install_mcp_cli() -> bool:
     """Install mcp-cli via bun for MCP server interaction."""
     if not command_exists("bun"):
         return False
 
     return _run_bash_with_retry("bun install -g https://github.com/philschmid/mcp-cli")
+
+
+def install_typescript_lsp() -> bool:
+    """Install TypeScript language server and compiler globally."""
+    return _run_bash_with_retry("npm install -g @vtsls/language-server typescript")
 
 
 def _is_agent_browser_ready() -> bool:
@@ -689,20 +494,44 @@ def _install_with_spinner(ui: Any, name: str, install_fn: Any, *args: Any) -> bo
         return install_fn(*args) if args else install_fn()
 
 
-def _install_claude_mem_with_deps(ui: Any) -> bool:
-    """Install claude-mem plugin and pre-install bun dependencies."""
-    if not _install_with_spinner(ui, "claude-mem plugin", install_claude_mem):
+def _install_plugin_dependencies(project_dir: Path, ui: Any = None) -> bool:
+    """Install plugin dependencies by running bun/npm install in the plugin folder.
+
+    This installs all Node.js dependencies defined in plugin/package.json,
+    which includes runtime dependencies for MCP servers and hooks.
+    """
+    plugin_dir = project_dir / ".claude" / "plugin"
+
+    if not plugin_dir.exists():
+        if ui:
+            ui.warning("Plugin directory not found - skipping plugin dependencies")
         return False
 
-    if ui:
-        ui.status("Pre-installing claude-mem dependencies...")
-    if preinstall_claude_mem_deps(ui):
+    package_json = plugin_dir / "package.json"
+    if not package_json.exists():
         if ui:
-            ui.success("claude-mem dependencies ready")
-    else:
-        if ui:
-            ui.warning("Could not pre-install claude-mem deps - will install on first start")
+            ui.warning("No package.json in plugin directory - skipping")
+        return False
 
+    success = False
+
+    if command_exists("bun"):
+        if _run_bash_with_retry("bun install", cwd=plugin_dir):
+            success = True
+
+    return success
+
+
+def _setup_claude_mem(ui: Any) -> bool:
+    """Migrate legacy plugins and configure claude-mem defaults.
+
+    Claude-mem MCP server is now defined in plugin/.mcp.json.
+    This function removes any legacy plugin installations and configures defaults.
+    """
+    _migrate_legacy_plugins(ui)
+    _configure_claude_mem_defaults()
+    if ui:
+        ui.success("claude-mem defaults configured")
     return True
 
 
@@ -761,43 +590,29 @@ def _install_vexor_with_ui(ui: Any) -> bool:
         return False
 
 
-def _configure_web_mcp_servers(ui: Any) -> None:
-    """Configure open-websearch and fetcher-mcp in ~/.claude.json."""
+def _clean_mcp_servers_from_claude_config(ui: Any) -> None:
+    """Remove mcpServers section from ~/.claude.json (now in plugin/.mcp.json)."""
     import json
 
     claude_config_path = Path.home() / ".claude.json"
 
     try:
-        if claude_config_path.exists():
-            config = json.loads(claude_config_path.read_text())
-        else:
-            config = {}
+        if not claude_config_path.exists():
+            return
+
+        config = json.loads(claude_config_path.read_text())
 
         if "mcpServers" not in config:
-            config["mcpServers"] = {}
+            return
 
-        config["mcpServers"]["web-search"] = {
-            "command": "npx",
-            "args": ["-y", "open-websearch@latest"],
-            "env": {
-                "MODE": "stdio",
-                "DEFAULT_SEARCH_ENGINE": "duckduckgo",
-                "ALLOWED_SEARCH_ENGINES": "duckduckgo,bing,exa",
-            },
-        }
-
-        config["mcpServers"]["web-fetch"] = {
-            "command": "npx",
-            "args": ["-y", "fetcher-mcp"],
-        }
-
-        claude_config_path.write_text(json.dumps(config, indent=2))
+        del config["mcpServers"]
+        claude_config_path.write_text(json.dumps(config, indent=2) + "\n")
 
         if ui:
-            ui.success("Web MCP servers configured (open-websearch, fetcher-mcp)")
+            ui.success("Cleaned mcpServers from ~/.claude.json (now in plugin/.mcp.json)")
     except Exception as e:
         if ui:
-            ui.warning(f"Could not configure web MCP servers: {e}")
+            ui.warning(f"Could not clean mcpServers from config: {e}")
 
 
 class DependenciesStep(BaseStep):
@@ -827,14 +642,17 @@ class DependenciesStep(BaseStep):
         if _install_claude_code_with_ui(ui, ctx.project_dir):
             installed.append("claude_code")
 
-        if _install_claude_mem_with_deps(ui):
+        if _setup_claude_mem(ui):
             installed.append("claude_mem")
 
-        if _install_with_spinner(ui, "Context7 plugin", install_context7):
-            installed.append("context7")
+        if _install_with_spinner(ui, "Plugin dependencies", _install_plugin_dependencies, ctx.project_dir, ui):
+            installed.append("plugin_deps")
 
         if _install_with_spinner(ui, "mcp-cli", install_mcp_cli):
             installed.append("mcp_cli")
+
+        if _install_with_spinner(ui, "vtsls (TypeScript LSP server)", install_typescript_lsp):
+            installed.append("typescript_lsp")
 
         if ctx.enable_agent_browser:
             if _install_agent_browser_with_ui(ui):
@@ -843,6 +661,6 @@ class DependenciesStep(BaseStep):
         if _install_vexor_with_ui(ui):
             installed.append("vexor")
 
-        _configure_web_mcp_servers(ui)
+        _clean_mcp_servers_from_claude_config(ui)
 
         ctx.config["installed_dependencies"] = installed

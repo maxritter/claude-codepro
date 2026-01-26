@@ -1,4 +1,4 @@
-"""Tests for downloads module with httpx."""
+"""Tests for downloads module."""
 
 from __future__ import annotations
 
@@ -103,7 +103,7 @@ class TestGetRepoFiles:
     """Test get_repo_files function."""
 
     def test_get_repo_files_local_mode(self):
-        """get_repo_files returns files in local mode."""
+        """get_repo_files returns FileInfo objects in local mode."""
         from installer.downloads import DownloadConfig, get_repo_files
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -120,10 +120,13 @@ class TestGetRepoFiles:
                 local_repo_dir=Path(tmpdir),
             )
 
-            files = get_repo_files("mydir", config)
-            assert len(files) == 2
-            assert "mydir/file1.txt" in files
-            assert "mydir/file2.txt" in files
+            file_infos = get_repo_files("mydir", config)
+            assert len(file_infos) == 2
+            paths = [f.path for f in file_infos]
+            assert "mydir/file1.txt" in paths
+            assert "mydir/file2.txt" in paths
+            # Local mode has no SHA
+            assert all(f.sha is None for f in file_infos)
 
     def test_get_repo_files_returns_empty_for_missing_dir(self):
         """get_repo_files returns empty list for missing directory."""

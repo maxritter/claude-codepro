@@ -108,11 +108,9 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "cython" },
-    { name = "httpx" },
     { name = "platformdirs" },
     { name = "rich" },
     { name = "setuptools" },
-    { name = "typer" },
 ]
 
 [package.dev-dependencies]
@@ -131,11 +129,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cython", specifier = ">=3.0.0" },
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "platformdirs", specifier = ">=4.3.6" },
     { name = "rich", specifier = ">=14.0.0" },
     { name = "setuptools", specifier = ">=61.0" },
-    { name = "typer", specifier = ">=0.21.1" },
 ]
 
 [package.metadata.requires-dev]

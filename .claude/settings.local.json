@@ -10,7 +10,9 @@
     "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "true",
     "DISABLE_INSTALLATION_CHECKS": "true",
     "DISABLE_AUTOUPDATER": "true",
-    "DISABLE_TELEMETRY": "true"
+    "DISABLE_TELEMETRY": "true",
+    "CLAUDE_PLUGIN_ROOT": "/workspaces/claude-codepro/.claude/plugin",
+    "CLAUDE_PROJECT_ROOT": "/workspaces/claude-codepro"
   },
   "permissions": {
     "allow": [
@@ -45,69 +47,18 @@
       "WebSearch",
       "Write",
       "mcp__ide__*",
-      "mcp__plugin_claude-mem_mcp-search__*",
-      "mcp__plugin_context7_context7__*",
-      "mcp__web-search__*",
-      "mcp__web-fetch__*",
-      "Skill(ccp)",
-      "Skill(vexor-cli)",
-      "Skill(plan)",
-      "Skill(implement)",
-      "Skill(verify)",
-      "Skill(setup)",
-      "Skill(spec)",
+      "mcp__plugin_plugin_mem-search__*",
+      "mcp__plugin_plugin_context7__*",
+      "mcp__plugin_plugin_web-search__*",
+      "mcp__plugin_plugin_web-fetch__*",
       "Skill(skill-creator)",
+      "Skill(spec)",
       "LSP"
     ],
     "deny": []
   },
   "model": "opus",
   "enableAllProjectMcpServers": true,
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "WebSearch|WebFetch|Grep|Task|EnterPlanMode|ExitPlanMode",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run python /workspaces/claude-codepro/.claude/hooks/tool_redirect.py"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run python /workspaces/claude-codepro/.claude/hooks/file_checker_python.py"
-          },
-          {
-            "type": "command",
-            "command": "uv run python /workspaces/claude-codepro/.claude/hooks/file_checker_ts.py"
-          },
-          {
-            "type": "command",
-            "command": "uv run python /workspaces/claude-codepro/.claude/hooks/file_checker_go.py"
-          },
-          {
-            "type": "command",
-            "command": "uv run python /workspaces/claude-codepro/.claude/hooks/tdd_enforcer.py"
-          }
-        ]
-      },
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run python /workspaces/claude-codepro/.claude/hooks/context_monitor.py"
-          }
-        ]
-      }
-    ]
-  },
   "statusLine": {
     "type": "command",
     "command": "/workspaces/claude-codepro/.claude/bin/ccp statusline",

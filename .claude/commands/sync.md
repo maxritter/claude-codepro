@@ -58,6 +58,8 @@ Custom skills in `.claude/skills/` (non-standard names) are preserved during upd
 
 **Build/update the semantic search index before exploration.**
 
+> **Note:** First-time indexing can take several minutes as embeddings are generated locally using CPU (or GPU if available). Subsequent syncs are much faster due to caching.
+
 1. **Check Vexor availability:**
    ```bash
    vexor --version
@@ -65,10 +67,11 @@ Custom skills in `.claude/skills/` (non-standard names) are preserved during upd
 
 2. **If Vexor not installed:** Inform user, will use Grep/Glob for exploration instead.
 
-3. **Build or update the index:**
+3. **Build or update the index (use extended timeout for first run):**
    ```bash
    vexor index --path /absolute/path/to/project
    ```
+   Use Bash with `timeout: 300000` (5 minutes) for first-time indexing.
 
 4. **Verify index is working:**
    ```bash

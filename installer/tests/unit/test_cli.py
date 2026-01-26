@@ -12,17 +12,18 @@ import pytest
 class TestCLIApp:
     """Test CLI application."""
 
-    def test_cli_app_exists(self):
-        """CLI app module exists."""
-        from installer.cli import app
+    def test_cli_parser_exists(self):
+        """CLI argument parser exists."""
+        from installer.cli import create_parser
 
-        assert app is not None
+        parser = create_parser()
+        assert parser is not None
 
     def test_cli_has_install_command(self):
-        """CLI has install command."""
-        from installer.cli import install
+        """CLI has install command handler."""
+        from installer.cli import cmd_install
 
-        assert callable(install)
+        assert callable(cmd_install)
 
 
 class TestRunInstallation:

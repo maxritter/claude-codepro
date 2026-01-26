@@ -23,6 +23,7 @@ sdist/
 var/
 wheels/
 node_modules/
+.pnpm-store/**
 share/python-wheels/
 *.egg-info/
 .installed.cfg
@@ -238,6 +239,7 @@ tmp/
 .claude/installer/
 docs/plans
 docs/license
+.install-version
 
 # Kiro
 .kiro/

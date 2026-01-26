@@ -8,35 +8,35 @@ from pathlib import Path
 from typing import Any
 
 from installer.context import InstallContext
-from installer.downloads import DownloadConfig, download_file, get_repo_files
+from installer.downloads import DownloadConfig, FileInfo, download_file, get_repo_files
 from installer.steps.base import BaseStep
 
 SETTINGS_FILE = "settings.local.json"
-PYTHON_CHECKER_HOOK = "uv run python .claude/hooks/file_checker_python.py"
-TYPESCRIPT_CHECKER_HOOK = "uv run python .claude/hooks/file_checker_ts.py"
-GOLANG_CHECKER_HOOK = "uv run python .claude/hooks/file_checker_go.py"
-HOOKS_PATH_PATTERN = ".claude/hooks/"
 BIN_PATH_PATTERN = ".claude/bin/"
-SOURCE_REPO_HOOKS_PATH = "/workspaces/claude-codepro/.claude/hooks/"
+PLUGIN_PATH_PATTERN = ".claude/plugin"
 SOURCE_REPO_BIN_PATH = "/workspaces/claude-codepro/.claude/bin/"
+SOURCE_REPO_PLUGIN_PATH = "/workspaces/claude-codepro/.claude/plugin"
+SOURCE_REPO_PROJECT_PATH = "/workspaces/claude-codepro"
 
 
 def patch_claude_paths(content: str, project_dir: Path) -> str:
     """Patch .claude paths to use absolute paths for the target project.
 
-    Handles both relative paths (.claude/hooks/, .claude/bin/) and existing
+    Handles both relative paths (.claude/bin/, .claude/plugin) and existing
     absolute paths from the source repo (/workspaces/claude-codepro/.claude/).
+    Hooks are in the plugin folder and use CLAUDE_PLUGIN_ROOT, so no separate patching needed.
     """
-    abs_hooks_path = str(project_dir / ".claude" / "hooks") + "/"
     abs_bin_path = str(project_dir / ".claude" / "bin") + "/"
+    abs_plugin_path = str(project_dir / ".claude" / "plugin")
+    abs_project_path = str(project_dir)
 
-    content = content.replace(SOURCE_REPO_HOOKS_PATH, abs_hooks_path)
     content = content.replace(SOURCE_REPO_BIN_PATH, abs_bin_path)
+    content = content.replace(SOURCE_REPO_PLUGIN_PATH, abs_plugin_path)
+    content = content.replace(SOURCE_REPO_PROJECT_PATH, abs_project_path)
 
-    content = content.replace(" " + HOOKS_PATH_PATTERN, " " + abs_hooks_path)
-    content = content.replace('"' + HOOKS_PATH_PATTERN, '"' + abs_hooks_path)
     content = content.replace(" " + BIN_PATH_PATTERN, " " + abs_bin_path)
     content = content.replace('"' + BIN_PATH_PATTERN, '"' + abs_bin_path)
+    content = content.replace('"' + PLUGIN_PATH_PATTERN, '"' + abs_plugin_path)
 
     return content
 
@@ -123,16 +123,16 @@ class ClaudeFilesStep(BaseStep):
         file_count = 0
         failed_files: list[str] = []
 
-        categories: dict[str, list[str]] = {
+        categories: dict[str, list[FileInfo]] = {
             "commands": [],
             "rules_standard": [],
             "rules": [],
-            "hooks": [],
-            "skills": [],
+            "plugin": [],
             "other": [],
         }
 
-        for file_path in claude_files:
+        for file_info in claude_files:
+            file_path = file_info.path
             if not file_path:
                 continue
 
@@ -153,6 +153,21 @@ class ClaudeFilesStep(BaseStep):
             if file_path.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
                 continue
             if Path(file_path).name == ".gitignore":
+                continue
+
+            if "/node_modules/" in file_path:
+                continue
+            if "/dist/" in file_path:
+                continue
+            if "/.vite/" in file_path:
+                continue
+            if "/coverage/" in file_path:
+                continue
+            if "/.turbo/" in file_path:
+                continue
+            if file_path.endswith(".lock") or file_path.endswith("-lock.yaml"):
+                continue
+            if ".install-version" in file_path:
                 continue
 
             if "/rules/custom/" in file_path:
@@ -181,28 +196,27 @@ class ClaudeFilesStep(BaseStep):
                     continue
 
             if "/commands/" in file_path:
-                categories["commands"].append(file_path)
+                categories["commands"].append(file_info)
             elif "/rules/standard/" in file_path:
-                categories["rules_standard"].append(file_path)
+                categories["rules_standard"].append(file_info)
             elif "/rules/" in file_path:
-                categories["rules"].append(file_path)
+                categories["rules"].append(file_info)
+            elif "/plugin/" in file_path:
+                categories["plugin"].append(file_info)
             elif "/hooks/" in file_path:
-                categories["hooks"].append(file_path)
+                continue
             elif "/skills/" in file_path:
-                skill_name = Path(file_path).parent.name
-                if skill_name.startswith("standards-"):
-                    categories["skills"].append(file_path)
+                continue
             elif "/scripts/" in file_path:
                 continue
             else:
-                categories["other"].append(file_path)
+                categories["other"].append(file_info)
 
         category_names = {
             "commands": "slash commands",
             "rules_standard": "standard rules",
             "rules": "custom rules",
-            "hooks": "hooks",
-            "skills": "skills",
+            "plugin": "plugin files",
             "other": "config files",
         }
 
@@ -211,18 +225,13 @@ class ClaudeFilesStep(BaseStep):
         )
 
         if not source_is_destination:
-            dirs_to_clear = [
-                ("hooks", categories["hooks"], ctx.project_dir / ".claude" / "hooks"),
-                ("standard rules", categories["rules_standard"], ctx.project_dir / ".claude" / "rules" / "standard"),
-            ]
-
-            for name, has_files, dir_path in dirs_to_clear:
-                if dir_path.exists() and has_files:
-                    try:
-                        shutil.rmtree(dir_path)
-                    except (OSError, IOError) as e:
-                        if ui:
-                            ui.warning(f"Failed to clear {name} directory: {e}")
+            rules_standard_dir = ctx.project_dir / ".claude" / "rules" / "standard"
+            if rules_standard_dir.exists() and categories["rules_standard"]:
+                try:
+                    shutil.rmtree(rules_standard_dir)
+                except (OSError, IOError) as e:
+                    if ui:
+                        ui.warning(f"Failed to clear standard rules directory: {e}")
 
             commands_dir = ctx.project_dir / ".claude" / "commands"
             if commands_dir.exists() and categories["commands"]:
@@ -237,19 +246,6 @@ class ClaudeFilesStep(BaseStep):
                                 if ui:
                                     ui.warning(f"Failed to clear command {name}: {e}")
 
-            skills_dir = ctx.project_dir / ".claude" / "skills"
-            if skills_dir.exists():
-                migrated_to_commands = {"plan", "implement", "verify"}
-                for skill_subdir in skills_dir.iterdir():
-                    if skill_subdir.is_dir():
-                        name = skill_subdir.name
-                        if name in migrated_to_commands or name.startswith("standards-"):
-                            try:
-                                shutil.rmtree(skill_subdir)
-                            except (OSError, IOError) as e:
-                                if ui:
-                                    ui.warning(f"Failed to clear skill {name}: {e}")
-
             scripts_dir = ctx.project_dir / ".claude" / "scripts"
             if scripts_dir.exists():
                 try:
@@ -258,13 +254,48 @@ class ClaudeFilesStep(BaseStep):
                     if ui:
                         ui.warning(f"Failed to remove scripts directory: {e}")
 
-        for category, files in categories.items():
-            if not files:
+            hooks_dir = ctx.project_dir / ".claude" / "hooks"
+            if hooks_dir.exists():
+                ccp_hooks = [
+                    "file_checker_python.py",
+                    "file_checker_ts.py",
+                    "file_checker_go.py",
+                    "tdd_enforcer.py",
+                    "context_monitor.py",
+                    "tool_redirect.py",
+                ]
+                for hook_file in ccp_hooks:
+                    hook_path = hooks_dir / hook_file
+                    if hook_path.exists():
+                        try:
+                            hook_path.unlink()
+                        except (OSError, IOError):
+                            pass
+
+            skills_dir = ctx.project_dir / ".claude" / "skills"
+            if skills_dir.exists():
+                for skill_dir in skills_dir.iterdir():
+                    if skill_dir.is_dir() and skill_dir.name.startswith("standards-"):
+                        try:
+                            shutil.rmtree(skill_dir)
+                        except (OSError, IOError):
+                            pass
+
+            old_statusline = ctx.project_dir / ".claude" / "statusline.json"
+            if old_statusline.exists():
+                try:
+                    old_statusline.unlink()
+                except (OSError, IOError):
+                    pass
+
+        for category, file_infos in categories.items():
+            if not file_infos:
                 continue
 
             if ui:
                 with ui.spinner(f"Installing {category_names[category]}..."):
-                    for file_path in files:
+                    for file_info in file_infos:
+                        file_path = file_info.path
                         dest_file = ctx.project_dir / file_path
                         if Path(file_path).name == SETTINGS_FILE:
                             success = self._install_settings(
@@ -281,21 +312,15 @@ class ClaudeFilesStep(BaseStep):
                                 installed_files.append(str(dest_file))
                             else:
                                 failed_files.append(file_path)
-                        elif download_file(file_path, dest_file, config):
+                        elif download_file(file_info, dest_file, config):
                             file_count += 1
                             installed_files.append(str(dest_file))
                         else:
                             failed_files.append(file_path)
-                ui.success(f"Installed {len(files)} {category_names[category]}")
-                if not ui.quiet:
-                    for file_path in files:
-                        if category == "skills":
-                            file_name = Path(file_path).parent.name
-                        else:
-                            file_name = Path(file_path).stem
-                        ui.print(f"    [dim]✓ {file_name}[/dim]")
+                ui.success(f"Installed {len(file_infos)} {category_names[category]}")
             else:
-                for file_path in files:
+                for file_info in file_infos:
+                    file_path = file_info.path
                     dest_file = ctx.project_dir / file_path
                     if Path(file_path).name == SETTINGS_FILE:
                         success = self._install_settings(
@@ -312,7 +337,7 @@ class ClaudeFilesStep(BaseStep):
                             installed_files.append(str(dest_file))
                         else:
                             failed_files.append(file_path)
-                    elif download_file(file_path, dest_file, config):
+                    elif download_file(file_info, dest_file, config):
                         file_count += 1
                         installed_files.append(str(dest_file))
                     else:
@@ -320,21 +345,33 @@ class ClaudeFilesStep(BaseStep):
 
         ctx.config["installed_files"] = installed_files
 
-        hooks_dir = ctx.project_dir / ".claude" / "hooks"
-        if hooks_dir.exists():
-            for hook_file in hooks_dir.glob("*.sh"):
-                hook_file.chmod(0o755)
-            for hook_file in hooks_dir.glob("*.py"):
-                hook_file.chmod(0o755)
+        scripts_dir = ctx.project_dir / ".claude" / "plugin" / "scripts"
+        if scripts_dir.exists():
+            for script in scripts_dir.glob("*.cjs"):
+                try:
+                    current_mode = script.stat().st_mode
+                    script.chmod(current_mode | 0o111)
+                except (OSError, IOError):
+                    pass
+
+        lsp_config_path = ctx.project_dir / ".claude" / "plugin" / ".lsp.json"
+        if lsp_config_path.exists():
+            try:
+                lsp_config = json.loads(lsp_config_path.read_text())
+                if not ctx.enable_python and "python" in lsp_config:
+                    del lsp_config["python"]
+                if not ctx.enable_typescript and "typescript" in lsp_config:
+                    del lsp_config["typescript"]
+                if not ctx.enable_golang and "go" in lsp_config:
+                    del lsp_config["go"]
+                lsp_config_path.write_text(json.dumps(lsp_config, indent=2) + "\n")
+            except (json.JSONDecodeError, OSError, IOError):
+                pass
 
         custom_dir = ctx.project_dir / ".claude" / "rules" / "custom"
         if not custom_dir.exists():
             custom_dir.mkdir(parents=True, exist_ok=True)
             (custom_dir / ".gitkeep").touch()
-
-        skills_dir = ctx.project_dir / ".claude" / "skills"
-        if not skills_dir.exists():
-            skills_dir.mkdir(parents=True, exist_ok=True)
 
         if ui:
             if file_count > 0:

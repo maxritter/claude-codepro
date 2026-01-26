@@ -83,9 +83,6 @@ def test_install_sh_uses_with_flags():
     content = install_sh.read_text()
 
     assert "--with rich" in content, "Must use --with for rich"
-    assert "--with httpx" in content, "Must use --with for httpx"
-    assert "--with typer" in content, "Must use --with for typer"
-    assert "--with platformdirs" in content, "Must use --with for platformdirs"
     assert "PYTHONPATH" in content, "Must set PYTHONPATH for installer module"
 
 

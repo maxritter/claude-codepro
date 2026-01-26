@@ -1,0 +1,117 @@
+{
+  "description": "Claude CodePro hooks - memory system and quality checks",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/worker-service.cjs\" start",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/worker-service.cjs\" hook claude-code context",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/worker-service.cjs\" hook claude-code user-message",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/worker-service.cjs\" start",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/worker-service.cjs\" hook claude-code session-init",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "WebSearch|WebFetch|Grep|Task|EnterPlanMode|ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run python \"${CLAUDE_PLUGIN_ROOT}/hooks/tool_redirect.py\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run python \"${CLAUDE_PLUGIN_ROOT}/hooks/file_checker_python.py\""
+          },
+          {
+            "type": "command",
+            "command": "uv run python \"${CLAUDE_PLUGIN_ROOT}/hooks/file_checker_ts.py\""
+          },
+          {
+            "type": "command",
+            "command": "uv run python \"${CLAUDE_PLUGIN_ROOT}/hooks/file_checker_go.py\""
+          },
+          {
+            "type": "command",
+            "command": "uv run python \"${CLAUDE_PLUGIN_ROOT}/hooks/tdd_enforcer.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/worker-service.cjs\" start",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/worker-service.cjs\" hook claude-code observation",
+            "timeout": 120
+          }
+        ]
+      },
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run python \"${CLAUDE_PLUGIN_ROOT}/hooks/context_monitor.py\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/worker-service.cjs\" start",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/worker-service.cjs\" hook claude-code summarize",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

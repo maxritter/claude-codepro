@@ -41,7 +41,7 @@ const insideItems: InsideItem[] = [
     title: "Rules, Commands & Skills",
     items: [
       "Rules: Best practices for TDD and workflows",
-      "Commands: /spec, /sync, /plan, /implement, /verify",
+      "Commands: /spec for SDD and /sync updating rules",
       "Skills: Coding standards for languages & frameworks",
       "Customizable: Add your own, they survive updates",
     ],
@@ -62,7 +62,7 @@ const insideItems: InsideItem[] = [
     items: [
       "TDD Enforcer - Pre-edit test requirement",
       "Quality Hooks - Python, TypeScript and Go",
-      "Context Monitor - Usage tracking and handoffs",
+      "LSP Integration - Auto-installed language servers",
       "Status Line - Live context, memory, and usage",
     ],
   },
