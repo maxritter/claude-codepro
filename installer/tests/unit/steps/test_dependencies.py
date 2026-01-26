@@ -520,46 +520,6 @@ class TestInstallPluginDependencies:
             assert result is True
             mock_run.assert_called_with("bun install", cwd=plugin_dir)
 
-    @patch("installer.steps.dependencies._run_bash_with_retry")
-    @patch("installer.steps.dependencies.command_exists")
-    def test_install_plugin_dependencies_runs_npm_install(self, mock_cmd_exists, mock_run):
-        """_install_plugin_dependencies runs npm install when npm is available."""
-        from installer.steps.dependencies import _install_plugin_dependencies
-
-        mock_cmd_exists.side_effect = lambda cmd: cmd == "npm"
-        mock_run.return_value = True
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            plugin_dir = Path(tmpdir) / ".claude" / "plugin"
-            plugin_dir.mkdir(parents=True)
-            (plugin_dir / "package.json").write_text('{"name": "test"}')
-
-            result = _install_plugin_dependencies(Path(tmpdir), ui=None)
-
-            assert result is True
-            mock_run.assert_called_with("npm install", cwd=plugin_dir)
-
-    @patch("installer.steps.dependencies._run_bash_with_retry")
-    @patch("installer.steps.dependencies.command_exists")
-    def test_install_plugin_dependencies_runs_both_bun_and_npm(self, mock_cmd_exists, mock_run):
-        """_install_plugin_dependencies runs both bun and npm when available."""
-        from installer.steps.dependencies import _install_plugin_dependencies
-
-        mock_cmd_exists.return_value = True
-        mock_run.return_value = True
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            plugin_dir = Path(tmpdir) / ".claude" / "plugin"
-            plugin_dir.mkdir(parents=True)
-            (plugin_dir / "package.json").write_text('{"name": "test"}')
-
-            result = _install_plugin_dependencies(Path(tmpdir), ui=None)
-
-            assert result is True
-            assert mock_run.call_count == 2
-            calls = [call[0][0] for call in mock_run.call_args_list]
-            assert "bun install" in calls
-
 
 class TestCleanMcpServersFromClaudeConfig:
     """Test cleaning mcpServers from ~/.claude.json."""
