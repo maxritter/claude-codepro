@@ -194,7 +194,7 @@ Claude CodePro extends Claude Code with a modular system of rules, commands, and
 
 - `.claude/commands/` - `spec` and `sync` commands are managed by CCP
 - `.claude/rules/standard/` - Best practices and workflows
-- `.claude/plugin/skills/` - Coding standards for languages and frameworks
+- `.claude/ccp/skills/` - Coding standards for languages and frameworks
 
 **Yours to customize** (never touched by updates):
 

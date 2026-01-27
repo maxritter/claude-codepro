@@ -139,7 +139,7 @@ def _configure_claude_defaults() -> bool:
             "autoConnectIde": True,
             "respectGitignore": False,
             "autoUpdates": False,
-            "claudeInChromeDefaultEnabled": False,
+            "lspRecommendationDisabled": True,
             "attribution": {"commit": "", "pr": ""},
         }
     )
@@ -169,11 +169,11 @@ def install_claude_code(project_dir: Path, ui: Any = None) -> tuple[bool, str]:
     if version != "latest":
         npm_cmd = f"npm install -g @anthropic-ai/claude-code@{version}"
         if ui:
-            ui.status(f"Installing Claude Code v{version} via npm...")
+            ui.status(f"Installing Claude Code v{version}...")
     else:
         npm_cmd = "npm install -g @anthropic-ai/claude-code"
         if ui:
-            ui.status("Installing Claude Code via npm...")
+            ui.status("Installing Claude Code...")
 
     if not _run_bash_with_retry(npm_cmd):
         return False, version
@@ -257,48 +257,6 @@ def _migrate_legacy_plugins(ui: Any = None) -> None:
     if ui and (removed_plugins or removed_marketplaces):
         total = len(removed_plugins) + len(removed_marketplaces)
         ui.success(f"Cleaned up {total} legacy plugins")
-
-
-def _configure_claude_mem_defaults() -> bool:
-    """Configure Claude Mem with recommended defaults."""
-    import json
-
-    settings_dir = Path.home() / ".claude-mem"
-    settings_path = settings_dir / "settings.json"
-
-    try:
-        settings_dir.mkdir(parents=True, exist_ok=True)
-
-        if settings_path.exists():
-            settings = json.loads(settings_path.read_text())
-        else:
-            settings = {}
-
-        settings.update(
-            {
-                "PROCESSING_MODE": "normal",
-                "CLAUDEMD_ENABLED": "false",
-                "CLAUDE_MEM_FOLDER_CLAUDEMD_ENABLED": "false",
-                "RETENTION_ENABLED": "true",
-                "CLEANUP_AUTO_ENABLED": "true",
-                "CLAUDE_MEM_RETENTION_ENABLED": "true",
-                "RETENTION_MAX_COUNT": "1000",
-                "MAX_WORKERS": "1",
-                "AUTO_SPAWN_WORKERS": "false",
-                "CLAUDE_MEM_RETENTION_MAX_COUNT": "1000",
-                "CLAUDE_MEM_CONTEXT_SHOW_LAST_SUMMARY": "true",
-                "CLAUDE_MEM_CONTEXT_SHOW_LAST_MESSAGE": "true",
-                "CLAUDE_MEM_CONTEXT_OBSERVATIONS": "50",
-                "CLAUDE_MEM_CONTEXT_SESSION_COUNT": "10",
-                "CLAUDE_MEM_CONTEXT_FULL_COUNT": "10",
-                "CLAUDE_MEM_CONTEXT_FULL_FIELD": "facts",
-                "CLAUDE_MEM_MODEL": "haiku",
-            }
-        )
-        settings_path.write_text(json.dumps(settings, indent=2) + "\n")
-        return True
-    except Exception:
-        return False
 
 
 def _configure_vexor_defaults() -> bool:
@@ -500,7 +458,7 @@ def _install_plugin_dependencies(project_dir: Path, ui: Any = None) -> bool:
     This installs all Node.js dependencies defined in plugin/package.json,
     which includes runtime dependencies for MCP servers and hooks.
     """
-    plugin_dir = project_dir / ".claude" / "plugin"
+    plugin_dir = project_dir / ".claude" / "ccp"
 
     if not plugin_dir.exists():
         if ui:
@@ -523,15 +481,14 @@ def _install_plugin_dependencies(project_dir: Path, ui: Any = None) -> bool:
 
 
 def _setup_claude_mem(ui: Any) -> bool:
-    """Migrate legacy plugins and configure claude-mem defaults.
+    """Migrate legacy plugins for claude-mem.
 
     Claude-mem MCP server is now defined in plugin/.mcp.json.
-    This function removes any legacy plugin installations and configures defaults.
+    This function removes any legacy plugin installations.
     """
     _migrate_legacy_plugins(ui)
-    _configure_claude_mem_defaults()
     if ui:
-        ui.success("claude-mem defaults configured")
+        ui.success("claude-mem legacy plugins cleaned")
     return True
 
 

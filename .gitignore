@@ -230,9 +230,8 @@ CLAUDE.md
 .claude/config/
 tmp/
 
-# Custom skills (non-standard names are project-specific)
-.claude/skills/*/
-!.claude/skills/standards-*/
+# Skills directory (generated/user-specific)
+.claude/skills/
 
 # Build artifacts
 .claude/bin/

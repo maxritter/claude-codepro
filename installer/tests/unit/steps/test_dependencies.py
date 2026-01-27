@@ -382,7 +382,7 @@ class TestMigrateLegacyPlugins:
 
 
 class TestSetupClaudeMem:
-    """Test claude-mem setup (migration + defaults configuration)."""
+    """Test claude-mem setup (legacy plugin migration)."""
 
     def test_setup_claude_mem_exists(self):
         """_setup_claude_mem function exists."""
@@ -390,19 +390,15 @@ class TestSetupClaudeMem:
 
         assert callable(_setup_claude_mem)
 
-    @patch("installer.steps.dependencies._configure_claude_mem_defaults")
     @patch("installer.steps.dependencies._migrate_legacy_plugins")
-    def test_setup_claude_mem_calls_migration_and_config(self, mock_migrate, mock_config):
-        """_setup_claude_mem calls migration and configures defaults."""
+    def test_setup_claude_mem_calls_migration(self, mock_migrate):
+        """_setup_claude_mem calls legacy plugin migration."""
         from installer.steps.dependencies import _setup_claude_mem
-
-        mock_config.return_value = True
 
         result = _setup_claude_mem(ui=None)
 
         assert result is True
         mock_migrate.assert_called_once()
-        mock_config.assert_called_once()
 
 
 class TestVexorInstall:
@@ -489,7 +485,7 @@ class TestInstallPluginDependencies:
         from installer.steps.dependencies import _install_plugin_dependencies
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            plugin_dir = Path(tmpdir) / ".claude" / "plugin"
+            plugin_dir = Path(tmpdir) / ".claude" / "ccp"
             plugin_dir.mkdir(parents=True)
 
             result = _install_plugin_dependencies(Path(tmpdir), ui=None)
@@ -505,7 +501,7 @@ class TestInstallPluginDependencies:
         mock_run.return_value = True
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            plugin_dir = Path(tmpdir) / ".claude" / "plugin"
+            plugin_dir = Path(tmpdir) / ".claude" / "ccp"
             plugin_dir.mkdir(parents=True)
             (plugin_dir / "package.json").write_text('{"name": "test"}')
 

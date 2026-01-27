@@ -17,7 +17,8 @@ model: opus
 
 ## ⛔ CRITICAL RULES
 
-1. **NO sub-agents (Task tool)** - Do all work directly with Read, Grep, Glob, Bash
+1. **NO sub-agents** - Never use `Task` tool to spawn sub-agents (loses context). Use Read, Grep, Glob, Bash directly.
+   - Note: Task MANAGEMENT tools (TaskCreate, TaskList, TaskUpdate, TaskGet) ARE allowed for tracking progress
 2. **NO stopping between phases** - Flow continuously from planning → implementation → verification
 3. **NO built-in plan mode** - Never use EnterPlanMode or ExitPlanMode tools
 4. **Quality over speed** - Never rush due to context pressure
@@ -437,17 +438,24 @@ Iterations: 0
 
 3. **Based on user response:**
 
-   **If user approves ("Yes, proceed..."):**
+   **If user selects "Yes, proceed with implementation":**
    - Edit the plan file to change `Approved: No` to `Approved: Yes`
    - **Continue immediately to PHASE 2: IMPLEMENTATION**
 
-   **If user wants changes ("No, I need to make changes"):**
+   **If user selects "No, I need to make changes":**
    - Tell user: "Please edit the plan file at `<plan-path>`, then say 'ready' when done"
    - Wait for user to confirm they're done editing
    - Re-read the plan file to see their changes
    - Ask for approval again using AskUserQuestion
 
-4. **DO NOT proceed to implementation until user explicitly approves**
+   **If user provides OTHER feedback (corrections, config values, clarifications):**
+   - This is NOT approval - they're giving you changes to incorporate
+   - Update the plan with their feedback
+   - Ask for approval AGAIN with a fresh AskUserQuestion
+
+4. **DO NOT proceed to implementation until user explicitly selects "Yes, proceed"**
+
+**⚠️ CRITICAL: Any response other than selecting "Yes, proceed with implementation" is NOT approval. Config feedback, threshold changes, clarifications = update plan, then re-ask.**
 
 **⚠️ CRITICAL: Claude handles the `Approved:` field update - user never edits it manually**
 
@@ -983,7 +991,7 @@ If `send-clear` fails:
 
 # CRITICAL RULES SUMMARY
 
-1. **NO sub-agents (Task tool)** - Perform all work yourself using direct tool calls
+1. **NO sub-agents** - Never use `Task` tool to spawn sub-agents. Task MANAGEMENT tools (TaskCreate/List/Update/Get) are fine.
 2. **ONLY stopping point is plan approval** - Never stop/wait between phases, during context handoff, or for user acknowledgment. Execute session continuation automatically.
 3. **Batch questions together** - Don't interrupt user flow
 4. **Run explorations sequentially** - One at a time, never in parallel

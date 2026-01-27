@@ -13,21 +13,21 @@ from installer.steps.base import BaseStep
 
 SETTINGS_FILE = "settings.local.json"
 BIN_PATH_PATTERN = ".claude/bin/"
-PLUGIN_PATH_PATTERN = ".claude/plugin"
+PLUGIN_PATH_PATTERN = ".claude/ccp"
 SOURCE_REPO_BIN_PATH = "/workspaces/claude-codepro/.claude/bin/"
-SOURCE_REPO_PLUGIN_PATH = "/workspaces/claude-codepro/.claude/plugin"
+SOURCE_REPO_PLUGIN_PATH = "/workspaces/claude-codepro/.claude/ccp"
 SOURCE_REPO_PROJECT_PATH = "/workspaces/claude-codepro"
 
 
 def patch_claude_paths(content: str, project_dir: Path) -> str:
     """Patch .claude paths to use absolute paths for the target project.
 
-    Handles both relative paths (.claude/bin/, .claude/plugin) and existing
+    Handles both relative paths (.claude/bin/, .claude/ccp) and existing
     absolute paths from the source repo (/workspaces/claude-codepro/.claude/).
     Hooks are in the plugin folder and use CLAUDE_PLUGIN_ROOT, so no separate patching needed.
     """
     abs_bin_path = str(project_dir / ".claude" / "bin") + "/"
-    abs_plugin_path = str(project_dir / ".claude" / "plugin")
+    abs_plugin_path = str(project_dir / ".claude" / "ccp")
     abs_project_path = str(project_dir)
 
     content = content.replace(SOURCE_REPO_BIN_PATH, abs_bin_path)
@@ -288,6 +288,14 @@ class ClaudeFilesStep(BaseStep):
                 except (OSError, IOError):
                     pass
 
+            old_plugin_dir = ctx.project_dir / ".claude" / "plugin"
+            if old_plugin_dir.exists():
+                try:
+                    shutil.rmtree(old_plugin_dir)
+                except (OSError, IOError) as e:
+                    if ui:
+                        ui.warning(f"Failed to remove old plugin directory: {e}")
+
         for category, file_infos in categories.items():
             if not file_infos:
                 continue
@@ -345,7 +353,7 @@ class ClaudeFilesStep(BaseStep):
 
         ctx.config["installed_files"] = installed_files
 
-        scripts_dir = ctx.project_dir / ".claude" / "plugin" / "scripts"
+        scripts_dir = ctx.project_dir / ".claude" / "ccp" / "scripts"
         if scripts_dir.exists():
             for script in scripts_dir.glob("*.cjs"):
                 try:
@@ -354,7 +362,7 @@ class ClaudeFilesStep(BaseStep):
                 except (OSError, IOError):
                     pass
 
-        lsp_config_path = ctx.project_dir / ".claude" / "plugin" / ".lsp.json"
+        lsp_config_path = ctx.project_dir / ".claude" / "ccp" / ".lsp.json"
         if lsp_config_path.exists():
             try:
                 lsp_config = json.loads(lsp_config_path.read_text())

@@ -34,33 +34,33 @@ class TestPatchClaudePaths:
         """patch_claude_paths replaces source repo plugin path with target project path."""
         from installer.steps.claude_files import patch_claude_paths
 
-        content = '{"CLAUDE_PLUGIN_ROOT": "/workspaces/claude-codepro/.claude/plugin"}'
+        content = '{"CLAUDE_PLUGIN_ROOT": "/workspaces/claude-codepro/.claude/ccp"}'
         result = patch_claude_paths(content, Path("/home/user/myproject"))
 
-        assert "/workspaces/claude-codepro/.claude/plugin" not in result
-        assert "/home/user/myproject/.claude/plugin" in result
+        assert "/workspaces/claude-codepro/.claude/ccp" not in result
+        assert "/home/user/myproject/.claude/ccp" in result
 
     def test_patch_claude_paths_replaces_relative_plugin_path(self):
-        """patch_claude_paths replaces relative .claude/plugin paths."""
+        """patch_claude_paths replaces relative .claude/ccp paths."""
         from installer.steps.claude_files import patch_claude_paths
 
-        content = '{"CLAUDE_PLUGIN_ROOT": ".claude/plugin"}'
+        content = '{"CLAUDE_PLUGIN_ROOT": ".claude/ccp"}'
         result = patch_claude_paths(content, Path("/home/user/myproject"))
 
-        assert '".claude/plugin' not in result
-        assert "/home/user/myproject/.claude/plugin" in result
+        assert '".claude/ccp' not in result
+        assert "/home/user/myproject/.claude/ccp" in result
 
     def test_patch_claude_paths_handles_bin_and_plugin(self):
         """patch_claude_paths replaces both bin and plugin paths in same content."""
         from installer.steps.claude_files import patch_claude_paths
 
         content = """{
-            "CLAUDE_PLUGIN_ROOT": "/workspaces/claude-codepro/.claude/plugin",
+            "CLAUDE_PLUGIN_ROOT": "/workspaces/claude-codepro/.claude/ccp",
             "statusLine": {"command": "/workspaces/claude-codepro/.claude/bin/ccp statusline"}
         }"""
         result = patch_claude_paths(content, Path("/target"))
 
-        assert "/target/.claude/plugin" in result
+        assert "/target/.claude/ccp" in result
         assert "/target/.claude/bin/ccp statusline" in result
         assert "/workspaces/claude-codepro" not in result
 
@@ -131,7 +131,9 @@ class TestProcessSettings:
 
         settings = {"model": "opus", "env": {"key": "value"}}
 
-        result = process_settings(json.dumps(settings), enable_python=False, enable_typescript=False, enable_golang=True)
+        result = process_settings(
+            json.dumps(settings), enable_python=False, enable_typescript=False, enable_golang=True
+        )
         parsed = json.loads(result)
 
         assert parsed["model"] == "opus"
@@ -180,7 +182,9 @@ class TestProcessSettings:
 
         for settings in malformed_cases:
             # Should not raise an exception
-            result = process_settings(json.dumps(settings), enable_python=False, enable_typescript=False, enable_golang=True)
+            result = process_settings(
+                json.dumps(settings), enable_python=False, enable_typescript=False, enable_golang=True
+            )
             # Should return valid JSON
             parsed = json.loads(result)
             assert parsed is not None
@@ -238,7 +242,9 @@ class TestProcessSettings:
             }
         }
 
-        result = process_settings(json.dumps(settings), enable_python=False, enable_typescript=False, enable_golang=True)
+        result = process_settings(
+            json.dumps(settings), enable_python=False, enable_typescript=False, enable_golang=True
+        )
         parsed = json.loads(result)
 
         hooks = parsed["hooks"]["PostToolUse"][0]["hooks"]
@@ -888,3 +894,41 @@ class TestDirectoryClearing:
 
             # Commands SHOULD be installed
             assert (dest_claude / "commands" / "test.md").exists()
+
+    def test_old_plugin_directory_is_removed(self):
+        """ClaudeFilesStep removes old .claude/plugin directory (now renamed to ccp)."""
+        from installer.context import InstallContext
+        from installer.steps.claude_files import ClaudeFilesStep
+        from installer.ui import Console
+
+        step = ClaudeFilesStep()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create source with ccp directory (new name)
+            source_dir = Path(tmpdir) / "source"
+            source_claude = source_dir / ".claude"
+            source_ccp = source_claude / "ccp"
+            source_ccp.mkdir(parents=True)
+            (source_ccp / "package.json").write_text('{"name": "ccp"}')
+
+            # Create destination with OLD plugin directory
+            dest_dir = Path(tmpdir) / "dest"
+            dest_claude = dest_dir / ".claude"
+            old_plugin = dest_claude / "plugin"
+            old_plugin.mkdir(parents=True)
+            (old_plugin / "package.json").write_text('{"name": "old-plugin"}')
+            (old_plugin / "scripts").mkdir()
+            (old_plugin / "scripts" / "worker.cjs").write_text("// old worker")
+
+            ctx = InstallContext(
+                project_dir=dest_dir,
+                ui=Console(non_interactive=True),
+                local_mode=True,
+                local_repo_dir=source_dir,
+            )
+
+            step.run(ctx)
+
+            # Old plugin directory should be REMOVED
+            assert not old_plugin.exists()
+            assert not (old_plugin / "package.json").exists()
+            assert not (old_plugin / "scripts").exists()
