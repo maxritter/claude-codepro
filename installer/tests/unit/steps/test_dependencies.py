@@ -273,8 +273,8 @@ class TestClaudeCodeInstall:
                 assert config["existing_key"] == "existing_value"
                 assert config["new_key"] == "new_value"
 
-    def test_configure_claude_defaults_sets_respect_gitignore_false(self):
-        """_configure_claude_defaults sets respectGitignore to False."""
+    def test_configure_claude_defaults_sets_settings(self):
+        """_configure_claude_defaults sets settings in settings.json."""
         import json
 
         from installer.steps.dependencies import _configure_claude_defaults
@@ -284,9 +284,15 @@ class TestClaudeCodeInstall:
                 result = _configure_claude_defaults()
 
                 assert result is True
+                # Check settings.json for settings
+                settings_path = Path(tmpdir) / ".claude" / "settings.json"
+                settings = json.loads(settings_path.read_text())
+                assert settings["respectGitignore"] is False
+                assert settings["attribution"] == {"commit": "", "pr": ""}
+                # Check .claude.json for preferences
                 config_path = Path(tmpdir) / ".claude.json"
                 config = json.loads(config_path.read_text())
-                assert config["respectGitignore"] is False
+                assert config["theme"] == "dark-ansi"
 
 
 class TestMigrateLegacyPlugins:

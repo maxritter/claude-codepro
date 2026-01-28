@@ -70,5 +70,12 @@
   },
   "outputStyle": "default",
   "spinnerTipsEnabled": false,
-  "alwaysThinkingEnabled": true
+  "alwaysThinkingEnabled": true,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "respectGitignore": false,
+  "cleanupPeriodDays": 31,
+  "plansDirectory": "./docs/plans"
 }

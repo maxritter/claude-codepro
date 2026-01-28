@@ -128,21 +128,53 @@ def _patch_claude_config(config_updates: dict) -> bool:
         return False
 
 
+def _patch_claude_settings(settings_updates: dict) -> bool:
+    """Patch ~/.claude/settings.json with the given settings updates.
+
+    Creates the file if it doesn't exist. Merges updates with existing settings.
+    """
+    import json
+
+    settings_dir = Path.home() / ".claude"
+    settings_dir.mkdir(parents=True, exist_ok=True)
+    settings_path = settings_dir / "settings.json"
+
+    try:
+        if settings_path.exists():
+            settings = json.loads(settings_path.read_text())
+        else:
+            settings = {}
+
+        settings.update(settings_updates)
+        settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+        return True
+    except Exception:
+        return False
+
+
 def _configure_claude_defaults() -> bool:
     """Configure Claude Code with recommended defaults after installation."""
-    return _patch_claude_config(
+    config_ok = _patch_claude_config(
         {
             "installMethod": "npm",
             "theme": "dark-ansi",
             "verbose": True,
             "autoCompactEnabled": False,
             "autoConnectIde": True,
-            "respectGitignore": False,
             "autoUpdates": False,
             "lspRecommendationDisabled": True,
-            "attribution": {"commit": "", "pr": ""},
+            "showTurnDuration": False,
+            "terminalProgressBarEnabled": True,
         }
     )
+    settings_ok = _patch_claude_settings(
+        {
+            "attribution": {"commit": "", "pr": ""},
+            "respectGitignore": False,
+            "cleanupPeriodDays": 7,
+        }
+    )
+    return config_ok and settings_ok
 
 
 def _get_forced_claude_version(project_dir: Path) -> str | None:
