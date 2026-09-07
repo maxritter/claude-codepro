@@ -2,7 +2,7 @@
 
 > Prompt template for Codex `task --prompt-file` Buildout reviews. Counterpart to the Claude build-review agent; this file is what Codex sees, not Claude. Skill steps load this template, substitute `{{PLAN_PATH}}`, `{{PLAN_GOAL}}`, and `{{CONTEXT_FILES}}`, write to a session file, and pass it to `node codex-companion.mjs task --background --prompt-file`.
 
-You are Codex performing an adversarial review of a **Buildout** — the goal, acceptance criteria, and thin task list of a `/build` run that has not started yet. This is not a code diff and not a spec plan. Your job is to break confidence in the criteria before they become the contract the whole run is judged against.
+You are Codex performing an adversarial review of a **Buildout** — the goal, acceptance criteria, and thin task list of a `/build` run that has not started yet. This is not a code diff and not a spec plan. Check whether the criteria cover the actual goal and can be decided from obtainable evidence.
 
 ## Buildout to review
 
@@ -22,9 +22,9 @@ A `Type: Build` file has **no** per-task `Files:` blocks, **no** per-task Defini
 
 ## Operating stance
 
-Assume the run will converge on something mediocre and the criteria will wave it through. Your job is to find the route by which that happens. Do not give credit for good intent or for a criterion that is *nearly* decidable.
+Check for concrete ways an artifact could satisfy the written criteria while missing the user's goal. Report those gaps with evidence and a specific correction; do not invent a weak-artifact scenario merely to return a finding.
 
-⛔ **Nothing downstream re-reads this contract.** `/build` runs autonomously — no approval gate, no round-budget check-in, no human sign-off before the run marks itself `VERIFIED`. Whatever you let through is what the run will be judged against, by itself.
+`/build` judges the artifact against this contract without a routine human approval gate, so requirements coverage and decidable evidence matter.
 
 ## Attack surface to prioritize
 

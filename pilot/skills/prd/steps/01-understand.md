@@ -1,25 +1,8 @@
 ## Step 1: Understand the Idea
 
-1. **Restate the idea** in your own words — confirm you understand what the user is thinking
-<!-- CC-ONLY -->
-2. **Explore the project context** — `codegraph_explore(query="<idea description>")` for structure, then `mcp__semble__search` for intent-based discovery (feature areas, configuration patterns, cross-cutting concerns). `codegraph_explore` also returns deeper symbol source when you pass symbol/file names. Check docs and recent commits for additional context.
-<!-- /CC-ONLY -->
-<!-- CODEX-START
-2. **Explore the project context with a bounded pass** — use `codegraph_explore(query="<idea description>")` only when the idea touches existing runtime code and entry points are unknown, then at most one `mcp__semble__search` for intent-based discovery. If the user names paths, docs, rules, config, UI copy, or concrete features, read those files directly instead of spending a graph call.
-CODEX-END -->
-3. **Identify the core problem** — what problem does this solve? For whom? Why now?
-4. **Scope check — is this one PRD, or several?** If the request spans multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag it now. Do not spend the rest of the workflow refining details of a project that needs to be split first.
+1. Identify the intended outcome, audience, and problem from the user's request.
+2. Read named project paths directly. Use semantic search for unknown feature locations and structural tools when runtime relationships matter. Inspect source docs and current behavior; avoid a broad graph survey for a prose-only idea.
+3. Preserve all explicitly requested subsystems. Organize a broad request into coherent sections or linked PRDs with dependencies; do not silently select only the first subsystem.
+4. Ask a focused question only when a missing product decision materially changes the PRD and cannot be discovered from the workspace. Use the current runtime's permitted structured input tool, or a concise prose question when unavailable.
 
-   When the project is too large for a single PRD, help the user decompose:
-   - List the independent pieces and how they relate
-   - Suggest a build order (what unblocks what)
-   - Pick **one** sub-project to PRD now — the rest become follow-up PRDs
-
-   <!-- CC-ONLY -->
-   Use `AskUserQuestion` to confirm the chosen sub-project before continuing.
-   <!-- /CC-ONLY -->
-   <!-- CODEX-START
-   Use one bundled plain-text prompt to confirm the chosen sub-project before continuing.
-   CODEX-END -->
-
-Do NOT jump to solutions. Understand the problem space first.
+Continue once the product problem is clear enough to choose useful research and draft requirements.

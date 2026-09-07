@@ -673,11 +673,7 @@ class ClaudeFilesStep(BaseStep):
 
         config = self._create_download_config(ctx)
         installed_files: list[str] = list(ctx.config.get("installed_files", []))
-        owned_manifests = {
-            Path(value).resolve()
-            for value in installed_files
-            if Path(value).name == "manifest.json"
-        }
+        owned_manifests = {Path(value).resolve() for value in installed_files if Path(value).name == "manifest.json"}
 
         failures: list[str] = []
         for skill_dir in decomposed:
@@ -1268,6 +1264,27 @@ class ClaudeFilesStep(BaseStep):
         installed = {Path(p).resolve() for p in ctx.config.get("installed_files", [])}
 
         for entry in previous_managed:
+            # The neutral tree mirrors these manifest-owned sources. Retire
+            # only the recorded files; ~/.pilot/bot/JOBS.yaml is user data.
+            parts = Path(entry).parts
+            if (
+                len(parts) >= 3
+                and parts[0] == "skills"
+                and parts[1] in {"bot-boot", "bot-channel-task", "bot-defaults", "bot-heartbeat", "bot-jobs"}
+                and all(part not in {".", ".."} for part in parts)
+            ):
+                neutral_root = Path.home() / ".pilot"
+                neutral_file = neutral_root / entry
+                try:
+                    has_alias = any((neutral_root / Path(*parts[:i])).is_symlink() for i in range(1, len(parts) + 1))
+                    if (
+                        not has_alias
+                        and neutral_file.resolve().is_relative_to(neutral_root.resolve())
+                        and neutral_file.is_file()
+                    ):
+                        neutral_file.unlink()
+                except OSError:
+                    pass
             file_path = home_claude_dir / entry
             if file_path.exists() and file_path.resolve() not in installed:
                 try:

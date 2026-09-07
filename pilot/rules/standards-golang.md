@@ -5,67 +5,28 @@ paths:
 
 ## Go Development Standards
 
-**Standards:** Go modules | go test | gofmt + go vet + golangci-lint | Self-documenting code
+Use the module/workspace, Go version, and toolchain declared by the project. Follow its package layout; `cmd/`, `internal/`, and `pkg/` are conventions, not a required scaffold.
 
-### Module Management
+### Tooling
 
-```bash
-go mod init module-name    # Initialize
-go mod tidy                # Add/remove deps
-go get -u ./...            # Update deps
-```
-
-### Testing & Quality
-
-**Use minimal output flags to avoid context bloat.**
+Typical checks, when applicable:
 
 ```bash
-go test ./...                             # All tests
-go test ./... -race                       # With race detector
-go test -coverprofile=coverage.out ./...  # Coverage report
-
-gofmt -w .                                # Format
-go vet ./...                              # Static analysis
-golangci-lint run                         # Comprehensive linting
+go test ./...
+go vet ./...
+go test -race ./...
 ```
 
-**Table-driven tests** preferred for multiple cases. Use `t.Run()` for subtests.
+Use `gofmt` on changed Go files and the configured linter if present. Run the race detector for concurrency-sensitive work or when required by the project. Run `go mod tidy` after relevant dependency changes and inspect its diff. Do not run blanket `go get -u ./...` as routine verification.
 
-### Code Style
+### Implementation
 
-- **Packages:** lowercase, single word (`http`, `json`, `user`)
-- **Exported:** PascalCase (`ProcessOrder`, `UserService`)
-- **Unexported:** camelCase (`processOrder`, `userService`)
-- **Acronyms:** ALL CAPS (`HTTPServer`, `XMLParser`, `userID`)
-- **Interfaces:** Often -er suffix (`Reader`, `Writer`, `Handler`)
-- **Comments:** Exported functions start with function name: `// ProcessOrder handles...`
+- Follow Go naming and documentation conventions, including conventional initialisms such as `HTTPServer` and `userID`.
+- Handle errors deliberately. Wrap with useful context and `%w` when callers should inspect the original error. Use sentinel errors or typed errors where their contract warrants them.
+- Document intentional ignored errors where the reason is non-obvious; do not mechanically add error plumbing for operations whose failure cannot matter.
+- Pass `context.Context` first to operations that need cancellation/deadlines. Propagate it rather than hiding request cancellation behind a new background context.
+- Arrange resource cleanup with `defer` when appropriate, and check close/flush errors when they affect durability.
+- Keep interfaces at useful consumer boundaries; do not add them solely to match a template.
+- Use table-driven tests and `t.Run` where multiple cases share a contract. Keep tests isolated and check cancellation, failure, and concurrency behaviour that the change affects.
 
-### Error Handling
-
-- Always handle errors explicitly — never `result, _ := doSomething()`
-- Wrap with context: `fmt.Errorf("processing user %s: %w", userID, err)`
-- Use sentinel errors: `var ErrNotFound = errors.New("not found")`
-
-### Common Patterns
-
-- **Context:** Always first parameter: `func ProcessRequest(ctx context.Context, ...)`
-- **Defer:** For cleanup: `defer f.Close()`
-- **Struct init:** Named fields: `User{ID: "123", Name: "Alice"}`
-
-### Project Structure
-
-```
-cmd/         # Main applications
-internal/    # Private packages
-pkg/         # Public packages
-```
-
-### Verification Checklist
-
-- [ ] `gofmt -w .` — formatted
-- [ ] `go test ./...` — tests pass
-- [ ] `go vet ./...` — clean
-- [ ] `golangci-lint run` — clean
-- [ ] `go mod tidy` — deps tidy
-- [ ] No ignored errors
-- [ ] File size within the limit (see `development-practices.md` → File size)
+Use `testing.md` for test scope. A generic rule does not authorize reorganizing files or changing dependency versions.

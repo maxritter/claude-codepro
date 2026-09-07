@@ -102,6 +102,7 @@ def test_clear_removes_plan_mode_and_preflight_markers(tmp_path: Path):
         "plan-model-warned",
         "plan-model-confirmed",
         "preflight-context-warned",
+        "native-spec-planning.json",
     )
     session_dir = tmp_path / "sessions" / "1001"
     session_dir.mkdir(parents=True)

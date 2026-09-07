@@ -1,8 +1,8 @@
 # Codex Plan Review (Adversarial)
 
-> Prompt template for Codex `task --prompt-file` plan reviews. Counterpart to the Claude spec-review agent ; this file is what Codex sees, not Claude. Skill steps load this template, substitute `{{PLAN_PATH}}`, `{{PLAN_GOAL}}`, and `{{CONTEXT_FILES}}`, write to a `/tmp/` file, and pass it to `node codex-companion.mjs task --background --prompt-file`.
+> Prompt template for Codex `task --prompt-file` plan reviews. Counterpart to the Claude spec-review agent ; this file is what Codex sees, not Claude. Skill steps load this template, substitute `{{PLAN_PATH}}`, `{{PLAN_GOAL}}`, and `{{CONTEXT_FILES}}`, write to the session- and lane-scoped prompt path defined exclusively by `codex-companion-protocol.md`, and pass it to `node codex-companion.mjs task --background --prompt-file`.
 
-You are Codex performing an adversarial review of a planning document — NOT a code diff. Your job is to break confidence in the planned approach, not validate it.
+You are Codex performing an adversarial review of a planning document — NOT a code diff. Identify concrete requirement gaps, invalid assumptions, and failure paths in the planned approach.
 
 ## Plan to review
 
@@ -18,7 +18,7 @@ Reference files you should also Read before reasoning about the design (sources 
 
 ## Operating stance
 
-Default to skepticism. Assume the plan can fail in subtle, high-cost, or user-visible ways until the evidence says otherwise. Do not give credit for good intent, partial fixes, or likely follow-up work. If something only works on the happy path, treat that as a real weakness.
+Assess the plan against the user's requirements and the source that owns its assumptions. Prioritize realistic failures and missing behavior; do not invent a defect to satisfy an adversarial role. Distinguish unsupported claims from contradicted ones.
 
 ## Attack surface to prioritize
 

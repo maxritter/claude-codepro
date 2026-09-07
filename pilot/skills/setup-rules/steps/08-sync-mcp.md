@@ -14,7 +14,7 @@ For each user server:
 1. `ToolSearch(query="+server-name keyword")` to discover tools
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-1. MCP tools from configured servers are available directly — use the tool name pattern `mcp__<server-name>__<tool-name>` to discover and invoke tools from each server.
+1. Discover the server's tools through the current runtime's tool inventory or discovery helper, then use the exposed names and schemas. A configured server is not proof that a tool is currently connected.
 CODEX-END -->
 2. Call 1-2 read-only tools per server as a connectivity check (**safety: only read-only tools**) — no need to test every tool, just confirm the server responds
 3. Record per-server: ✅ connected | ⚠️ partial (note issues) | ❌ unreachable
@@ -24,13 +24,13 @@ CODEX-END -->
    ⚠️ typefully — connected, 1 permission error on write tools
    ❌ my-api — connection refused
    ```
-5. If issues: AskUserQuestion "Document working servers only" | "Document all with status notes" | "Skip MCP sync"
+5. Report connection problems separately from stable server guidance. Ask only when an unresolved server identity or purpose affects what should be documented.
 
 Connection status is audit evidence for this run, not stable repository guidance. Report it in the final summary; do not persist a transient health result in `AGENTS.md` or a scoped rule.
 
 ### Step 8.3: Document
 
-Compare against the MCP section in `AGENTS.md` and any scoped `{slug}-mcp-servers.md`. If changes are detected, ask user: "Update all" | "Review each" | "Skip"
+Compare against the MCP section in `AGENTS.md` and any scoped `{slug}-mcp-servers.md`. Apply supported changes within an authorized setup/refresh; keep an audit-only request read-only.
 
 Also look for a legacy unscoped `mcp-servers.md`. Move repo-wide decision guidance into `AGENTS.md`; keep only path-specific detail in a `{slug}-mcp-servers.md` rule with `paths` frontmatter.
 

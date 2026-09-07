@@ -15,8 +15,7 @@ Use the `Bash` tool with `run_in_background=true`. Capture the returned task ID;
 ```
 Bash(
   command="PYTHONPATH=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/benchmark uv run python -m scripts.runner \
-    --config benchmarks/<target-name>/evals.json \
-    --skip-permissions",
+    --config benchmarks/<target-name>/evals.json",
   description="Run benchmark in background",
   run_in_background=true,
 )
@@ -26,7 +25,7 @@ Bash(
 ```bash
 PYTHONPATH=~/.agents/skills/benchmark uv run python -m scripts.runner \
   --config benchmarks/<target-name>/evals.json \
-  --skip-permissions --agent codex --grader-timeout 600
+  --agent codex --model <model-id> --grader-timeout 600
 ```
 CODEX-END -->
 
@@ -34,7 +33,7 @@ CODEX-END -->
 That's it for arguments — defaults handle the rest. The runner reads the target skill's `model:` frontmatter and uses that for both executor and grader. Rules targets and skills without a `model:` field fall back to `claude-sonnet-5`.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-That's it for arguments — defaults handle the rest. With `--agent codex`, the runner installs skills in `.agents/skills/<name>/`, composes rules into root `AGENTS.md`, and omits `--model` unless you pass one explicitly so Codex uses its active default model.
+With `--agent codex`, the runner installs skills in `.agents/skills/<name>/` and composes rules into root `AGENTS.md`. Set `<model-id>` to the actual model being evaluated. User configuration is isolated, so omitting it does not preserve the active session's model or selected profile. Use the same explicit model and effort for the paired runs and report those settings.
 CODEX-END -->
 
 <!-- CODEX-START
@@ -44,10 +43,10 @@ CODEX-END -->
 **Why `uv run`:** every Python invocation in this project uses `uv run` — no system `python` or `python3`. It ensures the right interpreter and dependency set.
 
 <!-- CC-ONLY -->
-**Why `--skip-permissions`:** all benchmark runs need this flag because `claude -p` is spawned non-interactively (no terminal to answer permission prompts). It passes `--dangerously-skip-permissions` to every executor and grader subprocess. Only use in a trusted environment — the grader reads arbitrary file paths passed by evals.json.
+**`--skip-permissions` is a permission choice.** It passes `--dangerously-skip-permissions` to executor and grader subprocesses. Use it only when authorized and when prompts, fixtures, and output paths are trusted and isolated; a temporary working directory alone does not confine side effects.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-**Why `--skip-permissions`:** all benchmark runs need this flag because `codex exec` is spawned non-interactively. It configures full-access sandbox permissions for every executor and grader subprocess. Only use in a trusted environment — the grader reads arbitrary file paths passed by evals.json.
+**`--skip-permissions` is a permission choice, not a requirement of non-interactive execution.** It gives child runs full access. Use it only when authorized and when prompts, fixtures, and output paths are trusted and isolated; otherwise use the runner's restricted path and report any permission blocker. A temporary working directory alone is not a security sandbox.
 CODEX-END -->
 
 <!-- CODEX-START
@@ -153,7 +152,7 @@ A few failed runs do not abort the rest of the benchmark — each writes its own
 
 ## Commit the snapshot
 
-Once the benchmark is stable (you've got a result you trust), commit `benchmarks/<target>/runs/<timestamp>/benchmark.json` as a baseline snapshot. Future runs can compare against it.
+Preserve `benchmarks/<target>/runs/<timestamp>/benchmark.json` as a reviewable snapshot for future comparisons. Commit it only when the user authorized a commit.
 
 ## Exit
 

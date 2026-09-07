@@ -2,10 +2,27 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from _checkers.go import check_go
+
+
+@pytest.mark.skipif(shutil.which("go") is None, reason="Go toolchain unavailable")
+def test_vet_uses_the_edited_files_package(tmp_path):
+    """A valid reference to a sibling file must not produce a fabricated undefined-symbol error."""
+    (tmp_path / "go.mod").write_text("module example.com/pilot-hook-regression\n\ngo 1.20\n")
+    edited = tmp_path / "total.go"
+    edited.write_text("package sample\n\nfunc Total() int { return quantity }\n")
+    (tmp_path / "quantity.go").write_text("package sample\n\nconst quantity = 3\n")
+    go_bin = shutil.which("go")
+    with (
+        patch("_checkers.go.check_file_length", return_value=""),
+        patch("_checkers.go.shutil.which", side_effect=lambda name: go_bin if name == "go" else None),
+    ):
+        assert check_go(edited) == (0, "")
 
 
 class TestCheckGoNoProject:

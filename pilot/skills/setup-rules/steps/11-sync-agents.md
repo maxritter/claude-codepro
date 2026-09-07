@@ -33,7 +33,7 @@ Resolve the bundled script relative to this skill's loaded `SKILL.md` (its sourc
 node <setup-rules-skill-dir>/scripts/sync-agent-assets.mjs --install --repo .
 ```
 
-`--install` writes the standalone `scripts/sync-agent-assets.mjs` into the repository and performs the initial convergence of the root import and project skill mirror. Commit the installed script so recovery and CI use the same implementation without requiring Pilot Shell.
+`--install` writes the standalone `scripts/sync-agent-assets.mjs` into the repository and performs the initial convergence of the root import and project skill mirror. Include the installed script in the reviewable change so recovery and CI use the same implementation without requiring Pilot Shell. Commit only when the user has authorized a commit.
 
 The checker creates missing skill roots when a valid one-sided skill needs a counterpart.
 

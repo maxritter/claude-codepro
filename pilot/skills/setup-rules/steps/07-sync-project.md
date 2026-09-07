@@ -19,7 +19,7 @@ Preserve existing headings and wording when they remain accurate. Never drop a l
 
 ### Step 7.2: Resolve Migration Choices — CONDITIONAL
 
-If existing files require content to move, use the existing user decision gate before writing:
+If content migration is already authorized and its mapping is unambiguous, preserve unique content and proceed. Ask only when moving content exposes a material unresolved conflict or the user requested a preview before writes:
 
 AskUserQuestion: "Pilot can make `AGENTS.md` the shared core, keep detailed rules path-scoped, and reduce `CLAUDE.md` to `@AGENTS.md`. How should I handle the existing content?"
 

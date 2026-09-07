@@ -2,9 +2,7 @@
 
 ### 6.1 Per-Task DoD Audit
 
-**If runtime profile is Minimal:** Skip.
-
-For EACH task, verify its Definition of Done criteria against the running program with evidence (command output, API response, screenshot).
+For EACH task, match its Definition of Done criteria to authoritative evidence: command output, generated artifact, API response, or observed UI. Reuse current-tree evidence already collected in this run; execute a new check when a criterion remains unproven.
 
 If any criterion unmet: fix inline if possible, or add a task and route the loop-back through Step 11's iteration-cap check (which sets `Status: PENDING`, increments `Iterations`, and re-invokes spec-implement — or surfaces to the user at the cap). Never loop back without passing that check.
 

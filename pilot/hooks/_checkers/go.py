@@ -60,20 +60,29 @@ def check_go(file_path: Path) -> tuple[int, str]:
     has_issues = False
 
     try:
-        result = subprocess.run([go_bin, "vet", str(file_path)], capture_output=True, text=True, check=False)
+        # A Go file is compiled with its package: vetting only the edited file
+        # invents undefined-symbol errors for declarations in sibling files.
+        result = subprocess.run(
+            [go_bin, "vet", "."], capture_output=True, text=True, check=False, cwd=file_path.parent, timeout=10
+        )
         output = result.stdout + result.stderr
         if result.returncode != 0 or output.strip():
             lines = [line.strip() for line in output.splitlines() if line.strip() and not line.strip().startswith("#")]
             if lines:
                 has_issues = True
                 results["vet"] = (len(lines), lines)
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
 
     if golangci_lint_bin and _has_golangci_config(file_path):
         try:
             result = subprocess.run(
-                [golangci_lint_bin, "run", "--fast", str(file_path)], capture_output=True, text=True, check=False
+                [golangci_lint_bin, "run", "."],
+                capture_output=True,
+                text=True,
+                check=False,
+                cwd=file_path.parent,
+                timeout=10,
             )
             output = result.stdout + result.stderr
             if result.returncode != 0:
@@ -82,7 +91,7 @@ def check_go(file_path: Path) -> tuple[int, str]:
                 if issue_count > 0:
                     has_issues = True
                     results["lint"] = (issue_count, lines)
-        except Exception:
+        except (OSError, subprocess.SubprocessError):
             pass
 
     if has_issues:
@@ -127,5 +136,5 @@ def _format_go_issues(file_path: Path, results: dict[str, tuple]) -> str:
         if len(lines) > 10:
             out.append(f"  ... and {len(lines) - 10} more lines")
 
-    out.append("Fix Go issues above before continuing")
+    out.append("Review these diagnostics with the current change; fix confirmed issues before final verification.")
     return "\n".join(out)

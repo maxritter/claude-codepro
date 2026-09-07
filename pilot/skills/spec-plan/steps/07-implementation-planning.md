@@ -16,7 +16,7 @@ One responsibility per file. Files that change together live together. In existi
 
 ### 7.1: Task Granularity
 
-**Task Granularity:** Each task: independently testable, focused (2-4 files max), verifiable. Split if multiple unrelated DoD criteria; merge if one can't be tested without the other. Don't create tasks for setup/boilerplate with no standalone value — fold into the first task that uses them. Task ORDER implies dependencies — no separate `Dependencies:` field needed.
+**Task Granularity:** Each task is a coherent, verifiable change. Size tasks by dependencies and observable outcomes, not file counts. Split unrelated outcomes; merge changes that cannot be tested independently. Fold setup with no standalone value into the first task that needs it. Task ORDER implies dependencies — no separate `Dependencies:` field needed.
 
 **Task Structure (4 required fields — keep it tight):**
 
@@ -34,7 +34,7 @@ One responsibility per file. Files that change together live together. In existi
 **Key Decisions / Notes:**
 
 - [Technical approach, pattern to follow with file:line ref]
-- `Trivial:` [Include this bullet ONLY for trivial changes — one-line justification: "≤ 5 net new lines, no new branch/loop/try with non-trivial body, no new public symbol, no new error path; covered by `<existing-test-or-verify-command>`". Otherwise omit entirely.]
+- `Trivial:` [Optional for a low-risk change whose behavior is adequately covered by an existing test or direct verification: explain why a new regression test adds no useful coverage and name `<existing-test-or-verify-command>`. Otherwise omit.]
 
 **Definition of Done:**
 
@@ -55,16 +55,16 @@ One responsibility per file. Files that change together live together. In existi
 
 #### Test plan parsimony
 
-**Testing posture preference.** If there is no project-level testing rule/memory and this plan would introduce several test classes or force a choice between unit-only vs unit+functional coverage, ask one concise question about testing posture. Default to the parsimonious posture here if questions are disabled or the user does not specify a preference.
+**Testing posture.** Follow repository requirements and choose coverage for the changed behavior and risk. Resolve routine choices about test placement and layers without a user round-trip.
 
 When listing files for a task, do not auto-create a new `tests/.../test_<file>.py` line for every modified production file. Apply these rules in order:
 
-1. If an existing test class for this production class already exists, reuse it (modify, do not duplicate).
-2. If the change is genuinely trivial (≤ 5 net new lines, no new branch/loop/try with non-trivial body, no new public symbol, no new error path), set the task's `Trivial:` field with the justification and the existing covering test/verification command — and omit the test file from `Files:`.
-3. Otherwise, plan **at most 1 new unit test class + at most 1 new functional/integration test class** for this production class. More than that requires an explicit `Why >2 test classes:` note in `Key Decisions`.
-4. Never plan a test file per method or per branch. The test class is the unit; methods inside it cover branches.
+1. Reuse existing behavioral tests when they cover the relevant contract; extend them where coverage is missing.
+2. For a low-risk change already covered by an existing check, use the optional `Trivial:` field to record that evidence and omit unnecessary new test files.
+3. Add tests for distinct behavior, regressions, or integration boundaries. Follow the project's test organization without imposing a class-count quota.
+4. Avoid tests that merely mirror implementation structure or duplicate another layer's assertion without exercising a different failure mode.
 
-The changes review and `spec-verify` Step 2 audit these rules against the actual diff — they are not advisory.
+The changes review and `spec-verify` Step 2 audit whether the chosen evidence covers the actual diff, including any `Trivial:` justification.
 
 **Performance considerations:** When a task processes data on a hot path (render loops, request handlers, polling callbacks), note it in Key Decisions. Flag: expensive computations that should be cached/memoized, heavy dependencies that have lighter alternatives, and repeated work that can be avoided when input hasn't changed.
 
@@ -82,7 +82,7 @@ Do NOT list "supporting artifacts" — they duplicate the per-task `Files:` bloc
 
 #### Step 7.3: Completeness Probe
 
-**Skip this step when task count ≤ 2** AND the plan does NOT touch security, authentication, data integrity, or destructive operations — the probe's ~2-min cost exceeds its value for 1–2 task changes whose error paths the implementer can audit by inspection. For 3+ task plans, OR any plan touching sensitive surfaces regardless of size, run the probe in full.
+Review failure modes relevant to the change, especially security, authentication, data integrity, cancellation, and destructive operations. Reuse cases already covered by task DoD and E2E scenarios rather than adding duplicate truths.
 
 Before locking the truth list, work backward from the success state to find missing observable behaviors. For the chosen approach, walk these four prompts once:
 
@@ -91,6 +91,4 @@ Before locking the truth list, work backward from the success state to find miss
 3. **What are the boundary inputs?** Empty, zero, negative, max length, unicode, whitespace-only, duplicate, exactly-at-limit.
 4. **What are the concurrency edges?** If two callers exercise the path simultaneously, is the observable outcome specified, or is implicit serialization being assumed?
 
-For each gap found, either add a truth covering it OR add an explicit `Out of Scope` entry under `## Scope`. Silence is the bug; explicit out-of-scope is the fix. Don't manufacture coverage — if a path is genuinely impossible in this codebase, say so in `## Assumptions` with the supporting finding.
-
-This probe replaces ad-hoc "did I think of everything?" with a checklist. Cost: ~2 minutes of planning. Value: catches the unspecified error paths that are the single largest source of "passes test but breaks on edge case" bugs.
+For a relevant gap, add a task criterion, E2E scenario, or cross-task truth at the appropriate level. Do not manufacture requirements for impossible paths or exclude a requested behavior merely to close the checklist. Record actual boundary decisions under `## Out of Scope`.

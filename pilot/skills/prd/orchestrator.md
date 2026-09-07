@@ -62,24 +62,22 @@ Spend an interaction only when the answer would **change what gets built**. Befo
 
 Combine related decisions into one call rather than serialising them — approach selection (Step 5) and scope confirmation (Step 6) belong in one interaction whenever the scope follows from the approach.
 
-**Offer the defaults exit when the user is running out of patience.** Answers like "sure", "whatever you think", "you pick", or a conversation already past its interaction target are signs to stop asking. Offer one option — *"I'll take my recommended defaults for the rest and you review the written PRD"* — and if they take it, fill every remaining decision with the default you would have recommended, record each under Key Decisions with its reasoning, and go straight to Step 7. Step 7's read-the-file review is the backstop: a wrong default there costs one `Edit`, another question costs a round-trip.
+**When the user delegates the remaining choices** ("whatever you think", "you pick"), take reasonable defaults, record consequential assumptions under Key Decisions, and draft the PRD in Step 7 without another permission question. Step 7's read-the-file review is the backstop: a wrong default there costs one `Edit`, another question costs a round-trip.
 
 <!-- CC-ONLY -->
-**Use the `AskUserQuestion` tool for user questions during convergent phases (Steps 4-8)** — it renders a structured form; don't fall back to plain-text numbered questions.
+**Use the `AskUserQuestion` tool for user questions during convergent phases (Steps 4-8)** — it renders a structured form; use a concise prose question when no permitted structured tool is available.
 
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-**Use the runtime's structured user-input tool when one is exposed.** Otherwise present 2-4 numbered options with trade-offs in prose, end the turn, and wait for the user's response.
-
-### Codex PRD Pacing Contract
-
-For Codex, PRD quality means enough product clarity to hand off to `$spec`, not exhaustive discovery.
-
-- Reach a first complete PRD draft before context reaches 40% unless the user explicitly asks for deep research or brainstorming.
-- Use one bounded project-context pass: at most one CodeGraph orientation call when existing runtime-code structure is unknown, plus at most one Semble search, then targeted reads. Skip CodeGraph for docs, rules, markdown, config, UI copy, or named paths.
-- Default to Quick research for repo-local ideas. Ask about Standard or Deep research only when the user requests market/current external context or the idea depends on external facts.
-- Ask at most two decision prompts before the PRD draft: one scope/requirements prompt and one approach/scope confirmation prompt. If the answer is reversible, document the assumption and draft.
-- Do not keep ideating after a viable direction exists. Capture alternatives as deferred ideas and move to the PRD.
+**Use the runtime's structured user-input tool when exposed and permitted for the question.** Otherwise ask a concise question in prose and wait for required input.
 CODEX-END -->
 
-**Whenever you cannot render a structured question** — as a Claude Code subagent, where `AskUserQuestion` is absent, or wherever it degrades to plain text — read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/agent-gate-protocol.md` and follow it for every question in Steps 1–6 and 8, with `SENTINEL_PATH` = `none` (a PRD registers no plan, so no stop guard is holding the session open). These questions elicit rather than authorise, so the runbook's "never resolve the gate yourself" reads here as: **never invent the user's answer and write it into the PRD as though it were given.** A requirement nobody stated, recorded as if they had, is the PRD equivalent of a self-approved plan. The defaults exit above is the sanctioned way to proceed without answers — and it is the user's to take, not yours.
+### Product clarity and pacing
+
+Draft once the user outcome, scope, important constraints, and acceptance signals are clear. Research unresolved facts that could change those decisions, then stop. Save useful findings across compaction; context percentages and tool counts are not reasons to narrow the requested scope.
+
+Skip ideation or repeated confirmation when the user already chose a direction. Reversible defaults can be recorded as assumptions; never represent an assumption as a user-provided answer.
+
+
+
+**Whenever you cannot render a structured question** — as a Claude Code subagent, where `AskUserQuestion` is absent, or wherever it degrades to plain text — read `$HOME/.pilot/agents/agent-gate-protocol.md` and follow it for every question in Steps 1–6 and 8, with `SENTINEL_PATH` = `none` (a PRD registers no plan, so no stop guard is holding the session open). These questions elicit rather than authorise, so the runbook's "never resolve the gate yourself" reads here as: **never invent the user's answer and write it into the PRD as though it were given.** A requirement nobody stated, recorded as if they had, is the PRD equivalent of a self-approved plan. Reasonable reversible defaults may be documented as assumptions; a material unresolved product decision still needs the user's answer.

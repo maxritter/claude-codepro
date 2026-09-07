@@ -45,15 +45,15 @@ The project's rules apply in full inside the loop, and so does the least that wo
 
 Name the production change that would make the test fail before writing the assertion; if you cannot, it is a change detector — test the observable behaviour instead. Then run the mutation check: wrong constant, wrong branch, missing side effect, empty return, missing validation — each must fail something.
 
-**Parsimony:** reuse the existing test class before adding one; ceiling is 1 unit + 1 functional class per production class; never one per method.
+**Parsimony:** reuse existing behavioral coverage and add tests for uncovered behavior or distinct integration boundaries. Follow the project's structure without a class-count quota.
 
 **Exempt:** prose, design, research, docs, config — say so in one line rather than inventing a test.
 
-⛔ **No `Trivial:` escape here.** `/spec`'s version is auditable against a named covering test; a Buildout has no per-task DoD, so the claim would be unfalsifiable. Write the test.
+For a low-risk change already covered by an existing check, record that check and why it covers the change in `## Round Log`; a new test is unnecessary. Behavior changes and bug fixes need a regression signal before production edits when practical.
 
 ### 4.3 Keep the Changed Files ledger current
 
-Append every path you create or modify to `## Changed Files`, in the same edit that ticks the task. A path enters only when this run wrote to it, and Step 6 stages nothing outside it — so a file the user already had dirty can never be swept into the review or a commit. The conversation is not an inventory; compaction erases it.
+Append every path you create or modify to `## Changed Files`, in the same edit that ticks the task. A path enters only when this run wrote to it, and Step 6 stages nothing outside it. When a listed file already contained user or concurrent edits, preserve and distinguish those hunks; a file-level ledger alone does not authorize staging every hunk. The conversation is not an inventory; compaction erases it.
 
 ⛔ **Record paths repo-relative, never as absolute worktree paths.** On a `Worktree: Yes` run the files live under the checkout, but Step 6 stages this ledger and Step 7 merges it back to the base branch, where an absolute `/…/.worktrees/spec-<slug>-<hash>/src/x.ts` resolves to nothing. `src/x.ts` is correct in both trees.
 
@@ -79,7 +79,7 @@ Loop pressure pushes toward batching everything into one giant call. It produces
 
 - **Use `Edit` / `Write` for every file change** — including the Buildout file itself. ⛔ Never patch a file with a `python3 - <<'PY' ... s.replace(...)` heredoc, `sed -i`, or any other string surgery. If `Edit` feels awkward, read the file first; that is the fix.
 - **One purpose per `Bash` call.** Do not chain an edit, a formatter, a linter, a test run, and a render into a single command — when it fails you cannot tell which half broke.
-- **Clean up what you start.** A background process you launched is yours to kill before the round ends.
+- **Own process lifecycles.** Keep handles for processes this run starts, reuse a needed test server across judge/verify steps, and stop owned processes when no longer needed. Never kill a user's or another session's service.
 - **One line of narration per task.** The round log is the record; the conversation is not the report. Save the writing for Step 6.
 
 Keep work in the active agent unless a concrete task is independent and benefits materially from parallel execution or isolated context. Use the minimum number of subagents, never fan out duplicate perspectives, and do not ask the user to approve qualifying delegation. Keep concurrent writes non-overlapping, retain returned ids, inspect the resulting files, and run fresh verification before ticking an agent-owned task.

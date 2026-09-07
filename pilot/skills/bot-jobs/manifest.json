@@ -1,9 +1,0 @@
-{
-  "version": 2,
-  "orchestrator": "orchestrator.md",
-  "delivery": "bundled",
-  "targets": ["claude"],
-  "visibility": "internal",
-  "invocation": "implicit",
-  "steps": []
-}

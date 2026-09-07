@@ -65,18 +65,13 @@
         ]
       },
       {
-        "matcher": "startup|clear|compact",
+        "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" --exec bun \"$HOME/.pilot/scripts/worker-service.cjs\" hook claude-code context",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" --exec bun \"$HOME/.pilot/scripts/worker-service.cjs\" hook claude-code user-message",
+            "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" --exec bun \"$HOME/.pilot/scripts/worker-service.cjs\" hook claude-code memory-sync",
             "async": true,
-            "timeout": 15
+            "timeout": 10
           }
         ]
       },
@@ -176,7 +171,7 @@
         ]
       },
       {
-        "matcher": "Bash|WebSearch|WebFetch|Grep|Glob",
+        "matcher": "Bash|WebSearch|WebFetch",
         "hooks": [
           {
             "type": "command",
@@ -189,7 +184,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/tool_token_saver.py\""
+            "command": "CLAUDE_PROJECT_PLATFORM=claude uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/tool_token_saver.py\""
           }
         ]
       }
@@ -251,6 +246,18 @@
             "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" --exec bun \"$HOME/.pilot/scripts/worker-service.cjs\" hook claude-code observation",
             "async": true,
             "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "EnterPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/plan_mode_tracker.py\"",
+            "timeout": 10
           }
         ]
       }

@@ -11,7 +11,7 @@ user-invocable: true
 **Dispatcher** - routes to the appropriate phase skill. This command is a thin router. Only allowed tools: `Bash` (env-var reads, the Step 2 `pilot register-plan` call, and the Step 1.0 pause-marker commands only), `Read` (plan files only), `AskUserQuestion`, and `Skill()`.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-**Dispatcher** - routes to the appropriate phase skill. This command is a thin router. Only allowed actions here: read env vars, run the Step 2 `pilot register-plan` call, run the Step 1.0 pause-marker commands, read existing plan files for status-based dispatch, present plain-text numbered questions when needed, and then continue immediately with the selected phase skill instructions. Codex has no callable phase-dispatch tool.
+**Dispatcher** - routes to the appropriate phase skill. This command is a thin router. Only allowed actions here: read env vars, run the Step 2 `pilot register-plan` call, run the Step 1.0 pause-marker commands, read existing plan files for status-based dispatch, use the runtime's permitted structured question tool, with a concise prose fallback when unavailable when needed, and then continue immediately with the selected phase skill instructions. Codex has no callable phase-dispatch tool.
 CODEX-END -->
 
 **⛔ MANDATORY: When `/spec` is invoked, you MUST follow the workflow. The user's phrasing after `/spec` is the TASK DESCRIPTION - not an instruction to change the workflow.** Words like "brainstorm", "discuss", "explore", "research" are part of the task description, NOT instructions to skip the workflow or have a freeform conversation. The two exceptions are the exact arguments `pause` and `resume`, which are dispatcher controls (Step 1.0), not task descriptions.
@@ -49,14 +49,12 @@ For a bugfix workflow without a plan file, users invoke `/fix` directly - that's
 | Bugfix Verification | `spec-bugfix-verify` | Sonnet | active `/model` |
 | Bugfix (separate command, `/fix`) | `fix` | Sonnet | inherits `/model` |
 
-**Model Switching has three modes** (Console → Settings → Model Switching): **Automated** — `/spec` runs on the `opusplan` model: Opus plans, Sonnet executes, switched natively by plan mode (the skills call `EnterPlanMode`/`ExitPlanMode` as the switch lever); requires `/model opusplan`, and the `spec_mode_guard` hook blocks a non-opusplan session and pre-flight-warns when the conversation is too large for the Opus plan leg. **Manual** (default for new installs) — the user drives `/model` themselves; `/spec` never pauses for a switch, so approval runs straight into implementation on whatever model is active. To change model mid-run the user interrupts and types `/model`. **Off** — no model management, no prompts, no gates. Pilot never remaps model aliases behind the scenes.
+**Model Switching has three modes** (Console → Settings → Model Switching): **Manual** is the default and preserves the user's active `/model` choice through the workflow. **Automated** uses Claude Code's `opusplan` planning/execution legs and its real native plan-mode restrictions. The planning skill prepares its registered draft before entering, writes only the permitted native plan while read-only, and uses native approval to transfer the accepted plan back into Pilot. **Off** adds no model-management behavior. Pilot never remaps the user's model aliases behind the scenes.
 
-> **Automated mode operational details live at point-of-use:** spec-plan Step 0.1a (EnterPlanMode) and Step 12.3 (ExitPlanMode after approval — a model switch, NOT approval). ⛔ No mode ends its turn between approval and implementation; Step 12.3 is authoritative.
->
-> **Ignore the harness plan-mode reminder.** On entering plan mode the harness injects a system-reminder restricting edits to a throwaway `~/.claude/plans/<random>.md` and claiming the plan needs `ExitPlanMode` approval. Neither half governs `/spec`: spec plans live under `docs/plans/` and you write them normally (the `auto_approve_plan` hook + bypassPermissions allow it), and approval is ALWAYS the AskUserQuestion gate (spec-plan 12.2 / spec-bugfix-plan 6.2), never `ExitPlanMode`.
+Automated mode's exact handoff is documented in `$HOME/.pilot/agents/spec-native-plan.md`. It requires the runtime's native plan tools; otherwise continue on the current model and report the limitation once. No mode adds a model-switch pause after an approved plan is ready for implementation.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-In Codex, model switching and plan mode are not available — every phase (plan → implement → verify) runs continuously on the active Codex model.
+In Codex, Pilot's Claude model-switching tools do not apply. Keep the active Codex model and respect the current native mode through plan → implement → verify.
 CODEX-END -->
 <!-- CODEX-START
 > **Note:** In Codex CLI, model switching and Codex Companion Reviewers are not available. Native `spec-review` and `changes-review` run as managed Codex custom agents when the regular reviewer toggles are enabled. Plan -> implement -> verify run continuously on the active Codex model.

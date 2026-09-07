@@ -32,12 +32,40 @@ def test_every_entry_has_an_explicit_contract_coverage_tag() -> None:
         assert test_name, entry["id"]
 
 
+def test_failed_native_entry_has_a_claude_failure_hook() -> None:
+    entries = generator.load_matrix()["entries"]
+    matching = [
+        entry
+        for entry in entries
+        if entry["platform"] == "claude"
+        and entry["event"] == "PostToolUseFailure"
+        and entry["matcher"] == "EnterPlanMode"
+    ]
+    assert len(matching) == 1
+    assert any("plan_mode_tracker.py" in handler for handler in matching[0]["handlers"])
+    assert matching[0]["async"] == [False]
+
+
 def test_referenced_local_command_targets_exist() -> None:
     targets = generator.referenced_local_targets(generator.load_matrix())
 
     assert targets
     missing = [path.relative_to(ROOT) for path in targets if not path.is_file()]
     assert missing == []
+
+
+def test_command_rewrite_hooks_explicitly_identify_the_runtime() -> None:
+    entries = generator.load_matrix()["entries"]
+    for platform in ("claude", "codex"):
+        handlers = [
+            handler
+            for entry in entries
+            if entry["platform"] == platform
+            for handler in entry["handlers"]
+            if "tool_token_saver.py" in handler
+        ]
+        assert len(handlers) == 1
+        assert handlers[0].startswith(f"CLAUDE_PROJECT_PLATFORM={platform} ")
 
 
 def test_generated_manifests_preserve_the_shipped_bytes() -> None:

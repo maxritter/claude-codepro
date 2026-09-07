@@ -3,7 +3,7 @@
 
 - Always blocks /spec when the user is manually in plan mode (in Automated
   mode the skill, not the user, enters plan mode via EnterPlanMode).
-- Warns when not in bypassPermissions mode.
+- Preserves the user's permission mode without promoting bypassPermissions.
 - Model gate (three-way Model Switching mode, read FRESH from config.json):
     * automated: the session must run `opusplan`, whose non-plan leg is Sonnet,
       so at /spec-submit time a correct user shows Sonnet. A non-Sonnet model
@@ -14,15 +14,12 @@
       opusplan resolution, is proof the session is live on Fable and stays
       blocked). A user wrongly on plain Sonnet is indistinguishable from
       opusplan and is allowed (accepted false-negative).
-      Additionally, a pre-flight context check warns (non-blocking) when the
-      conversation likely exceeds the Opus plan leg's effective window --
-      Claude Code would then silently keep serving the Sonnet leg.
     * manual / off: NO model gate. Manual mode's /spec flow reminds the user
       to pick their planning model themselves; off means Pilot stays out of
       model management entirely.
 
 Reads:
-  - `permission_mode` from hook stdin (plan-mode block, bypassPermissions warn)
+  - `permission_mode` from hook stdin (plan-mode block)
   - the Model Switching mode fresh from ~/.pilot/config.json ("manual" fallback)
   - `model_id` from the statusline cache at ``~/.pilot/sessions/<sid>/context-pct.json``
   - `model` from ``$CLAUDE_CONFIG_DIR/settings.json`` (the *selected* alias,
@@ -238,67 +235,6 @@ def _is_resume_existing_plan(prompt: str) -> bool:
     return tokens[0].lower().endswith(".md")
 
 
-# The opusplan plan leg's effective context window: 200K. CC 2.1.172 nominally
-# lifted it to 1M for entitled accounts, but current versions regressed to the
-# hard >200K guard even WITH the entitlement (anthropics/claude-code#65512
-# comments show it on 2.1.216; #74325 tracks the silent fallback) -- and
-# accounts without the entitlement or with exhausted usage credits were always
-# capped. The pre-flight warns at 90% of it -- the statusline `pct` is rounded
-# and render-lagged, so the 10% margin prevents false negatives right at the
-# boundary (documented plan decision).
-OPUS_PLAN_CONTEXT_FLOOR = int(200_000 * 0.9)
-
-
-def _opus_context_preflight() -> str | None:
-    """Warn when the conversation likely exceeds the Opus plan leg's window.
-
-    Automated mode only. opusplan can only switch the planning leg to Opus if
-    the conversation fits Opus's effective window; past it, Claude Code
-    silently keeps serving the Sonnet leg (verified against CC 2.1.209/2.1.211
-    -- print mode errors "Prompt is too long", interactive stays on Sonnet).
-    This currently hits 1M-entitled accounts too: the CC 2.1.172 entitled-1M
-    fix regressed upstream (anthropics/claude-code#65512, #74325), so the
-    warning must never imply the entitlement exempts anyone.
-    Estimates current tokens from the statusline cache; falls open silently
-    when the cache is missing or invalid.
-    """
-    session_dir = Path.home() / ".pilot" / "sessions" / resolve_session_id()
-    marker = session_dir / "preflight-context-warned"
-    if marker.exists():
-        return None  # once per session -- don't re-nag every /spec submit
-    cache_file = session_dir / "context-pct.json"
-    try:
-        data = json.loads(cache_file.read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    pct = data.get("pct")
-    window = data.get("context_window_size")
-    if not isinstance(pct, (int, float)) or not isinstance(window, int) or window <= 0:
-        return None
-    est_tokens = int(pct / 100 * window)
-    if est_tokens <= OPUS_PLAN_CONTEXT_FLOOR:
-        return None
-    try:
-        marker.write_text("")
-    except OSError:
-        pass
-    return (
-        f"[Pilot] PRE-FLIGHT CONTEXT CHECK: this conversation is at ~{est_tokens // 1000}K tokens, "
-        "which likely exceeds the Opus plan leg's effective 200K window. The cap currently "
-        "applies even with the Opus 1M entitlement -- current Claude Code versions fail to "
-        "switch the opusplan plan leg to Opus past 200K (known upstream regression, "
-        "anthropics/claude-code#65512); accounts without the entitlement or with exhausted "
-        "usage credits were always capped. If so, Claude Code will SILENTLY keep planning on "
-        "Sonnet after EnterPlanMode. Tell the user in one short paragraph BEFORE starting the "
-        "/spec workflow: planning may stay on Sonnet at this context size -- to plan on Opus, "
-        "run /compact or /clear first, or switch Model Switching to Manual (Console -> "
-        "Settings) and pick the planning model yourself. Then continue with the workflow on "
-        "their call."
-    )
-
-
 def run_spec_mode_guard() -> int:
     """Check permission mode and active model before allowing /spec invocation."""
     try:
@@ -328,7 +264,8 @@ def run_spec_mode_guard() -> int:
                     "decision": "block",
                     "reason": (
                         "[Pilot] /spec cannot run in Plan mode. "
-                        "Press Shift+Tab to cycle to 'Bypass Permissions' mode, then try again."
+                        "Leave native Plan mode using its normal controls, then invoke /spec "
+                        "in your chosen editing permission mode."
                     ),
                 }
             )
@@ -355,7 +292,6 @@ def run_spec_mode_guard() -> int:
     #     false-negative, avoids false-blocking every correct user).
     #   * manual / off: NO model gate -- the user drives /model themselves.
     mode = read_model_switch_mode()
-    context_notes: list[str] = []
 
     if mode == "automated":
         active_model = _read_active_model_from_cache()
@@ -414,34 +350,6 @@ def run_spec_mode_guard() -> int:
                 print(json.dumps({"decision": "block", "reason": block_reason}))
                 sys.stderr.write(block_stderr)
                 return 2
-
-        preflight = _opus_context_preflight()
-        if preflight:
-            context_notes.append(preflight)
-
-    if permission_mode and permission_mode != "bypassPermissions":
-        sys.stderr.write(
-            f"\033[0;33m[Pilot] Warning: /spec works best in 'Bypass Permissions' mode "
-            f"(current: {permission_mode}). Press Shift+Tab to switch.\033[0m\n"
-        )
-        context_notes.append(
-            f"NOTE: Current permission mode is '{permission_mode}'. "
-            "For uninterrupted /spec execution, 'bypassPermissions' mode is recommended "
-            "(Shift+Tab to cycle). In the current mode the workflow may pause for "
-            "permission prompts. Briefly warn the user, then proceed with the workflow."
-        )
-
-    if context_notes:
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "UserPromptSubmit",
-                        "additionalContext": "\n\n".join(context_notes),
-                    }
-                }
-            )
-        )
 
     return 0
 

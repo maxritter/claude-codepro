@@ -9,11 +9,11 @@ instructions because this PreToolUse hook has no reliable semantic signal for
 whether a task is simple, independent, or an explicitly required workflow
 review. It therefore neither encourages fan-out nor blocks qualifying agents.
 
-Also nudges (non-deny) on recursive code-search Bash commands (grep -r, rg, find,
-fd, ag), built-in Grep, and built-in Glob - pointing at codegraph_explore /
-semble search. Throttled per-(category, session) so the reminder stays salient.
+Ordinary local file inspection through Bash gets a short private reminder on
+every call to use native Read/Grep/Glob. Those native tools stay silent. Broader semantic
+search guidance is throttled by category and session.
 
-Reminds (non-deny, not throttled) on Bash commands that edit files (sed -i,
+Reminds once per session on Bash commands that edit files (sed -i,
 heredoc or redirect into a project file, tee, inline python/node scripts that
 write files) that the user wants changes made with the Edit/Write tools, where
 they show up as a diff in the terminal. The command itself is never blocked.
@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -30,17 +31,15 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).parent))
 from _lib.util import pre_tool_use_context, resolve_session_id
 
-WEB_TOOL_NUDGES: dict[str, dict[str, str]] = {
-    "WebSearch": {
-        "message": "Prefer the Pilot web-search MCP when it is available",
-        "alternative": "Use ToolSearch to load mcp__plugin_pilot_web-search__search, then call it directly",
-        "example": 'ToolSearch(query="+web-search search") then mcp__plugin_pilot_web-search__search(query="...")',
-    },
-    "WebFetch": {
-        "message": "Prefer the Pilot web-fetch MCP when it is available because built-in output may truncate",
-        "alternative": "Use ToolSearch to load mcp__plugin_pilot_web-fetch__fetch_url, then call it directly",
-        "example": 'ToolSearch(query="+web-fetch fetch") then mcp__plugin_pilot_web-fetch__fetch_url(url="...")',
-    },
+WEB_TOOL_NUDGES: dict[str, str] = {
+    "WebSearch": (
+        "Use the available search tool that fits this question. A connected search provider can help "
+        "when results are insufficient; do not repeat a successful search just to change providers."
+    ),
+    "WebFetch": (
+        "If this fetch omits material needed for the task, use another available fetch tool or browser. "
+        "Keep the current result when it is sufficient, and preserve authenticated browser access."
+    ),
 }
 
 SHELL_SEGMENT_SEP_RE: re.Pattern[str] = re.compile(r"(?:&&|\|\||;|\n)")
@@ -135,40 +134,25 @@ def classify_search_command(cmd: str) -> str | None:
 
 
 _NUDGE_BASH_GREP = (
-    "Recursive grep on the project. For symbol search by name, codegraph_explore is faster "
-    "(one call returns structured source plus the call path). For find-by-intent, semble search 'query' ./ "
-    "ranks results by relevance (hybrid BM25+semantic). If you need exact text "
-    "in known files, proceed."
+    "For intent search, use semble search or its available MCP tool; for callers and symbol relationships, "
+    "codegraph_explore can help on an indexed project. Exact text/regex searches remain appropriate."
 )
 _NUDGE_BASH_RG = (
-    "Recursive ripgrep. For symbol search or project structure use codegraph_explore; "
-    "for intent-based code search use semble search 'query' ./ "
-    "(or mcp__semble__search). If you need exact text/regex on the filesystem, proceed."
+    "Ripgrep is appropriate for exact text/regex and exhaustive occurrence checks. Use available "
+    "semble search for intent or codegraph_explore for callers when those answer the actual question."
 )
 _NUDGE_BASH_FIND = (
-    "Project file enumeration. codegraph_explore surfaces the files that define or relate to "
-    "a symbol faster than a raw tree walk. If you need a filesystem-level operation (e.g., -delete, -exec), proceed."
+    "Filesystem enumeration is appropriate for file operations. For files related to a symbol, "
+    "codegraph_explore can help when available and indexed."
 )
 _NUDGE_BASH_FD = (
-    "Project file discovery. codegraph_explore surfaces structurally-related files faster. "
-    "Proceed if you specifically need fd's filesystem behavior."
+    "Use fd for filename patterns; available codegraph_explore can help when the question is about "
+    "symbol relationships rather than paths."
 )
 _NUDGE_BASH_AG = (
-    "Silver searcher. codegraph_explore (by symbol/structure) and semble search (by intent) are faster "
-    "on indexed projects. Proceed if you need exact text in arbitrary filesystem paths."
+    "Use exact text search for literal occurrences. Available codegraph_explore or semble search can help "
+    "with symbol relationships or intent on indexed projects."
 )
-_NUDGE_BUILTIN_GREP = (
-    "Built-in Grep is valid for exact text/regex and as a completeness check after "
-    "codegraph_explore. For symbol search by name, codegraph_explore is faster. For "
-    "intent-based code search, semble search 'query' ./ (or mcp__semble__search) "
-    "ranks by relevance."
-)
-_NUDGE_BUILTIN_GLOB = (
-    "Built-in Glob lists files by pattern. For project structure by symbol, codegraph_explore "
-    "surfaces the relevant files faster (with call path and metadata). Proceed if you "
-    "need exact-pattern matching."
-)
-
 _BASH_NUDGE_BY_CATEGORY: dict[str, str] = {
     "grep": _NUDGE_BASH_GREP,
     "rg": _NUDGE_BASH_RG,
@@ -176,6 +160,57 @@ _BASH_NUDGE_BY_CATEGORY: dict[str, str] = {
     "fd": _NUDGE_BASH_FD,
     "ag": _NUDGE_BASH_AG,
 }
+
+_NATIVE_FILE_TOOLS = (
+    "Use Read for file contents, Grep for text search, and Glob for paths. "
+    "Batch files as separate native tool calls; Bash cat/sed/head/tail and echo-separated "
+    "dumps clutter the user's terminal. Use the native tools for subsequent inspections; "
+    "do not re-read this result. Keep Bash for real shell processing or explicit shell requests."
+)
+
+
+def is_shell_file_inspection(command: str) -> bool:
+    """Recognize simple file display/search, without treating piped command output as a file."""
+    for segment in SHELL_SEGMENT_SEP_RE.split(command):
+        try:
+            tokens = shlex.split(_LEADING_PREFIX_RE.sub("", segment.strip()))
+        except ValueError:
+            continue
+        if not tokens:
+            continue
+        if tokens[0] == "command":
+            tokens = tokens[1:]
+        rtk_read = False
+        if tokens and Path(tokens[0]).name == "rtk":
+            tokens = tokens[1:]
+            if tokens and tokens[0] == "proxy":
+                tokens = tokens[1:]
+            rtk_read = bool(tokens and tokens[0] == "read")
+        if not tokens:
+            continue
+        name, args = Path(tokens[0]).name, tokens[1:]
+        if name not in {"cat", "head", "tail", "sed", "grep", "rg"} and not rtk_read:
+            continue
+        # A heredoc supplies data rather than reading a local file. Followers
+        # and binary/field transformations still belong in the shell.
+        if "<<" in segment or any(
+            token in {"-f", "-F", "--follow"} or token.startswith("--follow=") for token in args if name == "tail"
+        ):
+            continue
+        if name == "sed":
+            if "-n" not in args or not any(re.fullmatch(r"[\d,$;\s]+p", token) for token in args):
+                continue
+            if _sed_edits_in_place(" ".join(tokens)):
+                continue
+        before_pipe = args[: args.index("|")] if "|" in args else args
+        # Named text files cover ordinary code/docs inspection. Variables and
+        # /dev streams may require shell evaluation, so keep those untouched.
+        if any(
+            _is_single_file_path(token) and not token.startswith("/dev/") and not any(char in token for char in "$`<>")
+            for token in before_pipe
+        ):
+            return True
+    return False
 
 
 def _throttle_sentinel_path() -> Path:
@@ -233,21 +268,6 @@ def _bash_search_nudge(command: str) -> str | None:
     return _BASH_NUDGE_BY_CATEGORY.get(category)
 
 
-def _builtin_tool_nudge(tool_name: str) -> str | None:
-    """Return nudge for built-in Grep/Glob if not throttled, else None."""
-    if tool_name == "Grep":
-        if _nudge_already_sent("Grep"):
-            return None
-        _mark_nudge_sent("Grep")
-        return _NUDGE_BUILTIN_GREP
-    if tool_name == "Glob":
-        if _nudge_already_sent("Glob"):
-            return None
-        _mark_nudge_sent("Glob")
-        return _NUDGE_BUILTIN_GLOB
-    return None
-
-
 def _extract_shell_commands(tool_name: str, tool_input: dict) -> list[str]:
     """Return the list of shell-command strings carried by this tool invocation."""
     if tool_name != "Bash":
@@ -278,7 +298,7 @@ def _is_authenticated_claude_artifact_url(tool_input: object) -> bool:
 # Claude Code's bypass-permissions mode tells the model to prefer heredocs, sed
 # and inline scripts over the Edit/Write tools. Those edits render no diff in
 # the terminal, so the user cannot see what changed. Point back at the dedicated
-# tools on every such command; the rule text alone did not survive the harness
+# tools once per session; the rule text alone did not survive the harness
 # hint. Deliberately a reminder, not a deny: a heuristic match must never stop a
 # user's legitimate shell work.
 
@@ -362,15 +382,15 @@ def classify_shell_file_edit(cmd: str) -> str | None:
 
 
 def _file_edit_nudge(label: str) -> str:
-    """Reminder text for a shell command that edits a file. Never blocks, never throttled.
+    """Reminder text for a possible shell file edit. Never blocks.
 
     A false match must cost nothing, so this is additionalContext, not a deny:
     the command still runs and the model is told how the user wants edits made.
     """
     return (
-        f"This shell command edits a file ({label}). The user does not see a diff for shell edits; "
-        "make changes with the Edit tool, or Write for a new file, and keep the shell for running "
-        "commands. Output you need to keep can go to /tmp or the scratchpad directory."
+        f"This shell command may write a file ({label}). Prefer the Edit tool or Write for ordinary "
+        "source edits so changes are reviewable. Shell output capture and established generators or "
+        "codemods are valid; inspect their resulting diff when they change project sources."
     )
 
 
@@ -388,27 +408,30 @@ def run_tool_redirect() -> int:
         commands = _extract_shell_commands(tool_name, tool_input)
         if commands:
             edit_label = classify_shell_file_edit(commands[0])
-            if edit_label:
+            if edit_label and not _nudge_already_sent("shell-edit"):
+                _mark_nudge_sent("shell-edit")
                 print(pre_tool_use_context(_file_edit_nudge(edit_label)))
+                return 0
+            if "turn_id" not in hook_data and is_shell_file_inspection(commands[0]):
+                print(pre_tool_use_context(_NATIVE_FILE_TOOLS))
                 return 0
             nudge = _bash_search_nudge(commands[0])
             if nudge:
                 print(pre_tool_use_context(nudge))
                 return 0
 
-    if tool_name in {"Grep", "Glob"}:
-        nudge = _builtin_tool_nudge(tool_name)
-        if nudge:
-            print(pre_tool_use_context(nudge))
-            return 0
+    # Native file tools already provide the intended compact interface. Do not
+    # nudge them back toward shell wrappers or emit maintenance chatter.
+    if tool_name in {"Read", "Grep", "Glob"}:
+        return 0
 
     if tool_name == "WebFetch" and _is_authenticated_claude_artifact_url(hook_data.get("tool_input")):
         return 0
 
     if tool_name in WEB_TOOL_NUDGES:
-        info = WEB_TOOL_NUDGES[tool_name]
-        reason = f"{info['message']}\n-> {info['alternative']}\nExample: {info['example']}"
-        print(pre_tool_use_context(reason))
+        if not _nudge_already_sent(tool_name):
+            _mark_nudge_sent(tool_name)
+            print(pre_tool_use_context(WEB_TOOL_NUDGES[tool_name]))
         return 0
 
     return 0

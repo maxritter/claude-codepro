@@ -20,7 +20,6 @@ from installer.steps.codex_files import (
     _adapt_invocation_syntax,
     _codex_supports_context_management,
     _ensure_section_keys,
-    _load_bundled_codex_model_catalog,
     _validate_toml_structure,
     build_codex_review_agent_toml,
     build_codex_skill_md,
@@ -50,12 +49,8 @@ def _claude_runtime_text(skill_name: str) -> str:
 
 
 @pytest.fixture(autouse=True)
-def _disable_live_codex_catalog_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+def _disable_live_codex_version_probe(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unit tests never execute the user's real Codex binary."""
-    monkeypatch.setattr(
-        "installer.steps.codex_files._load_bundled_codex_model_catalog",
-        lambda: None,
-    )
     monkeypatch.setattr(
         "installer.steps.codex_files._codex_supports_context_management",
         lambda: True,
@@ -271,7 +266,7 @@ class TestCodexHooksInstallation:
         assert "Stop" in hooks
         assert "PreCompact" in hooks
 
-    def test_real_template_uses_async_only_for_observers(self, tmp_path: Path) -> None:
+    def test_real_template_uses_async_for_observers_and_silent_memory_sync(self, tmp_path: Path) -> None:
         codex_dir = tmp_path / ".codex"
         repo_root = Path(__file__).resolve().parent.parent.parent.parent.parent
         ctx = MagicMock(ui=None, local_mode=True, local_repo_dir=repo_root)
@@ -282,11 +277,12 @@ class TestCodexHooksInstallation:
         hooks = json.loads((codex_dir / "hooks.json").read_text())["hooks"]
         handlers = [handler for entries in hooks.values() for entry in entries for handler in entry.get("hooks", [])]
         async_handlers = [handler for handler in handlers if handler.get("async") is True]
-        assert len(async_handlers) == 3
+        assert len(async_handlers) == 4
         assert {handler["command"].split()[-1] for handler in async_handlers} >= {
             "session-init",
             "observation",
             "summarize",
+            "memory-sync",
         }
         startup_sync = next(handler for handler in handlers if "codex_skill_sync.py" in handler["command"])
         assert "async" not in startup_sync
@@ -500,6 +496,20 @@ class TestCodexSkillsInstallation:
 
         assert (agents_skills_dir / "fix" / "SKILL.md").exists()  # allowlisted sibling proves the run
         assert not (agents_skills_dir / "bot-jobs").exists()
+
+    def test_retiring_claude_only_skills_preserves_unowned_same_name_skill(self, tmp_path: Path) -> None:
+        source = tmp_path / ".pilot" / "skills"
+        source.mkdir(parents=True)
+        custom = tmp_path / ".agents" / "skills" / "bot-jobs"
+        custom.mkdir(parents=True)
+        (custom / "SKILL.md").write_text("My independent Codex scheduler")
+        (custom / "notes.txt").write_text("User notes")
+        ctx = MagicMock()
+        ctx.ui = None
+        with patch("installer.steps.codex_files.Path.home", return_value=tmp_path):
+            CodexFilesStep()._install_codex_skills(ctx)
+        assert (custom / "SKILL.md").read_text() == "My independent Codex scheduler"
+        assert (custom / "notes.txt").read_text() == "User notes"
 
     def test_installs_skills_to_agents_dir(self, tmp_path: Path) -> None:
         agents_skills_dir = tmp_path / ".agents" / "skills"
@@ -1007,6 +1017,7 @@ class TestCodexSkillsInstallation:
             stale_dir = agents_skills_dir / name
             stale_dir.mkdir(parents=True)
             (stale_dir / "SKILL.md").write_text(f"# stale {name}")
+            (stale_dir / ".pilot-resources.json").write_text('{"files": [], "directories": []}')
 
         step = CodexFilesStep()
         ctx = MagicMock()
@@ -1039,9 +1050,9 @@ class TestCodexSkillsInstallation:
         result = _codex_runtime_text("create-skill")
 
         assert ".agents/skills/{slug}-{name}/SKILL.md" in result
-        assert "~/.agents/skills/{slug}-{name}/SKILL.md" in result
+        assert "mkdir -p ~/.agents/skills/{slug}-{name}" in result
         assert "Pilot's shared hook synchronizes `.agents/skills/` and `.claude/skills/`" in result
-        assert "For project scope, prefer `.agents/skills/` as the durable source" in result
+        assert "Create or edit only the canonical directory" in result
         assert "Users normally do not run `--write`" in result
         assert "Keep manual `--write` as recovery" in result
 
@@ -1347,6 +1358,44 @@ class TestCodexRulesInstallation:
         assert "Use the Claude Chrome MCP." not in written
         assert "$fix" in written
 
+    def test_preserves_unmanaged_same_name_stack_rule_across_updates(self, tmp_path: Path) -> None:
+        codex_dir = tmp_path / ".codex"
+        rules_dir = codex_dir / "rules"
+        rules_dir.mkdir(parents=True)
+        custom = rules_dir / "standards-python.md"
+        custom.write_text("My Python project conventions.\n")
+        files = {"standards-python.md": '---\npaths:\n  - "**/*.py"\n---\n\nPilot Python conventions.'}
+
+        self._install_rules(tmp_path, files)
+        self._install_rules(tmp_path, files)
+
+        assert custom.read_text() == "My Python project conventions.\n"
+        assert "standards-python.md" not in json.loads((rules_dir / ".pilot-rules.json").read_text())
+        assert str(custom) in (codex_dir / "AGENTS.md").read_text()
+
+    def test_cleans_last_managed_rule_without_touching_user_file(self, tmp_path: Path) -> None:
+        codex_dir = self._install_rules(tmp_path, {"stack.md": '---\npaths:\n  - "**/*.py"\n---\n\nStack'})
+        (codex_dir / "rules" / "mine.md").write_text("User guidance")
+        (tmp_path / ".claude" / "rules" / "stack.md").unlink()
+
+        self._install_rules(tmp_path, {"core.md": "General guidance"})
+
+        assert not (codex_dir / "rules" / "stack.md").exists()
+        assert (codex_dir / "rules" / "mine.md").read_text() == "User guidance"
+        assert json.loads((codex_dir / "rules" / ".pilot-rules.json").read_text()) == []
+
+    def test_rule_manifest_cannot_remove_files_outside_rule_directory(self, tmp_path: Path) -> None:
+        codex_dir = tmp_path / ".codex"
+        rules_dir = codex_dir / "rules"
+        rules_dir.mkdir(parents=True)
+        user_file = codex_dir / "user.md"
+        user_file.write_text("Keep me")
+        (rules_dir / ".pilot-rules.json").write_text(json.dumps(["../user.md", str(user_file), None]))
+
+        self._install_rules(tmp_path, {"stack.md": '---\npaths:\n  - "**/*.py"\n---\n\nStack'})
+
+        assert user_file.read_text() == "Keep me"
+
     def test_real_rules_generate_codex_safe_agents_md(self, tmp_path: Path) -> None:
         codex_dir = tmp_path / ".codex"
         codex_dir.mkdir(parents=True)
@@ -1368,15 +1417,15 @@ class TestCodexRulesInstallation:
         assert "## Codex Compatibility" in content
         assert "update_plan" in content
         assert "verify the generated artifacts directly" in content
-        assert "persist returned agent/job ids to a session file" in content
+        assert "agent/job ids" in content
+        assert "session state" in content
         assert "| Start any new task | `codegraph_context(task=...)` — ALWAYS FIRST |" not in content
         assert "| Task orientation (FIRST on every task) | `codegraph_context` |" not in content
         # The CODEX-START variant of the CodeGraph guidance must survive unwrapping, and the
         # CC-ONLY variant must be stripped. Assert the load-bearing phrases rather than whole
         # sentences - the rules get reworded regularly, and a full-sentence match turns every
         # copy-edit into a red test without catching anything a phrase match misses.
-        assert "Codex budget:" in content
-        assert "Skip the graph entirely for docs, rules, config, UI copy, named paths" in content
+        assert "skip CodeGraph for named paths, docs, rules, config, UI copy" in content
         preamble_end = "Skill invocation: use `$skill-name` (not `/skill-name`)."
         assert preamble_end in content
         rules_body = content.split(preamble_end, 1)[1]
@@ -1875,7 +1924,8 @@ class TestAdaptInvocationSyntax:
   options=["Yes", "No"]
 )"""
         result = _adapt_invocation_syntax(content)
-        assert "Present numbered options in plain text" in result
+        assert "runtime exposes and permits" in result
+        assert "otherwise ask in plain text" in result
         assert 'question="Ready?"' in result
         assert 'options=["Yes", "No"]' in result
         assert "AskUserQuestion" not in result
@@ -1922,9 +1972,13 @@ class TestAdaptInvocationSyntax:
         assert "spawn-agent tool exposed in the current Codex tool schema" in result
         assert "wait mechanism exposed in the current Codex tool schema" in result
         assert 'agent_type="changes-review"' in result
-        assert "changes-review-agent-id-" in result
+        assert "review-state-protocol.md" in result
+        assert "atomically persist `CHANGES_REVIEW_AGENT_ID`" in result
+        assert "native_agent_id" in result
+        assert "verifying this plan and lane identity" in result
         assert "Do not silently skip review" in result
-        assert 'FIND_BIN="/usr/bin/find"' in result
+        assert "completed final JSON response" in result
+        assert "Do not sweep findings files" in result
         assert "Reviewable file preflight" in result
         assert "Broad-check failure classification" in result
         assert "Final-status-only findings are not implementation fixes" in result
@@ -1983,7 +2037,7 @@ class TestAdaptInvocationSyntax:
         result = _codex_runtime_text("create-skill")
         assert "Subagent and web tools are not available in Codex" not in result
         assert "Codex does not support parallel subagents" not in result
-        assert "current Codex tool schema" in result
+        assert "Tool absence is a reported validation gap" in result
 
     def test_real_spec_verify_codex_strips_inline_code_review_blocks(self) -> None:
         """The CC-only inline /code-review flow (Skill invocation + Plan
@@ -2400,6 +2454,38 @@ class TestMcpMarkerReplacement:
 
 
 class TestCodexModelDefaults:
+    @pytest.mark.parametrize("catalog_exists", [False, True])
+    @pytest.mark.parametrize("quoted_key", [False, True])
+    def test_upgrade_retires_only_pilot_catalog_override(
+        self, tmp_path: Path, catalog_exists: bool, quoted_key: bool
+    ) -> None:
+        codex_dir = tmp_path / "custom-codex-home"
+        codex_dir.mkdir()
+        catalog = codex_dir / ".pilot-model-catalog.json"
+        if catalog_exists:
+            catalog.write_text('{"models": [{"slug": "gpt-5.6-sol"}]}')
+        key = '"model_catalog_json"' if quoted_key else "model_catalog_json"
+        config = codex_dir / "config.toml"
+        config.write_text(
+            f"  {key} = '{catalog}' # legacy Pilot catalog\n"
+            '[profiles.custom]\nmodel_catalog_json = "/custom/models.json"\n'
+        )
+        cache = self._write_models_cache(codex_dir)
+        with patch("installer.steps.codex_files._get_codex_config_dir", return_value=codex_dir):
+            step = CodexFilesStep()
+            assert step._install_codex_config(MagicMock(ui=None)) is True
+            assert step._install_codex_config(MagicMock(ui=None)) is False
+
+        parsed = tomllib.loads(config.read_text())
+        assert "model_catalog_json" not in parsed
+        assert parsed["profiles"]["custom"]["model_catalog_json"] == "/custom/models.json"
+        assert parsed["model_context_window"] == 1050000
+        assert parsed["model_auto_compact_token_limit"] == 922000
+        assert catalog.exists() is catalog_exists
+        if catalog_exists:
+            assert catalog.read_text() == '{"models": [{"slug": "gpt-5.6-sol"}]}'
+        assert json.loads((codex_dir / "models_cache.json").read_text()) == cache
+
     @staticmethod
     def _write_models_cache(codex_dir: Path) -> dict[str, object]:
         cache: dict[str, object] = {
@@ -2435,7 +2521,7 @@ class TestCodexModelDefaults:
         (codex_dir / "models_cache.json").write_text(json.dumps(cache))
         return cache
 
-    def test_fresh_install_enforces_codex_model_defaults_without_overriding_policy(self, tmp_path: Path) -> None:
+    def test_fresh_install_leaves_model_and_effort_to_codex(self, tmp_path: Path) -> None:
         codex_dir = tmp_path / ".codex"
         codex_dir.mkdir(parents=True)
         config = codex_dir / "config.toml"
@@ -2453,19 +2539,13 @@ class TestCodexModelDefaults:
 
         result = config.read_text()
         parsed = tomllib.loads(result)
-        assert parsed["model"] == "gpt-5.6-sol"
-        assert parsed["model_reasoning_effort"] == "xhigh"
-        assert parsed["plan_mode_reasoning_effort"] == "xhigh"
+        assert "model" not in parsed
+        assert "model_reasoning_effort" not in parsed
+        assert "plan_mode_reasoning_effort" not in parsed
         assert parsed["model_context_window"] == 1050000
         assert parsed["model_auto_compact_token_limit"] == 922000
-        assert parsed["model_catalog_json"] == str(codex_dir / ".pilot-model-catalog.json")
-        catalog = json.loads((codex_dir / ".pilot-model-catalog.json").read_text())
-        models = {model["slug"]: model for model in catalog["models"]}
-        assert models["gpt-5.6-sol"]["max_context_window"] == 1050000
-        assert models["gpt-5.6-terra"]["max_context_window"] == 1050000
-        assert models["gpt-5.6-luna"]["max_context_window"] == 1050000
-        assert models["gpt-6-astra"]["max_context_window"] == 1050000
-        assert models["gpt-5.5"]["max_context_window"] == 272000
+        assert "model_catalog_json" not in parsed
+        assert not (codex_dir / ".pilot-model-catalog.json").exists()
         assert json.loads((codex_dir / "models_cache.json").read_text()) == source_cache
         for key in (
             "approval_policy",
@@ -2485,16 +2565,22 @@ class TestCodexModelDefaults:
         assert "notice" not in parsed
         _validate_toml_structure(result)
 
-    def test_enforces_model_defaults_while_preserving_policy_and_profiles(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize(
+        ("model", "effort", "plan_effort"),
+        [("gpt-5.5", "medium", "low"), ("gpt-6-astra", "high", "medium"), ("gpt-5.6-sol", "xhigh", "xhigh")],
+    )
+    def test_preserves_model_effort_policy_and_profiles(
+        self, tmp_path: Path, model: str, effort: str, plan_effort: str
+    ) -> None:
         codex_dir = tmp_path / ".codex"
         codex_dir.mkdir(parents=True)
         config = codex_dir / "config.toml"
         config.write_text(
             'approval_policy = "on-request"\n'
             'sandbox_mode = "workspace-write"\n'
-            '  model = "gpt-5.5"\n'
-            'model_reasoning_effort = "medium"\n'
-            'plan_mode_reasoning_effort = "low"\n'
+            f'  model = "{model}"\n'
+            f'model_reasoning_effort = "{effort}"\n'
+            f'plan_mode_reasoning_effort = "{plan_effort}"\n'
             "model_context_window = 272000\n"
             "model_auto_compact_token_limit = 200000\n"
             'personality = "friendly"\n'
@@ -2517,9 +2603,9 @@ class TestCodexModelDefaults:
         parsed = tomllib.loads(result)
         assert parsed["approval_policy"] == "on-request"
         assert parsed["sandbox_mode"] == "workspace-write"
-        assert parsed["model"] == "gpt-5.6-sol"
-        assert parsed["model_reasoning_effort"] == "xhigh"
-        assert parsed["plan_mode_reasoning_effort"] == "xhigh"
+        assert parsed["model"] == model
+        assert parsed["model_reasoning_effort"] == effort
+        assert parsed["plan_mode_reasoning_effort"] == plan_effort
         assert parsed["model_context_window"] == 1050000
         assert parsed["model_auto_compact_token_limit"] == 922000
         assert parsed["personality"] == "friendly"
@@ -2601,44 +2687,35 @@ class TestCodexModelDefaults:
         parsed = tomllib.loads(config.read_text())
         assert parsed["features"] == {"hooks": True}
 
-    def test_uses_installed_codex_catalog_when_cache_is_missing(self, tmp_path: Path) -> None:
+    def test_fresh_install_without_cache_keeps_native_catalog(self, tmp_path: Path) -> None:
         codex_dir = tmp_path / ".codex"
         codex_dir.mkdir(parents=True)
         config = codex_dir / "config.toml"
         config.write_text("")
-        bundled = {
-            "models": [
-                {
-                    "slug": "gpt-5.6-sol",
-                    "context_window": 272000,
-                    "max_context_window": 272000,
-                }
-            ]
-        }
 
         step = CodexFilesStep()
         ctx = MagicMock(ui=None)
         with (
             patch("installer.steps.codex_files._get_codex_config_dir", return_value=codex_dir),
             patch("installer.steps.codex_files.Path.home", return_value=tmp_path),
-            patch(
-                "installer.steps.codex_files._load_bundled_codex_model_catalog",
-                return_value=bundled,
-            ) as load_bundled,
+            patch("installer.steps.codex_files.subprocess.run") as run,
         ):
             step._install_codex_config(ctx)
 
-        load_bundled.assert_called_once_with()
+        run.assert_not_called()
         parsed = tomllib.loads(config.read_text())
-        assert parsed["model_catalog_json"] == str(codex_dir / ".pilot-model-catalog.json")
-        catalog = json.loads((codex_dir / ".pilot-model-catalog.json").read_text())
-        assert catalog["models"][0]["max_context_window"] == 1050000
+        assert "model_catalog_json" not in parsed
+        assert not (codex_dir / ".pilot-model-catalog.json").exists()
 
-    def test_preserves_user_catalog_when_expanded_catalog_is_unavailable(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("cache_exists", [False, True])
+    @pytest.mark.parametrize("catalog_path", ["/custom/models.json", "/custom/.pilot-model-catalog.json"])
+    def test_preserves_user_catalog(self, tmp_path: Path, cache_exists: bool, catalog_path: str) -> None:
         codex_dir = tmp_path / ".codex"
         codex_dir.mkdir(parents=True)
         config = codex_dir / "config.toml"
-        config.write_text('model_catalog_json = "/custom/models.json"\n')
+        config.write_text(f'model_catalog_json = "{catalog_path}"\n')
+        if cache_exists:
+            self._write_models_cache(codex_dir)
 
         step = CodexFilesStep()
         ctx = MagicMock(ui=None)
@@ -2648,7 +2725,7 @@ class TestCodexModelDefaults:
         ):
             step._install_codex_config(ctx)
 
-        assert tomllib.loads(config.read_text())["model_catalog_json"] == "/custom/models.json"
+        assert tomllib.loads(config.read_text())["model_catalog_json"] == catalog_path
         assert not (codex_dir / ".pilot-model-catalog.json").exists()
 
     def test_model_defaults_are_idempotent(self, tmp_path: Path) -> None:
@@ -2667,38 +2744,10 @@ class TestCodexModelDefaults:
         ):
             assert step._install_codex_config(ctx) is True
             first = config.read_text()
-            first_catalog = (codex_dir / ".pilot-model-catalog.json").read_text()
             assert step._install_codex_config(ctx) is False
 
         assert config.read_text() == first
-        assert (codex_dir / ".pilot-model-catalog.json").read_text() == first_catalog
-
-
-class TestCodexModelCatalogProbe:
-    def test_reads_catalog_from_detected_codex_binary(self) -> None:
-        bundled = {"models": [{"slug": "gpt-5.6-sol"}]}
-        completed = subprocess.CompletedProcess(
-            args=["/opt/codex", "debug", "models", "--bundled"],
-            returncode=0,
-            stdout=json.dumps(bundled),
-            stderr="",
-        )
-
-        with (
-            patch(
-                "installer.steps.codex_files._codex_binary_candidates",
-                return_value=[Path("/opt/codex")],
-            ),
-            patch("installer.steps.codex_files.subprocess.run", return_value=completed) as run,
-        ):
-            assert _load_bundled_codex_model_catalog() == bundled
-
-        run.assert_called_once_with(
-            ["/opt/codex", "debug", "models", "--bundled"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
+        assert not (codex_dir / ".pilot-model-catalog.json").exists()
 
 
 class TestCodexConfigEnvHeal:

@@ -2,14 +2,14 @@
 
 ### Project Scope
 
-The repository must already have the checker installed by `/setup-rules`. Verify that before authoring:
+If the repository already has Pilot's synchronization checker, inspect its state before authoring:
 
 ```bash
 test -f scripts/sync-agent-assets.mjs
 node scripts/sync-agent-assets.mjs --check
 ```
 
-If the script is absent, run `/setup-rules` to migrate existing content and install it. Do not invent another copy command or edit `.claude/skills/` directly; setup must resolve possible legacy conflicts before generation.
+If the script is absent, follow the repository's existing asset conventions and keep the requested skill canonical. Do not run a repository-wide migration merely to author one skill. Resolve a relevant legacy conflict before editing its content, and report any unavailable synchronization check.
 
 Create or edit only the canonical directory:
 
@@ -55,7 +55,7 @@ Edit the created `SKILL.md` with the template from Step 1.
 
 **Determinism checklist:**
 
-- Prefer exact commands over descriptions (`run prettier --write .` not "format the code")
+- Use exact, scoped commands when their form matters; avoid a whole-repository formatter for a local edit
 - Prefer scripts over multi-step instructions (reference `scripts/deploy.sh` not five prose steps)
 - Use explicit values over judgment (`block files > 100KB` not "block large files")
 - For high-risk operations: include exact commands, validation steps, and rollback plan

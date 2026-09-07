@@ -71,5 +71,8 @@ def _format_charset_issues(file_path: Path, hits: list[tuple[int, str]]) -> str:
         lines.append(f"  line {lineno}: {char!r} (U+{ord(char):04X})")
     if count > _MAX_REPORTED:
         lines.append(f"  ... and {count - _MAX_REPORTED} more")
-    lines.append("Replace with ASCII equivalents (-, ', \", ..., ->); no-emojis-in-source rule.")
+    lines.append(
+        "Use ASCII for incidental code decoration when it matches the project style. Preserve intentional "
+        "Unicode in user-facing text, localization, data, and test fixtures; this heuristic cannot distinguish them."
+    )
     return "\n".join(lines)

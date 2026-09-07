@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from _lib.console_settings import get_console_url
+from _lib.session_artifacts import NATIVE_SPEC_PLANNING
 from _lib.util import read_hook_stdin, resolve_session_id
 
 SESSIONS_DIR = Path.home() / ".pilot" / "sessions"
@@ -230,6 +231,10 @@ def main() -> int:
         return 0
 
     hook_data = read_hook_stdin()
+    try:
+        (SESSIONS_DIR / resolve_session_id(hook_data.get("session_id")) / NATIVE_SPEC_PLANNING).unlink(missing_ok=True)
+    except OSError:
+        pass
     _complete_session(
         hook_data,
         stop_worker=not _has_other_active_sessions(_resolve_content_session_id(hook_data)),

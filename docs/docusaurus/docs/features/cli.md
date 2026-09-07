@@ -27,7 +27,7 @@ Pilot Shell loads automatically when you run `claude` or `codex` — there is no
 
 When access is inactive, Pilot makes the change visible and pauses its licensed surfaces:
 
-- Pilot workflows, managed skills and rules, review agents, context, memory injection, and quality automation are unavailable.
+- Pilot workflows, managed skills and rules, review agents, context, memory capture and retrieval, and quality automation are unavailable.
 - Pilot tool integrations, statusline metrics, and Console features stop working.
 - The statusline becomes a calm recovery notice, and the Console opens only its license recovery screen.
 - Claude Code and Codex themselves continue to work normally, including their native commands, planning, goals, models, and user-owned configuration.
@@ -161,12 +161,6 @@ PILOT_WORKTREE_TIMEOUT=900             # seconds per git call
 
 A location outside the repo keeps a second full checkout away from IDE indexers and file watchers, and is not written to `.gitignore`. Raise the timeout if `pilot worktree create` reports one — the error names both knobs.
 :::
-
-## Bot mode *(Claude Code only)*
-
-| Command | Description |
-|---------|-------------|
-| `pilot bot` | Launch [Pilot Bot](/docs/features/bot) — persistent automation session with scheduled tasks, background jobs, and optional Telegram |
 
 ## Customization (Team / Enterprise)
 

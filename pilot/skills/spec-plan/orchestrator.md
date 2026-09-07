@@ -15,40 +15,31 @@ hooks:
 **Input:** Task description (new) or plan path (continue unapproved)
 **Output:** Approved plan at `docs/plans/YYYY-MM-DD-<slug>.md`
 <!-- CC-ONLY -->
-**Next:** On approval → `Skill(skill='spec-implement', args='<plan-path>')`
+**Next:** On approval → `Skill(skill='spec-implement', args='<plan-path> $LANE_FLAG')`
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-**Next:** On approval → continue immediately with the `$spec-implement` skill instructions using arguments: `<plan-path>`.
+**Next:** On approval → continue immediately with the `$spec-implement` skill instructions using arguments: `<plan-path> $LANE_FLAG`.
 CODEX-END -->
 
 ---
+
+## Run identity on entry
+
+Parse the plan path or description separately from optional `--lane <id>` before status detection or file access. Resolve `LANE_ID` and `$LANE_FLAG` (`--lane <id>` or nothing) from these arguments at every phase entry, including verification loopbacks and resumes. Retain them with the plan identity across compaction and pass `<plan-path> $LANE_FLAG` to every subsequent phase. Shell variables from another phase do not survive. A lane argument must never become part of the plan filename or silently disappear.
 
 ## ⛔ Critical Constraints
 
 - **Choose planning delegation autonomously and sparingly.** Direct exploration is the baseline. Add the minimum number of read-only agents only for genuinely independent questions whose breadth would materially flood the main context; never fan out duplicate perspectives, and nest only when a flat assignment cannot represent the work. Never ask the user for permission to spawn qualifying agents. Prevent conflicting writes to the plan file and keep one coherent final plan; run the managed `spec-review` agent in Step 10 when enabled.
 - **Run spec-review when enabled** — it runs for every feature spec when `$PILOT_SPEC_REVIEW_ENABLED` is not `"false"`. Context level is NOT a valid reason to skip. To disable, use Console Settings → Reviewers → Spec Review toggle.
 - **NEVER write code during planning** — planning and implementation are separate phases
-- **NEVER assume — verify by reading files**
-- **ONLY stopping point is plan approval** — everything else is automatic. Never ask "Should I fix these?"
+- **Verify repository facts; state consequential assumptions.** Ask only when a missing decision cannot be resolved from the request or workspace and materially changes the result.
+- **Continue through planning to approval.** Resolve routine planning and review findings autonomously; pause earlier only for a genuine missing decision or blocker.
 - **Re-read plan after user edits** — before asking for approval again
 - **Plan file is source of truth** — survives across auto-compaction cycles
-- **⛔ No workflow narration** — never output text describing what step you are about to execute ("I'm scanning the workspace…", "I'm creating the plan header…", "The harness injected a reminder…"). Just do the work. The user sees tool calls and the final plan, not a running commentary.
-<!-- CC-ONLY -->
-- **Quality over speed** — never rush due to context pressure
-<!-- /CC-ONLY -->
-<!-- CODEX-START
-- **Bounded quality** — do enough verification to make the plan actionable, then draft it.
-CODEX-END -->
+- **Keep progress updates brief and useful.** Report discoveries, decisions, and blockers during longer work; omit step-by-step narration and routine hook details.
 
-<!-- CODEX-START
+### Planning depth
 
-### Codex Planning Speed Contract
+Draft once the requested scope, affected components, dependencies, and verification approach are supported by evidence. Investigate further only to resolve a concrete uncertainty that could invalidate the plan. Reuse earlier findings; do not repeat broad searches to satisfy a call count or phase checklist.
 
-For Codex, quality means enough verified context to write an implementable plan, not exhaustive research. This block overrides broader "always" and "mandatory" exploration language in this skill and in the rules when they conflict.
-
-- Reach a first complete plan draft before context reaches 35%.
-- **Planning context ceiling — total planning must not exceed ~55% of the context window (hard cap 60%).** The 35% target above is the *first-draft* budget; the remaining headroom is for self-review, annotation processing, and refinement — NOT more exploration. On the ~256K Codex window that is ≈140K tokens. If context approaches ~55% before approval, STOP all exploration and refinement and finalize the plan immediately with what you have; push remaining detail into per-task DoD for implementation to resolve. Crossing the ceiling means the plan is too granular — trim scope, do not keep researching. Implementation needs the larger share of the window, so planning that eats >60% has already failed.
-- Use a bounded scan: at most one CodeGraph orientation call when runtime-code structure is unknown, plus one Semble intent search at most before asking or choosing. If either result is irrelevant, pivot immediately to direct file reads. Skip CodeGraph for docs, rules, markdown, config, UI copy, reviews of a known diff, or named paths.
-- Ask at most one clarification/design batch before approval. If you can make a reversible assumption, document it under "Assumptions" or "Autonomous Decisions" and continue.
-- Stop exploration once you can name the files, commands, tests, and user-visible checks for each task. Leave implementation-time details to task DoD.
-CODEX-END -->
+Preserve the full requested scope across long runs. Save findings and unresolved questions in the plan before context compaction; context usage is a reason to preserve state, never to trim the user's requirements or declare an unsupported plan ready.

@@ -35,8 +35,8 @@ def read_model_switch_mode() -> str:
     Session env vars are startup-frozen, so a Console mode change would be
     invisible to running sessions if hooks read $PILOT_MODEL_SWITCH_MODE alone.
     Resolution order: valid ``specWorkflow.modelSwitchMode`` from config.json ->
-    legacy ``modelSwitch`` mapping (false -> "off", else "automated") ->
-    "automated". Mirrors ``launcher.model_config.get_model_switch_mode``
+    legacy ``modelSwitch`` mapping (false -> "off", true -> "automated") ->
+    "manual". Mirrors ``launcher.model_config.get_model_switch_mode``
     (vendored: hooks cannot import the Cython-compiled launcher). Reuses
     :func:`_read_pilot_config` so the config-read contract lives in one place.
     """
@@ -49,13 +49,15 @@ def read_model_switch_mode() -> str:
                 return mode
             if workflow.get("modelSwitch") is False:
                 return "off"
-    # Unreadable/missing config falls back to "automated" -- the SAME default
+            if workflow.get("modelSwitch") is True:
+                return "automated"
+    # Unreadable/missing config falls back to "manual" -- the SAME default
     # the launcher's get_model_switch_mode uses, so hooks, skills, statusline,
     # and writers can never disagree on the effective mode.
     # ($PILOT_MODEL_SWITCH_MODE is display/subagent metadata, deliberately NOT a
     # decision fallback: it is startup-frozen and could contradict a launcher
     # that already fell back.)
-    return "automated"
+    return "manual"
 
 
 def _get_max_context_tokens() -> int:

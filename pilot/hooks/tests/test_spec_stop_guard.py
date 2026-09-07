@@ -24,6 +24,19 @@ HOOK_PATH = Path(__file__).resolve().parent.parent / "spec_stop_guard.py"
 TEST_SESSION_ID = "test-spec-stop-guard"
 
 
+def test_unapproved_plan_continuation_requires_approval_before_implementation(tmp_path):
+    from spec_stop_guard import _block_reason
+
+    plan = tmp_path / "plan.md"
+    plan.write_text("# Plan\n\nStatus: PENDING\nApproved: No\nType: Feature\n")
+    reason = _block_reason(plan, "PENDING")
+
+    assert "approval" in reason.lower()
+    assert "next pending task" not in reason
+    assert "implementation" in reason.lower()
+    assert "VERY NEXT action must be a tool call" not in reason
+
+
 def _test_session_dir() -> Path:
     """Get the session directory for the test session."""
     return Path.home() / ".pilot" / "sessions" / TEST_SESSION_ID

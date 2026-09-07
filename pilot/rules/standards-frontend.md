@@ -18,21 +18,20 @@ paths:
 
 ## Components
 
-**Small, focused components with single responsibility. Compose complex UIs from simple pieces.**
+Use the existing component system and separate responsibilities when that improves comprehension, reuse, or state ownership.
 
-- **Single responsibility:** If you need "and" to describe it, split it
-- **Minimal props:** Under 5-7. More = component doing too much. Always typed with defaults.
-- **State:** Keep local — only lift when multiple components need it. Prop drilling 3+ levels → use composition or context.
-- **Naming:** Components: PascalCase nouns. Props: camelCase, booleans `is*`/`has*`. Events: `on*` for props, `handle*` internal.
-- **Split when:** >600-800 lines (deliberately stricter than the global 800/1000 in `development-practices.md` — JSX/component files grow unwieldy faster), multiple responsibilities, reusable elsewhere, testing becomes difficult.
+- **Props:** Define clear contracts; defaults belong to optional values and should not conceal missing required input. Prop counts do not determine component quality.
+- **State:** Keep ownership near its consumers. Use composition, shared state, or context when actual sharing and lifecycle needs warrant it.
+- **Naming:** Follow the framework and project's conventions.
+- **Boundaries:** Split for coherent responsibilities and useful reuse, not a global line-count or nesting-depth quota.
 
 ## CSS
 
-**Follow project methodology consistently. Identify first: Utility-first (Tailwind), CSS Modules, BEM, CSS-in-JS, or CSS isolation. Never mix.**
+Follow the project's established styling system, including intentional combinations of utilities, component styles, and scoped/global CSS.
 
 - Use design tokens (`var(--color-primary)`) over hardcoded values
-- Work with the framework — if you need `!important`, reconsider your approach
-- Custom CSS only for: complex animations, unique effects, third-party integration, browser fixes
+- Understand specificity and cascade layers before adding overrides. Use `!important` only for a concrete need, not as a substitute for finding the conflicting rule.
+- Add custom CSS where it is appropriate for that system; do not introduce a new styling dependency incidentally.
 
 ## Accessibility
 
@@ -51,21 +50,21 @@ paths:
 - **Fluid layouts:** `width: 100%` + `max-width`, grid with `1fr`/`minmax()`/`auto-fit`
 - **Units:** Prefer `rem` for scalable spacing and type, `em` for component-relative values, `ch` for readable text widths, and `px` where fixed device-independent CSS pixels are intentional.
 - **Pointer targets:** Meet WCAG 2.2 AA's 24×24 CSS-pixel minimum or its spacing exception. On touch-first product surfaces, follow the platform's larger target guidance (commonly 44×44 on iOS and 48×48 on Android).
-- **Typography:** Body 16px min, line-height 1.5. Fluid: `clamp(2rem, 5vw, 3rem)`
+- **Typography:** Use the product's readable type scale and spacing. Verify zoom/text resizing and reflow; fixed font-size or line-height recipes do not prove accessibility.
 - **Images:** Use `srcset` and `sizes`
 
 ## Performance
 
-- **Cache expensive work:** Parsing, transforming, or filtering data in a render/update path must be memoized. If input hasn't changed, output must not be recomputed.
-- **Isolate re-renders:** List items should not re-render when unrelated parent state changes. Use framework memoization primitives on list item components.
+- **Expensive work:** Identify actual render/update costs before adding memoization. Account for compiler/framework optimizations, invalidation, and memory overhead.
+- **Re-renders:** Isolate costly unrelated updates when profiling or the code path shows a problem. Do not wrap every component in memoization mechanically.
 - **Minimize dependency weight:** Import only what you use. Full library imports where tree-shaken alternatives exist waste bandwidth and parse time.
-- **Polling-safe:** If the view refreshes on an interval, child components must not redo expensive work when the underlying data hasn't changed.
+- **Polling:** Avoid unnecessary expensive work and overlapping requests. Handle cancellation and stale responses where the interaction requires them.
 
 ## Checklist
 
 - [ ] Components: single responsibility, typed props, local state
-- [ ] CSS: project methodology, design tokens, no `!important`
+- [ ] CSS: project methodology, design tokens, deliberate cascade
 - [ ] Accessible: keyboard, labels, alt text, and applicable WCAG contrast ratios verified on every surface and theme
 - [ ] Responsive: follows project breakpoints, remains fluid, and meets pointer-target requirements
-- [ ] Performance: expensive work cached, re-renders isolated, deps tree-shaken, polling-safe
+- [ ] Performance: relevant expensive paths checked, dependency weight justified, stale/overlapping updates handled
 - [ ] Design: user-visible changes also satisfy Open Claude Design's `open-claude-design-quality` skill

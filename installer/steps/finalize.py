@@ -128,10 +128,10 @@ class FinalizeStep(BaseStep):
 
     @staticmethod
     def _kill_stale_worker() -> None:
-        """Kill any running Console worker so it restarts with the newly installed files."""
+        """Kill the process listening on the Console port so the worker restarts."""
         try:
             result = subprocess.run(
-                ["lsof", "-ti", f":{get_worker_port()}"],
+                ["lsof", "-ti", f":{get_worker_port()}", "-sTCP:LISTEN"],
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -178,31 +178,22 @@ class FinalizeStep(BaseStep):
 
             if reload_cmds:
                 cmd_str = " or ".join(reload_cmds)
-                getting_started.append(("🔄 Reload shell", f"{cmd_str} (or restart terminal)"))
+                getting_started.append(("Reload shell", f"{cmd_str} (or restart terminal)"))
 
         getting_started.extend(
             [
+                ("Start", "claude or codex"),
                 (
-                    "Start a session",
-                    "Run 'claude' or 'codex' — direct requests, native Plan/Goal tools, and Pilot workflows use the same harness",
+                    "Setup (optional)",
+                    "/setup-rules (Claude) · $setup-rules (Codex)",
                 ),
-                (
-                    "Add project context",
-                    "Run '/setup-rules' in Claude Code or '$setup-rules' in Codex when you want repository-specific guidance",
-                ),
-                (
-                    "Open the Console",
-                    f"Review sessions, memories, workflows, changes, and settings at http://{get_console_display()}",
-                ),
-                (
-                    "Explore capabilities",
-                    "Browse https://pilot-shell.com/docs for native integrations, Pilot workflows, skills, and tools",
-                ),
-                ("Check for updates", "Run 'pilot update' to update Pilot Shell"),
+                ("Console", f"http://{get_console_display()}"),
+                ("Docs", "https://pilot-shell.com/docs"),
+                ("Update", "pilot update"),
             ]
         )
 
-        ui.next_steps([("Getting Started", getting_started)])
+        ui.next_steps([("Next steps", getting_started)])
 
         if not ui.quiet:
             ui.rule()

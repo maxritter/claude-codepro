@@ -47,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/maxritter/pilot-shell/main/install.
 **Pilot Shell is a professional context and harness engineering system—not a collection of rules and skills.** It coordinates the complete engineering process around the model:
 
 - **Quality on every layer** — hooks, stop guards, independent reviews, full test/build gates, and browser or device verification prevent “looks done” handoffs
-- **Persistent context** — relevant source, architecture, project standards, prior decisions, and session state survive long work and compaction
+- **Persistent context** — relevant source, architecture, project standards, prior decisions, and session state survive long work and compaction, with useful findings remembered automatically across Claude Code and Codex
 - **Professional toolchain** — Semble, CodeGraph, ast-grep, RTK, language servers, browser automation, and MCP integrations support discovery, structural search, impact analysis, implementation, and runtime proof
 - **Runtime verification** — tests, builds, real CLI/API execution, browser automation, and device checks turn completion claims into evidence
 - **Human control plane** — the Console connects plan and diff review, annotations, progress, evidence, session recovery, shared project knowledge, and usage
@@ -243,6 +243,10 @@ The local Console at `localhost:41777` makes the harness visible and steerable.
 - Recover Claude Code and Codex sessions and search source-linked project knowledge.
 - Inspect progress, verification evidence, notifications, changes, usage, and costs.
 - Manage workflow settings and shared rules, skills, commands, and agents.
+
+Memory capture runs automatically in the background across Claude Code and Codex. Pilot selects an available low-cost provider, handles temporary quota failures, and keeps saved findings searchable without a model call. This adds project history alongside each agent's native context.
+
+Team sharing is optional: keep stored memory local, or let useful findings travel through your project's normal Git commits and pulls. [How automatic memory works](docs/docusaurus/docs/features/knowledge.md).
 
 [Explore the Console →](https://pilot-shell.com/docs/features/console)
 

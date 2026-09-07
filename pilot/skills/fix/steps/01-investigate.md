@@ -5,7 +5,7 @@
 ### 1.1 Reproduce & understand
 
 - Restate **symptom**, **trigger**, **expected behaviour**.
-- **Runnable reproduction? Execute it NOW — before reading any code.** When the report names a failing test, a CI failure, or a crashing command, running it locally is the FIRST investigative action — before `git log` (1.2), before tracing (1.3), before forming any hypothesis. Capture everything:
+- **Runnable reproduction? Run it early after confirming the command is safe and the required setup is understood.** For a named test, CI failure, or crashing command, the actual output is usually the strongest starting evidence. Inspect configuration or source first when needed to avoid unintended side effects. Capture relevant output:
 
   **Derive `<fix-slug>` first** — kebab-case the bug description, ~40 chars, the same shape `/spec` uses for a plan filename. Every session artifact this run writes carries it, and you must be able to reconstruct it in a later Bash call from the bug description alone, so keep it deterministic. **Running as an orchestration lane** (`--lane <id>` — Step 6.2)? Use `$SESS_DIR/lanes/<lane>` as `RUN_DIR` instead; the lane id is already unique, so it does the namespacing on its own.
 
@@ -57,12 +57,12 @@ git log --oneline -10 -- <suspected_file_or_dir> 2>/dev/null
 
 Look for the commit that introduced the bug. If recent, read that diff. If nothing obvious, skip.
 
-**Bisect when `git log` doesn't reveal it.** If the bug appeared between two known-good and known-bad states and the suspect commit isn't obvious, run `git bisect start <bad> <good>` then `git bisect run <test-cmd>` against the reproducing test you'll write in Step 2 — this pinpoints the introducing commit automatically. Skip when the surface area is small enough that a single read finds it.
+**Bisect when it materially narrows the cause.** With known-good and known-bad states and a deterministic reproduction, use `git bisect` in an isolated temporary checkout. Preserve the active worktree, branches, and concurrent changes; do not run a history-changing investigation in the user's dirty checkout.
 
 ### 1.3 Trace to root cause
 
 <!-- CC-ONLY -->
-**Start with `codegraph_explore(query="<bug description>")`** for structure, then `mcp__semble__search` for intent ("where does X get modified", "how is Y configured") — especially for cross-language or cross-cutting bugs.
+Read named locations directly. Use `codegraph_explore(query="<bug description>")` for unresolved runtime structure and Semble for unknown intent or cross-cutting mutation sites; do not repeat a graph and text search when the source already answers the question.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
 **Use `codegraph_explore` only when the bug is structural or the entry point is unclear.** For docs, rules, markdown, config, UI copy, or a named local file/function, start with targeted reads or Semble. If the user names a concrete path or the symptom points to one file, read that file first and add CodeGraph only if the call path becomes the actual question.

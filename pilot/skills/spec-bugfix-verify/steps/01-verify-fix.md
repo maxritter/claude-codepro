@@ -4,7 +4,7 @@ Audits that the process was followed. A retroactive test that passes proves noth
 
 ### 1.0 Run Full Test Suite (Baseline)
 
-Run all tests. Fix any failures immediately. Re-run until green. The remaining sub-steps assume a clean baseline.
+Confirm the repository's required suite passed against the current code. Reuse the implementation Quality Gate result if its inputs are unchanged; otherwise run it. Fix failures caused by the change, and distinguish proven pre-existing unrelated failures without expanding scope.
 
 ### 1.1 Read the plan
 
@@ -20,35 +20,16 @@ uv run pytest <test-path>::<test-name> -q   # or language-appropriate equivalent
 
 Must PASS. If not, fix is incomplete — fix immediately.
 
-### 1.3 Prove the test is a genuine RED (always run)
+### 1.3 Prove the test is a genuine RED
 
-A test only has value if it would fail without the fix. Run the test against pre-fix code; it must fail. One atomic bash with trap-based cleanup — touches only the root-cause file, always restores it (works in worktree and non-worktree mode):
+A passing regression test must distinguish the original bug from the fix. Reuse the recorded pre-fix RED from implementation when it identifies the exact test, pre-fix state, and documented failure, and the test has not since changed in a way that invalidates that evidence.
 
-```bash
-ROOT_CAUSE_FILE="<path from plan Summary>"
-TEST_CMD="<command that runs the single reproducing test>"
+When that evidence is missing or stale, run the current regression test against a verified pre-fix snapshot in an isolated temporary checkout or copy. Include the fixtures and dependencies the test requires. Never overwrite, restore, or stash the active worktree's source merely to reconstruct the bug, and do not guess that the latest file commit's parent is the pre-fix state.
 
-BACKUP=$(mktemp)
-cp "$ROOT_CAUSE_FILE" "$BACKUP"
-trap 'cp "$BACKUP" "$ROOT_CAUSE_FILE" 2>/dev/null; rm -f "$BACKUP"; trap - EXIT INT TERM' EXIT INT TERM
-
-if ! git diff --quiet HEAD -- "$ROOT_CAUSE_FILE"; then
-    git show "HEAD:$ROOT_CAUSE_FILE" > "$ROOT_CAUSE_FILE"
-else
-    FIX_COMMIT=$(git log --format=%H -1 -- "$ROOT_CAUSE_FILE")
-    git show "${FIX_COMMIT}~1:$ROOT_CAUSE_FILE" > "$ROOT_CAUSE_FILE"
-fi
-
-eval "$TEST_CMD"
-```
-
-`cp + trap` instead of `git stash`: stash modifies index/working-tree globally and can leave untracked files or merge conflicts on pop. `cp + trap` touches one file and always restores it.
-
-Outcomes:
-
-- **Test failed with the documented `Currently (bug)` error** → RED proven.
-- **Test passed without fix** → test doesn't encode the bug. Set `Status: PENDING`, note "reproducing test does not fail without fix", return to `spec-implement`.
-- **Test errored unrelated** (import, missing fixture) → not a valid signal. Investigate: test depends on something only the fix creates (design problem) or unrelated change snuck in. Resolve before accepting.
+- Failure with the documented `Currently (bug)` behavior proves RED.
+- A pass without the fix means the test does not distinguish the bug; improve the regression coverage before proceeding.
+- An unrelated import, fixture, or setup error is not RED evidence. Resolve the environment or report the missing evidence.
+- Restore only the isolated resources this check created; preserve concurrent work.
 
 ### 1.4 Root-cause + scope audit
 

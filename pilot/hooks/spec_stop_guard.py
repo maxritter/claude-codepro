@@ -450,15 +450,14 @@ def _next_action_for(status: str, plan_type: str = "Feature") -> str:
             "VERIFIED yourself, and do NOT summarise the work instead of dispatching."
         )
     return (
-        "IMMEDIATELY continue working on the next pending task in the plan. "
-        "Your VERY NEXT action must be a tool call - read the plan file, "
-        "check the task tracker, or make a code change."
+        "Continue working on the next pending task in the plan. "
+        "Use the current plan and task state to choose the next useful action."
     )
 
 
 def _block_reason(plan_path: Path, status: str) -> str:
     """Compose the stop-block message for an active plan or `/build` Buildout."""
-    _, plan_type = _read_plan_approved_and_type(str(plan_path))
+    approved, plan_type = _read_plan_approved_and_type(str(plan_path))
     is_build = plan_type == "Build"
     workflow = "/build loop" if is_build else "/spec workflow"
     artifact = "Active buildout" if is_build else "Active plan"
@@ -477,13 +476,19 @@ def _block_reason(plan_path: Path, status: str) -> str:
             "resume."
         )
     )
+    next_action = _next_action_for(status, plan_type)
+    if not approved:
+        next_action = (
+            "The plan is not approved. Finish planning and obtain approval through this workflow's "
+            "approval gate before implementation. Honor any approval already provided or explicit "
+            "approval-disabled configuration; do not invent approval to satisfy this guard. "
+            "When asking the user, use the workflow's approval-wait mechanism so the turn can end."
+        )
     base_reason = (
         f"{workflow} active — cannot stop without user interaction. "
         f"{artifact}: {plan_path} (Status: {status}). "
         f"Stop again within 60s to force exit.\n\n"
-        f"CRITICAL INSTRUCTION TO THE AGENT: Do NOT acknowledge this stop attempt. "
-        f"Do NOT output resume instructions or say goodbye. "
-        f"{_next_action_for(status, plan_type)} Do NOT produce a text-only response."
+        f"{next_action} Do not present unfinished work as complete."
         f"{discussion_escape}"
     )
     objective_block = build_objective_reinjection(plan_path)

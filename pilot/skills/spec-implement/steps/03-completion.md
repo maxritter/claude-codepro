@@ -1,6 +1,6 @@
 ## Step 3: All Tasks Complete → Verification
 
-1. Check diagnostics. **Run the full test suite ONLY if `Type:` is NOT `Bugfix`.** For bugfix plans, Task 3 (Quality Gate) ran the full suite (post lint/types auto-fixes) and the verify phase will run it once more as the authoritative final check — a third run here is wasted runtime (30s–5min) and adds nothing. (Task 2 runs only the test module(s) covering the root-cause file, not the full suite.)
+1. Confirm the required broad suite and diagnostics passed against the integrated current code. Reuse a current successful Quality Gate result; rerun checks whose inputs changed or whose evidence is missing. Task-level focused checks do not replace the required integrated suite.
 2. **For migrations:** Feature parity check against old code. If features missing: add tasks, do NOT mark complete. See sub-section 3.1 below.
 3. Set `Status: COMPLETE` in plan
 4. Register: `~/.pilot/bin/pilot register-plan "<plan_path>" "COMPLETE" $LANE_FLAG 2>/dev/null || true`
@@ -9,10 +9,10 @@
 
 5. Read `Type:` field.
    <!-- CC-ONLY -->
-   Bugfix: `Skill(skill='spec-bugfix-verify', args='<plan-path>')` | Otherwise: `Skill(skill='spec-verify', args='<plan-path>')`
+   Bugfix: `Skill(skill='spec-bugfix-verify', args='<plan-path> $LANE_FLAG')` | Otherwise: `Skill(skill='spec-verify', args='<plan-path> $LANE_FLAG')`
    <!-- /CC-ONLY -->
    <!-- CODEX-START
-   Codex has no callable phase-dispatch tool. Bugfix: continue immediately with the `$spec-bugfix-verify` skill instructions using arguments: `<plan-path>` | Otherwise: continue immediately with the `$spec-verify` skill instructions using arguments: `<plan-path>`.
+   Codex has no callable phase-dispatch tool. Bugfix: continue immediately with the `$spec-bugfix-verify` skill instructions using arguments: `<plan-path> $LANE_FLAG` | Otherwise: continue immediately with the `$spec-verify` skill instructions using arguments: `<plan-path> $LANE_FLAG`.
    CODEX-END -->
 
 ### 3.1 Migration/Refactoring Additions (only when `## Feature Inventory` is present in the plan)

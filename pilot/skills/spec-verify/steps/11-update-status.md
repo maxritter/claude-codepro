@@ -1,12 +1,14 @@
 ## Step 11: Update Plan Status
 
-### ⛔ Precondition Gate — verify ALL THREE before writing `Status: VERIFIED`
+### Approval and evidence precondition
 
-1. The Step 10 gate **was actually put to the user** in **this same conversation turn flow** (not a previous, abandoned one) — by `AskUserQuestion`, or, for an agent that cannot emit it, by the prose ask + yield in `agent-gate-protocol.md`. What matters is that the question was asked and the turn ended so it could be answered; *which* mechanism asked it is not the test. (An agent with no `AskUserQuestion` can never satisfy a tool-presence check, which would make `VERIFIED` unreachable for an orchestration lane no matter how legitimately the gate was answered.)
-2. The user's most recent reply contains one of the **explicit approve keywords**: `Approve`, `approve`, `lgtm`, `looks good`. (A bare `continue`/`proceed` is a resume nudge, NOT approval — same rule as Step 10.)
-3. That reply arrived **after** the AskUserQuestion call — not before, not as a stale message.
+Before `Status: VERIFIED`, confirm:
 
-If any of the three is false → return to Step 10 and re-ask. Common traps that DO NOT count as approval: "no annotations in file", "all tests pass", "user has been idle", "session was resumed", "user said 'thanks'/'ok'/anything else."
+1. The current reviewable result was presented through Step 10's permitted question mechanism.
+2. The user explicitly approved that result after it was presented, or supplied applicable standing authorization.
+3. No later code change or unresolved feedback invalidated that approval, and the required verification evidence still applies.
+
+Preserve valid approval across turns and compaction. Do not require that the approval be the latest conversational message or match a fixed keyword list. An unrelated reply, bare resume nudge, silence, hook output, or passing tests is not approval. If required approval is missing, return to Step 10.
 
 **When ALL passes AND user approves:**
 
@@ -28,7 +30,7 @@ If any of the three is false → return to Step 10 and re-ask. Common traps that
 
 5. **Instruct the user:** Include in your completion message:
    ```
-   Run /clear before starting new work — this resets context while keeping project rules loaded.
+   Start a fresh context for unrelated work when useful; preserve this run's evidence and state.
    ```
 
 **When verification FAILS (missing features, serious bugs — before reaching Step 10):**
@@ -48,7 +50,7 @@ AskUserQuestion(
 ```
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-Present these numbered options and wait for user response:
+Use the current runtime's permitted structured input tool for this decision, or a concise prose question when unavailable. Wait for the required answer:
 
 1. Continue — try one more iteration (rarely the right answer)
 2. Pivot — let me re-investigate the plan with you
@@ -57,10 +59,10 @@ CODEX-END -->
 
 Handle:
 <!-- CC-ONLY -->
-- **Continue:** **set `Status: PENDING`**, increment `Iterations`, write `## Verification Gaps`, register status, invoke `Skill(skill='spec-implement', args='<plan-path>')` as below. (Do NOT hand a `Status: COMPLETE` plan to spec-implement.)
+- **Continue:** **set `Status: PENDING`**, increment `Iterations`, write `## Verification Gaps`, register status, invoke `Skill(skill='spec-implement', args='<plan-path> $LANE_FLAG')` as below. (Do NOT hand a `Status: COMPLETE` plan to spec-implement.)
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-- **Continue:** **set `Status: PENDING`**, increment `Iterations`, write `## Verification Gaps`, register status, then continue immediately with the `$spec-implement` skill instructions using arguments: `<plan-path>`. (Do NOT hand a `Status: COMPLETE` plan to spec-implement.)
+- **Continue:** **set `Status: PENDING`**, increment `Iterations`, write `## Verification Gaps`, register status, then continue immediately with the `$spec-implement` skill instructions using arguments: `<plan-path> $LANE_FLAG`. (Do NOT hand a `Status: COMPLETE` plan to spec-implement.)
 CODEX-END -->
 - **Pivot:** set `Status: PENDING`, do NOT invoke spec-implement. Tell the user you're standing by for new investigation direction.
 - **Abandon:** leave `Status: PENDING`, do not invoke spec-implement. Stop.
@@ -75,10 +77,10 @@ CODEX-END -->
    | Gap | Type | Severity | Affected Files | Fix Description |
    ```
 <!-- CC-ONLY -->
-5. Invoke `Skill(skill='spec-implement', args='<plan-path>')`
+5. Invoke `Skill(skill='spec-implement', args='<plan-path> $LANE_FLAG')`
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-5. Continue immediately with the `$spec-implement` skill instructions using arguments: `<plan-path>`.
+5. Continue immediately with the `$spec-implement` skill instructions using arguments: `<plan-path> $LANE_FLAG`.
 CODEX-END -->
 
 ARGUMENTS: $ARGUMENTS

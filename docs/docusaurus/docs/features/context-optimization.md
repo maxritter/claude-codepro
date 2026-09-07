@@ -8,77 +8,73 @@ description: Keep the context window lean and recover cleanly when it fills up �
 
 Two things matter for a long-running session: keeping the context window lean so tokens go to your code, and handling the moments when it fills up anyway.
 
-These strategies apply to both **Claude Code** and **Codex CLI**. Claude Code uses automatic compaction. For Codex 0.153.0 and newer, Pilot enables the native experimental context manager unless `experimental_mode` is already set explicitly in `config.toml`. Older Codex releases keep the compatible boolean-only feature layout.
+These strategies apply to both **Claude Code** and **Codex CLI**.
 
 ## Native Codex context management
 
-Pilot adds this default during installation when Codex 0.153.0 or newer is detected:
+On Codex 0.153.0+, Pilot enables native context management unless you explicitly opt out:
 
 ```toml
 [features]
 context_management.experimental_mode = true
 ```
 
-For eligible ChatGPT-backed Codex sessions, this keeps notes across context windows, makes earlier thread history searchable, and exposes Codex's `new_context` tool. Codex ignores the feature for unsupported plans, custom providers, provider credentials, non-Codex endpoints, and temporary structured threads.
+Eligible ChatGPT-backed sessions retain notes across windows and can search earlier thread history. Unsupported sessions use ordinary Codex context behavior; older runtimes skip this setting. Pilot memory remains available on demand across sessions, without an automatic digest.
 
-Codex 0.152.x and older accept only boolean values inside `[features]`. Pilot therefore omits the structured setting for those versions and removes the incompatible Pilot-added form during an upgrade so Codex can start normally.
+Pilot requests expanded context with `model_context_window = 1050000` and `model_auto_compact_token_limit = 922000`; Codex enforces each model's native limits. Live checks on Codex 0.153.4 showed **828,400 usable tokens** for both Sol and Astra, versus 258,400 without overrides. A full million usable tokens is not guaranteed.
 
-Pilot also requests `model_context_window = 1050000` and
-`model_auto_compact_token_limit = 922000`, matching Astra's published total
-window and maximum input. These remain safe global defaults for GPT-5.6 Sol and
-its Terra/Luna siblings as well as older models: Pilot lifts the four published
-full-window models (Astra, Sol, Terra, Luna) to 1,050,000 in its provider-derived
-catalog. Codex clamps every other selected model to its own catalog ceiling, then
-caps auto-compaction at 90% of that resolved window. A genuinely smaller model
-therefore keeps its smaller boundary instead of inheriting Astra's limits.
-
-Pilot memory remains the cross-session layer. Its observer and summarizer continue to save durable project knowledge locally, but Codex does not receive an automatic Pilot memory digest. Before non-trivial work on existing behavior, Codex searches the local `mem-search` MCP with the current task, uses `timeline` for surrounding context, and fetches only selected observations. This produces smaller, more relevant context than loading a recency-based digest before the task is known.
-
-API-key, custom-provider, and otherwise ineligible Codex sessions ignore the native experimental mode. They still have on-demand Pilot memory for cross-session recall, while their current thread follows Codex's ordinary context behavior.
+Codex manages model discovery, so new models do not require a Pilot release. Upgrades remove Pilot's old catalog pointer while preserving custom catalogs and profile settings. Restart Codex after upgrading.
 
 ## Keeping context lean
 
 | Strategy | Savings | How |
 |----------|---------|-----|
-| **RTK proxy** | 60–90% | Rewrites dev tool output (`git status`, `npm test`, etc.) to remove noise before it enters the context window |
-| **Semble code search** | ~98% | Returns only the matched chunks instead of dumping whole files — Semble's own benchmark shows ~98% fewer tokens than `grep + read` at 94% recall |
+| **RTK proxy** | Varies by command | Rewrites dev tool output (`git status`, `npm test`, etc.) to remove noise before it enters the context window |
+| **Semble code search** | Varies by query | Returns relevant matched chunks for intent searches rather than requiring whole-file reads |
 | **Conditional rule loading** | Variable | Coding standards load only for matching file types — Python rules don't load when editing TypeScript |
-| **Progressive skill disclosure** | ~90% | Skill frontmatter (~100 tokens) loads always; full SKILL.md loads only on activation; linked files load on demand |
+| **Skill activation** | Variable | Descriptions expose available skills; the full SKILL.md loads when needed. Pilot's sequential workflows bundle their required phase instructions |
 | **Scoped MCP tools** | Variable | MCP tool schemas are lazy-loaded via `ToolSearch` — only fetched when needed, not preloaded |
 | **Routing hooks** | Variable | PreToolUse hooks privately nudge recursive search and ordinary built-in web calls toward dedicated indexed/MCP tools without blocking them, while authenticated Claude artifact URLs stay on the session-aware built-in tool |
+| **Bounded native reads and searches** | Variable | Read relevant file ranges and request filenames, counts, or limited matches when full output is unnecessary |
 
 ## Status line display *(Claude Code only)*
 
 The status line shows context usage as a visual progress bar:
 
 ```
-Opus 5 [1M] | █████░▓ 60% | ...
+Opus 5 [high] [1M] | █████░▓ 60% | ...
 ```
 
-Claude Code reserves ~16.5% of the context window as a compaction buffer, triggering auto-compaction at ~83.5% raw usage. Pilot Shell rescales this to an **effective 0–100% range** so the bar fills naturally to 100% right before compaction fires. A `▓` indicator shows the reserved zone. The monitor warns at ~80% effective (informational) and ~90%+ effective (caution).
+The bar uses Claude Code's reported context percentage, with correction only when live token evidence shows that the reported window size is stale. It does not rescale usage to an assumed compaction point; `▓` is the bar's end marker. Colors are green below 75%, yellow from 75% to below 90%, and red at 90% or more. The effort label, when supplied by the runtime, appears before the context-size label.
+
+Pilot's retained compaction-budget helper uses a **33,000-token** reserve: 83.5% of a 200K window or 96.7% of a 1M window remains before that reserve. This is a budget estimate, not a universal compaction trigger or the scale used by the current status line. Claude Code controls actual compaction. The monitor issues one advisory when reported usage reaches 90%; there is no separate 80% warning, and work can continue normally.
 
 ## When compaction fires *(Claude Code only)*
 
-On 200K windows, compaction happens more often. Pilot Shell preserves state automatically across the three lifecycle events:
+Pilot captures and restores selected workflow state around Claude Code's compaction lifecycle:
 
 ```
 PreCompact → Compact → SessionStart(compact)
 ```
 
-1. **PreCompact** — `pre_compact.py` captures active plan, task list, recent decisions, and key context to Pilot Shell Console memory.
-2. **Compact** — Claude Code summarizes conversation history while preserving recent tool calls and flow.
-3. **SessionStart(compact)** — `post_compact_restore.py` re-injects the active plan path, task state, and key decisions. Work resumes seamlessly.
+1. **PreCompact** — `pre_compact.py` captures the registered plan path, status, current task, available task-list metadata, and supplied compaction instructions. It saves through the Console or falls back to a session file.
+2. **Compact** — Claude Code compresses the conversation using its native context management.
+3. **SessionStart(compact)** — `post_compact_restore.py` re-injects the registered plan reference and available task metadata so the agent can recover its working state.
 
-Memory observations (decisions, discoveries, bugfixes) persist independently in SQLite — they survive compaction regardless of hooks.
+Saved memory observations persist independently in SQLite. These mechanisms do not guarantee that every conversational detail survives. Preserve important decisions, constraints, approvals, and active process/agent identifiers in the relevant task or plan state; after compaction, read that state and recheck current files and live job handles before continuing.
 
-## Session-start memory digest *(Claude Code only)*
+## On-demand memory *(both agents)*
 
-At `startup`, `clear`, and `compact`, Pilot injects a digest of recent memory for the project: a table of recent observations by day and file, the last session summary, and the previous assistant message. Claude Code caps a SessionStart hook's `additionalContext` at 10,000 characters and hands the model only a short preview of anything longer, so the digest is rendered to a budget: `CLAUDE_PILOT_CONTEXT_MAX_CHARS` in `~/.pilot/memory/settings.json` (default `9000`, `0` for no cap). When the budget is exceeded, whole days are dropped from the old end first and a line says how many older entries were left out; they remain searchable through the `mem-search` MCP server or `bun ~/.pilot/scripts/worker-service.cjs search "<query>" --json`. `CLAUDE_PILOT_CONTEXT_OBSERVATIONS` (default `50`) and `CLAUDE_PILOT_CONTEXT_FULL_COUNT` (default `10`) still bound how much is fetched before the budget applies.
+At startup, resume, and compaction, Pilot synchronizes memory storage silently. Neither Claude Code nor Codex receives an automatic memory digest or a terminal dump. Background observation and summarization continue independently.
+
+Agents use `mem-search` when the task needs prior decisions: `search` with `scope="all"` returns compact history and [OKF knowledge](./knowledge.md) results, followed by selected `get_observations` or `get_knowledge` calls. Local full-text search works without the vector service and does not hide older records behind an automatic age cutoff. Knowledge sources, stale dates, and lifecycle state help the agent decide what to revalidate.
+
+Legacy digest settings are retained for explicit Console context previews. They no longer control automatic injection. Memory is historical evidence, not proof of current code or another session's authority.
 
 :::tip Don't rush the current task
-Context limits are not an emergency — auto-compaction preserves everything and resumes cleanly. Finish the current task with full quality. The only thing that matters is the output, not the context percentage.
+Context limits do not justify shrinking the requested outcome. Preserve the information needed to resume, let the runtime manage compaction, and continue from current evidence. Report a genuine missing-state blocker rather than guessing or restarting completed work.
 :::
 
 ## Running parallel sessions
 
-Multiple Pilot Shell sessions can run on the same project without interference. Each session has its own context window, task list, and plan state. The Console dashboard tracks every active session so you can jump between them.
+Multiple Pilot Shell sessions can work on the same project with separate context and session-scoped workflow state. That separation does not prevent conflicts in shared files, the staging area, browser tabs, or external resources. Coordinate ownership or use authorized worktrees, and preserve changes made by other sessions. The Console dashboard helps identify active sessions.

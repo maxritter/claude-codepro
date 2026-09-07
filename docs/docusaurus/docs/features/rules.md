@@ -1,14 +1,14 @@
 ---
 sidebar_position: 4
 title: Rules & Standards
-description: Production-tested rules and standards loaded into every Claude Code and Codex session — TDD enforcement, language standards, MCP routing, and project conventions.
+description: Shared guidance for Claude Code and Codex — proportionate testing, language standards, tool routing, and project conventions.
 ---
 
 # Rules & Standards
 
 Production-tested best practices loaded into every session.
 
-Rules load automatically at session start or when their scoped files become relevant. Pilot ships 9 always-on rules and 9 path-gated stack rules, delivered in the format each agent handles best.
+Rules load automatically at session start or when their scoped files become relevant. Pilot ships 8 always-on rules and 9 path-gated stack rules, delivered in the format each agent handles best. Project conventions and user instructions shape how these defaults apply; the active runtime's safety and permission controls remain authoritative.
 
 - **Claude Code:** rules in `~/.claude/rules/` (global) and `.claude/rules/` (project). Project rules take precedence.
 - **Codex:** global guidance in `~/.codex/AGENTS.md`, adapted skills in `~/.agents/skills/`, and file-type standards loaded when relevant.
@@ -20,8 +20,8 @@ Run `/setup-rules` (or `$setup-rules` on Codex) to generate project-specific rul
 ### Core Harness (3 rules)
 
 - `task-and-workflow.md` — Direct execution when no workflow is invoked, equal treatment of native and Pilot workflows, session state, agent-controlled delegation without permission prompts, and tool portability
-- `testing.md` — TDD workflow with `Trivial:` escape, parsimony-first test design (reuse existing tests; max 1 unit + 1 functional test class when new coverage is needed), critical-path coverage review
-- `verification.md` — Execution verification, completion requirements
+- `testing.md` — Existing behavioural coverage first, regression checks for meaningful changes, and tests sized to the actual risk without global class or coverage quotas
+- `verification.md` — Evidence matched to the affected command, API, rendered UI, or installed artifact; reuse valid results and complete required project checks
 
 ### Development Practices (3 rules)
 
@@ -32,9 +32,9 @@ Run `/setup-rules` (or `$setup-rules` on Codex) to generate project-specific rul
 ### Tooling & Context (4 rules)
 
 - `cli-tools.md` — Pilot CLI, Semble hybrid code search, RTK token optimization
-- `browser-automation.md` — Browser automation for E2E UI testing (Chrome → Chrome DevTools MCP → playwright-cli → agent-browser), plus reuse of the installed [Impeccable](https://impeccable.style) hook evidence and a bounded detector fallback when no current hook result exists
+- `browser-automation.md` — Path-gated UI verification using the project's driver or the active runtime's available browser tools, plus reuse of [Impeccable](https://impeccable.style) hook evidence and a bounded advisory detector fallback
 - `mcp-servers.md` — MCP server reference and tool selection guidance
-- `mobile-development.md` — Installed-app verification for Capacitor, React Native, Expo, Flutter, Android, and iOS projects
+- `mobile-development.md` — Path-gated installed-app verification, project-specific device drivers, and preservation of app data for Capacitor, React Native, Expo, Flutter, Android, and iOS projects
 
 ### UI Design Expertise (automatic skills)
 
@@ -58,12 +58,11 @@ The gate compiles the real Codex skill descriptions, checks public implicit-skil
 
 | Standard | Activates On | Coverage |
 |----------|-------------|----------|
-| Python | `*.py` | uv, pytest, ruff, basedpyright, type hints |
-| TypeScript | `*.ts, *.tsx, *.js, *.jsx` | npm/pnpm, Jest, ESLint, Prettier, React patterns |
-| Go | `*.go` | Modules, testing, formatting, error handling |
-| .NET | `*.cs, *.csproj, *.sln` | dotnet CLI, format gate, nullable, analyzers, test traits |
+| Python | `*.py` | Project environment/version, configured checks, type hints, resources and errors |
+| TypeScript | `*.ts, *.tsx, *.js, *.jsx, *.mjs, *.mts` | Project package manager/runtime, type boundaries, async behaviour |
+| Go | `*.go` | Existing modules/layout, testing, formatting, errors and cancellation |
+| .NET | `*.cs, *.csproj, *.sln, *.slnx` | Existing SDK/analyzer policy, async and HTTP lifetimes, faithful database tests |
 | Frontend | `*.tsx, *.jsx, *.html, *.vue, *.css` | Components, CSS, accessibility, responsive design |
-| UI design | `*.tsx, *.jsx, *.html, *.vue, *.svelte, *.astro, *.razor, *.css, *.scss` | Product context, hierarchy, visual system, interaction states, responsive/theme design |
 | Blazor | `*.razor, *.razor.css, *.razor.cs` | Components, CSS isolation, render modes, lifecycle |
 | Backend | `**/models/**, **/routes/**, **/api/**` | API design, data models, query optimization, migrations |
 
@@ -75,41 +74,38 @@ Create `.claude/rules/my-rule.md` in your project. Add `paths: ["*.py"]` frontma
 Organize rules in nested subdirectories by product and team (e.g. `.claude/rules/my-product/team-x/`). Team-level rules must use `paths` frontmatter to scope to the right files. `/setup-rules` generates a `README.md` in your rules directory to document the structure.
 :::
 
-## Testing posture: parsimonious by default
+## Testing posture: proportionate and behavioural
 
-The default `testing.md` rule defines the agent's testing posture. Pilot's default is **parsimonious**:
+Pilot reuses existing behavioural tests before adding coverage. Meaningful behaviour changes and bug fixes should have a focused reproducer, preferably before implementation. If an automated test is impractical, the agent records the actual failing interaction or artifact and states the coverage limit.
 
-- **Reuse existing behavioural tests first.** When a new public production class truly needs new tests, the ceiling is 1 unit test class + 1 functional test class (only when behaviour cannot be covered through unit tests). One test class per production class is the ceiling, not the floor — splitting tests per-method or mirroring code structure in tests is an anti-pattern (per Uncle Bob's *Test Contravariance* and Kent Beck's *Test Desiderata* "structure-insensitive" property).
-- **Coverage gate scoped to critical paths** (business logic, security, data integrity, error handling). No blanket numeric threshold on glue code, configuration plumbing, simple CRUD, or trivial UI bindings. Coverage padding to push a number above a threshold is an anti-pattern.
-- **TDD with documented escapes.** Red-green-refactor remains the default. The `Trivial:` plan-task field is the documented opt-out for changes ≤ 5 net new lines with no new branch, public symbol, or error path, and it must name an existing covering test or verification command. Bugfixes never qualify — a reproducing RED test is the bugfix lane's anti-regression guarantee.
-- **Post-implementation enforcement.** The changes review (built-in `/code-review` skill on Claude Code, native `changes-review` agent on Codex) and the `spec-verify` Step 5 audit ("Test Parsimony Audit" + "Trivial: claim audit") verify the doctrine against the actual diff — the planner's claim is not authoritative.
+There is no global test-class count, file-size limit, or numeric coverage target. Tests should protect contracts and credible failure modes while surviving internal refactors. Simple reversible edits can use existing checks; configuration and dependency changes receive the validation their runtime impact requires.
 
-### Override the testing posture
+The agent runs focused checks and the repository's required suite. Passing results remain usable for the unchanged artifact and environment across messages and workflow phases. Relevant edits, failures, or unresolved concerns trigger additional checks.
 
-If your project wants strict TDD on every change, blanket 80 % coverage, or a different posture, create `.claude/rules/testing-project.md` in the repository — it shadows Pilot's global `testing.md`. The shadow file can be as small as a few overriding sections (the rest of the global rule still applies). Suggested structure:
+An explicitly selected workflow may require a recorded RED/GREEN result or other review artifacts. The optional `Trivial:` field explains why a named existing check is sufficient; it is assessed against the actual change, rather than a five-line threshold. User instructions can change Pilot's default process without bypassing runtime permissions.
+
+### Project-specific testing requirements
+
+Keep stricter requirements in the repository's agent instructions or scoped project rule, such as `.claude/rules/testing-project.md`:
 
 ```markdown
 ---
 paths: ["**/*.py", "**/*.ts", "**/*.tsx"]
 ---
 
-## Testing override
+## Testing requirements
 
-This project requires:
-- Strict TDD on every code change (no `Trivial:` escape).
-- 80 % minimum coverage across the entire codebase, not just critical paths.
-- One test class per production class is acceptable; do not consolidate.
+- Reproduce every business-rule defect with an automated regression test.
+- Exercise database constraints and transactions against the supported database.
+- Run the project's configured coverage gate and required CI checks.
 ```
 
-See `pilot/rules/testing.md` § Default Posture for the full doctrine that the shadow file overrides.
+These requirements apply through the agent's instruction loading and precedence; a filename alone does not replace another rule. For Codex, ensure the project `AGENTS.md` exposes the relevant rule.
 
-### Anti-patterns the parsimony rule rejects
+### What verification proves
 
-| Anti-pattern | Why it's rejected |
-|--------------|-------------------|
-| One test class per method (e.g. `DoSomethingTests` for `Foo.DoSomething()`) | Couples test layout to implementation detail; refactor moves a method, all tests break. Reviewer flags as `must_fix`. |
-| Mirroring code structure in tests | Behaviour-preserving refactor must not break the suite; structure-insensitive is a Test Desideratum. Flagged as `suggestion`. |
-| Redundant assertions on the same path | Three tests asserting the same observable behaviour through three internal paths is one test, not three. Maintenance tax with no signal. Flagged as `should_fix`. |
-| Test-per-trivial-helper | A one-line getter/formatter with no branches and no public-API exposure is covered by the test for the function that uses it. |
-| Coverage padding to hit a threshold | Numbers are a side-effect of testing what matters, not the goal. Threshold-driven test creation is rejected. |
-| `Trivial:` justification used to skip TDD on a non-trivial change | Post-implementation `Trivial:` claim audit verifies the field names an existing covering check and that the diff meets the four criteria (≤ 5 production lines, no new branch with non-trivial body, no new public symbol, no new error path). Mismatch → `must_fix`, remove `Trivial:`, write a real RED test. |
+CLI and API changes need execution evidence when their runtime boundary is affected. UI claims require the relevant interaction and rendered result. Native and packaged changes need the corresponding built or installed artifact; a desktop dev server does not establish mobile release behaviour.
+
+Pilot uses documented local and authorized preview targets. A verification request does not itself authorize a deployment, replacement of a live installation, or mutation of user data. The agent prepares everything it can and reports a concrete remaining gate when needed.
+
+Design detectors remain advisory. Model-written prose is not validated merely by asserting that a source file contains expected phrases: packaging checks can establish generated syntax and delivery, while behavioural evaluations are needed to assess how models follow the instructions.

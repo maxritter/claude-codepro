@@ -15,46 +15,17 @@ A caller running as an orchestration lane also supplies its `<lane>` id.
 
 ## `--new-branch`
 
-⛔ **One Bash call.** Shell state (`$STASHED`, `$?`) does not survive across Bash
-invocations, so splitting stash/detect/checkout/restore risks stranding the
-user's work in a stash nobody pops.
+The explicit branch choice authorizes creating the requested branch. Preserve the user's working changes and do not change another session's active checkout.
 
-```bash
-STASH_MSG="pilot-spec-$(date +%s)"
-git stash push -m "$STASH_MSG" --include-untracked 2>/dev/null
-# `git stash push` exits 0 even with nothing to stash — detect a real one by message:
-STASHED=no; git stash list | grep -q "$STASH_MSG" && STASHED=yes
+1. Resolve the actual default remote branch from `refs/remotes/origin/HEAD` or verified remote refs. Refresh `origin` when appropriate. Do not invent `main` when no base exists.
+2. Check the current branch, index, and worktree. Derive a free `<prefix>/<plan_slug>` name; if it already exists, choose a unique suffix without overwriting it.
+3. On a clean checkout, run `git checkout -b <branch> <verified-base>`.
+4. On a dirty checkout, preserve the exact staged/unstaged/untracked state before switching. If using a stash, capture its object id and the original branch, and restore that exact stash with `git stash apply --index <stash-id>`; never assume the top stash is still this run's. Keep the recovery identity across tool calls.
+5. If checkout or restoration fails, stop the branch transition, report the actual branch and preserved recovery state, and resolve it before continuing. Do not claim restoration succeeded from an exit message alone. Do not drop a recovery stash until restoration is verified.
 
-# Detect the default branch. `git fetch` is a network call; fall back locally if offline.
-git fetch origin 2>/dev/null
-DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
-if [ -z "$DEFAULT_BRANCH" ]; then
-  for b in main master; do git rev-parse --verify "origin/$b" >/dev/null 2>&1 && { DEFAULT_BRANCH="$b"; break; }; done
-fi
-DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
+Use a single guarded command or persistent recorded state for the transition; transient shell variables are not available in later tool calls. If concurrent work makes switching this checkout unsafe, surface that concrete conflict rather than silently carrying other work into the new branch.
 
-BRANCH_NAME="<prefix>/<plan_slug>"
-git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1 && BRANCH_NAME="<prefix>/<plan_slug>-$(date +%m%d-%H%M)"
-
-if git checkout -b "$BRANCH_NAME" "origin/$DEFAULT_BRANCH"; then
-  # New branch = latest origin base + the user's own uncommitted work on top.
-  if [ "$STASHED" = yes ]; then
-    git stash pop 2>/dev/null \
-      && echo "on $BRANCH_NAME — restored your working changes" \
-      || echo "on $BRANCH_NAME — stash '$STASH_MSG' did NOT auto-apply (conflict with origin/$DEFAULT_BRANCH); recover with: git stash pop"
-  else
-    echo "on $BRANCH_NAME"
-  fi
-else
-  # checkout failed (e.g. no origin remote) — restore onto the current branch so no work is lost
-  [ "$STASHED" = yes ] && git stash pop 2>/dev/null
-  echo "checkout failed — restored stash, staying on current branch"
-fi
-```
-
-A pop conflict preserves the stash for manual recovery; a checkout failure restores it onto the current branch. Either way no work is lost.
-
-After a successful branch creation, continue with `Worktree: No` semantics — the work happens directly on the new branch.
+After verified branch creation and restoration, continue with `Worktree: No` semantics.
 
 ## `--worktree=yes`
 
@@ -71,5 +42,5 @@ All file writes — including the plan file — use the returned `path` as their
 
 **If creation fails:**
 
-- **Ordinary run** — continue without a worktree and record `Worktree: No` in the header. Losing isolation costs nothing the user did not already have.
+- **Ordinary run** — diagnose and retry a recoverable setup failure. If the requested isolation cannot be established, report the blocker and preserve the current checkout; do not silently replace `--worktree=yes` with shared-checkout execution.
 - ⛔ **Lane run (`--lane` was supplied) — ABORT.** Say which command failed and why, and stop. Continuing would drop the lane into the coordinator's shared checkout, where it races every sibling's edits and staging — exactly the collision the lane was created to avoid. A lane that silently loses its isolation is worse than a lane that never started, because nothing downstream can tell the difference.

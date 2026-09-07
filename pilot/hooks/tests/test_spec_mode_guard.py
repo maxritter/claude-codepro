@@ -1,5 +1,4 @@
-"""Tests for spec_mode_guard hook — blocks /spec in plan mode, blocks on non-Opus,
-warns in non-bypass mode."""
+"""Tests for explicit workflow mode boundaries and preservation of user choices."""
 
 from __future__ import annotations
 
@@ -8,6 +7,7 @@ import os
 from io import StringIO
 from unittest.mock import patch
 
+import pytest
 from spec_mode_guard import _is_fable, _is_opus, _is_sonnet, run_spec_mode_guard
 
 # Hermetic default for CLAUDE_CONFIG_DIR: the guard reads the selected model
@@ -28,8 +28,7 @@ def _run_with_input(
 
     By default the cached active model is mocked as None (no cache yet).
     ``mode`` pins the three-way Model Switching mode (the guard reads it fresh
-    from config.json in production; tests patch the reader). The pre-flight
-    context check is neutralized here; TestOpusContextPreflight covers it.
+    from config.json in production; tests patch the reader).
     """
     hook_data = {"prompt": prompt, "permission_mode": permission_mode}
     stdin = StringIO(json.dumps(hook_data))
@@ -38,7 +37,6 @@ def _run_with_input(
         patch("sys.stdin", stdin),
         patch("sys.stdout", new_callable=StringIO) as stdout,
         patch("spec_mode_guard.read_model_switch_mode", return_value=mode),
-        patch("spec_mode_guard._opus_context_preflight", return_value=None),
         patch("spec_mode_guard._read_active_model_from_cache", return_value=None),
     ):
         code = run_spec_mode_guard()
@@ -61,7 +59,6 @@ def _run_with_model_cache(
         patch("sys.stdin", stdin),
         patch("sys.stdout", new_callable=StringIO) as stdout,
         patch("spec_mode_guard.read_model_switch_mode", return_value=mode),
-        patch("spec_mode_guard._opus_context_preflight", return_value=None),
         patch("spec_mode_guard._read_active_model_from_cache", return_value=model_id),
     ):
         code = run_spec_mode_guard()
@@ -77,7 +74,8 @@ class TestPlanModeBlocking:
         result = json.loads(output)
         assert result["decision"] == "block"
         assert "Plan mode" in result["reason"]
-        assert "Shift+Tab" in result["reason"]
+        assert "leave" in result["reason"].lower()
+        assert "Bypass Permissions" not in result["reason"]
 
     def test_blocks_bare_spec_in_plan_mode(self):
         code, output = _run_with_input("/spec", "plan")
@@ -104,42 +102,13 @@ class TestBypassPermissionsAllowed:
         assert output == ""
 
 
-class TestNonBypassWarning:
-    """Non-bypass modes get a warning but are not blocked."""
-
-    def test_warns_in_default_mode(self):
-        code, output = _run_with_input("/spec fix bug", "default")
+class TestPermissionModePreserved:
+    @pytest.mark.parametrize("permission_mode", ["default", "manual", "acceptEdits", "dontAsk", "auto"])
+    def test_respects_permission_choice_without_promoting_bypass(self, permission_mode, capsys):
+        code, output = _run_with_input("/spec fix bug", permission_mode)
         assert code == 0
-        result = json.loads(output)
-        ctx = result["hookSpecificOutput"]["additionalContext"]
-        assert "default" in ctx
-        assert "bypassPermissions" in ctx
-        assert "proceed" in ctx.lower()
-
-    def test_warns_in_accept_edits_mode(self):
-        code, output = _run_with_input("/spec fix bug", "acceptEdits")
-        assert code == 0
-        result = json.loads(output)
-        ctx = result["hookSpecificOutput"]["additionalContext"]
-        assert "acceptEdits" in ctx
-        assert "proceed" in ctx.lower()
-
-    def test_warns_in_dont_ask_mode(self):
-        code, output = _run_with_input("/spec fix bug", "dontAsk")
-        assert code == 0
-        result = json.loads(output)
-        ctx = result["hookSpecificOutput"]["additionalContext"]
-        assert "dontAsk" in ctx
-        assert "proceed" in ctx.lower()
-
-    def test_warning_does_not_block(self):
-        """Non-bypass modes must NOT instruct the LLM to stop."""
-        for mode in ("default", "acceptEdits", "dontAsk"):
-            code, output = _run_with_input("/spec fix bug", mode)
-            assert code == 0
-            ctx = json.loads(output)["hookSpecificOutput"]["additionalContext"]
-            assert "Do NOT" not in ctx
-            assert "STOP" not in ctx
+        assert output == ""
+        assert capsys.readouterr().err == ""
 
 
 class TestNonSpecPrompts:
@@ -559,7 +528,6 @@ class TestCacheMissingEmitsWarning:
             patch("sys.stdout", new_callable=StringIO),
             patch("sys.stderr", new_callable=_io.StringIO) as stderr,
             patch("spec_mode_guard.read_model_switch_mode", return_value="automated"),
-            patch("spec_mode_guard._opus_context_preflight", return_value=None),
             patch("spec_mode_guard._read_active_model_from_cache", return_value=None),
         ):
             code = run_spec_mode_guard()
@@ -664,7 +632,6 @@ class TestModelSwitchToggle:
             patch("sys.stdout", new_callable=StringIO),
             patch("sys.stderr", new_callable=_io.StringIO) as stderr,
             patch("spec_mode_guard.read_model_switch_mode", return_value="automated"),
-            patch("spec_mode_guard._opus_context_preflight", return_value=None),
             patch("spec_mode_guard._read_active_model_from_cache", return_value=None),
         ):
             code = run_spec_mode_guard()
@@ -749,7 +716,6 @@ class TestOpusplanSelectedModel:
             patch("sys.stdout", new_callable=StringIO) as stdout,
             patch("sys.stderr", new_callable=_io.StringIO) as stderr,
             patch("spec_mode_guard.read_model_switch_mode", return_value="automated"),
-            patch("spec_mode_guard._opus_context_preflight", return_value=None),
             patch("spec_mode_guard._read_active_model_from_cache", return_value=None),
         ):
             code = run_spec_mode_guard()
@@ -771,84 +737,21 @@ class TestOpusplanSelectedModel:
         assert output == ""
 
 
-class TestOpusContextPreflight:
-    """Automated-mode pre-flight: warn when the conversation likely exceeds the
-    Opus plan leg's effective 200K window (opusplan then silently stays on the
-    Sonnet leg). Fails open on missing/corrupt cache."""
-
-    def _preflight(self, tmp_path, cache: object) -> str | None:
-        import spec_mode_guard as g
-
-        session_dir = tmp_path / "sessions" / "test-preflight"
-        session_dir.mkdir(parents=True)
-        if cache is not None:
-            (session_dir / "context-pct.json").write_text(cache if isinstance(cache, str) else json.dumps(cache))
-        with (
-            patch.dict(os.environ, {"PILOT_SESSION_ID": "test-preflight"}),
-            patch("spec_mode_guard.Path.home", return_value=tmp_path / "fake-home"),
-        ):
-            # Point the cache path at our fixture via a fake home.
-            real = tmp_path / "fake-home" / ".pilot" / "sessions" / "test-preflight"
-            real.mkdir(parents=True, exist_ok=True)
-            if cache is not None:
-                (real / "context-pct.json").write_text(cache if isinstance(cache, str) else json.dumps(cache))
-            return g._opus_context_preflight()
-
-    def test_warns_above_floor(self, tmp_path) -> None:
-        msg = self._preflight(tmp_path, {"pct": 42.0, "context_window_size": 1_000_000})
-        assert msg is not None
-        assert "420K" in msg
-        assert "/compact" in msg
-        assert "Manual" in msg
-        # The 200K cap currently trips even for 1M-entitled accounts (upstream
-        # CC regression of the v2.1.172 entitled-1M fix) -- the warning must not
-        # scope the cap to non-entitled accounts, or entitled users read it as
-        # "I'm exempt" and get silently Sonnet-planned anyway.
-        assert "even with the Opus 1M entitlement" in msg
-        assert "without Opus 1M" not in msg
-
-    def test_silent_below_floor(self, tmp_path) -> None:
-        assert self._preflight(tmp_path, {"pct": 10.0, "context_window_size": 1_000_000}) is None
-
-    def test_silent_on_missing_cache(self, tmp_path) -> None:
-        assert self._preflight(tmp_path, None) is None
-
-    def test_silent_on_corrupt_cache(self, tmp_path) -> None:
-        assert self._preflight(tmp_path, "{ not json") is None
-
-    def test_silent_on_200k_window_below_floor(self, tmp_path) -> None:
-        # 82% of 200K = 164K < 180K floor -> no warning.
-        assert self._preflight(tmp_path, {"pct": 82.0, "context_window_size": 200_000}) is None
-
-    def test_guard_emits_preflight_context_in_automated_mode(self) -> None:
-        hook_data = {"prompt": "/spec build a feature", "permission_mode": "bypassPermissions"}
-        stdin = StringIO(json.dumps(hook_data))
-        with (
-            patch("sys.stdin", stdin),
-            patch("sys.stdout", new_callable=StringIO) as stdout,
-            patch("spec_mode_guard.read_model_switch_mode", return_value="automated"),
-            patch("spec_mode_guard._read_active_model_from_cache", return_value="sonnet"),
-            patch("spec_mode_guard._opus_context_preflight", return_value="[Pilot] PRE-FLIGHT TEST"),
-        ):
-            code = run_spec_mode_guard()
-        assert code == 0
-        payload = json.loads(stdout.getvalue())
-        assert "PRE-FLIGHT TEST" in payload["hookSpecificOutput"]["additionalContext"]
-
-    def test_guard_never_runs_preflight_in_manual_mode(self) -> None:
-        hook_data = {"prompt": "/spec build a feature", "permission_mode": "bypassPermissions"}
-        stdin = StringIO(json.dumps(hook_data))
-        with (
-            patch("sys.stdin", stdin),
-            patch("sys.stdout", new_callable=StringIO) as stdout,
-            patch("spec_mode_guard.read_model_switch_mode", return_value="manual"),
-            patch("spec_mode_guard._read_active_model_from_cache", return_value="sonnet"),
-            patch("spec_mode_guard._opus_context_preflight") as preflight,
-        ):
-            code = run_spec_mode_guard()
-        assert code == 0
-        preflight.assert_not_called()
-        assert stdout.getvalue() == ""
+def test_large_context_does_not_predict_a_model_failure_or_require_compaction(tmp_path, capsys):
+    """Observe the actual planning model later; a historical cutoff is not a runtime limit."""
+    session = tmp_path / ".pilot" / "sessions" / "large-context"
+    session.mkdir(parents=True)
+    (session / "context-pct.json").write_text(
+        json.dumps({"pct": 42, "context_window_size": 1_000_000, "model_id": "sonnet"})
+    )
+    with (
+        patch.dict(os.environ, {"PILOT_SESSION_ID": "large-context"}),
+        patch("spec_mode_guard.Path.home", return_value=tmp_path),
+    ):
+        code, output = _run_with_model_cache("/spec add feature", "default", "sonnet", mode="automated")
+    assert code == 0
+    assert output == ""
+    assert capsys.readouterr().err == ""
 
 
 class TestFreshConfigModeResolution:
@@ -868,9 +771,9 @@ class TestFreshConfigModeResolution:
         ):
             assert _lib.read_model_switch_mode() == "automated"
 
-    def test_automated_fallback_when_config_unreadable(self, tmp_path) -> None:
+    def test_manual_fallback_when_config_unreadable(self, tmp_path) -> None:
         # Unified with the launcher's get_model_switch_mode: unreadable config
-        # falls back to "automated" (the default) everywhere. The env var is
+        # falls back to "manual" (the default) everywhere. The env var is
         # display metadata, deliberately NOT a decision fallback (startup-frozen;
         # readers could otherwise disagree mid-session).
         _lib = __import__("_lib.util", fromlist=["util"])
@@ -878,7 +781,35 @@ class TestFreshConfigModeResolution:
             patch.dict(os.environ, {"PILOT_MODEL_SWITCH_MODE": "off"}),
             patch.object(_lib.Path, "home", return_value=tmp_path / "nope"),
         ):
-            assert _lib.read_model_switch_mode() == "automated"
+            assert _lib.read_model_switch_mode() == "manual"
+
+    @pytest.mark.parametrize("config", [{}, {"specWorkflow": None}, {"specWorkflow": []}, {"specWorkflow": "manual"}])
+    def test_missing_or_malformed_workflow_defaults_to_manual(self, tmp_path, config) -> None:
+        _lib = __import__("_lib.util", fromlist=["util"])
+        config_path = tmp_path / ".pilot" / "config.json"
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text(json.dumps(config))
+        with patch.object(_lib.Path, "home", return_value=tmp_path):
+            assert _lib.read_model_switch_mode() == "manual"
+
+    @pytest.mark.parametrize(
+        "workflow, expected",
+        [
+            ({}, "manual"),
+            ({"modelSwitchMode": "invalid"}, "manual"),
+            ({"modelSwitch": "true"}, "manual"),
+            ({"modelSwitch": True}, "automated"),
+            ({"modelSwitch": False}, "off"),
+            ({"modelSwitchMode": "manual", "modelSwitch": True}, "manual"),
+        ],
+    )
+    def test_only_explicit_valid_settings_enable_automation(self, tmp_path, workflow, expected) -> None:
+        _lib = __import__("_lib.util", fromlist=["util"])
+        config = tmp_path / ".pilot" / "config.json"
+        config.parent.mkdir(parents=True)
+        config.write_text(json.dumps({"specWorkflow": workflow}))
+        with patch.object(_lib.Path, "home", return_value=tmp_path):
+            assert _lib.read_model_switch_mode() == expected
 
     def test_legacy_boolean_mapping_in_config(self, tmp_path) -> None:
         _lib = __import__("_lib.util", fromlist=["util"])
@@ -887,22 +818,3 @@ class TestFreshConfigModeResolution:
         config.write_text(json.dumps({"specWorkflow": {"modelSwitch": False}}))
         with patch.object(_lib.Path, "home", return_value=tmp_path):
             assert _lib.read_model_switch_mode() == "off"
-
-
-class TestPreflightWarnsOncePerSession:
-    def test_marker_suppresses_second_warning(self, tmp_path) -> None:
-        import spec_mode_guard as g
-
-        home = tmp_path / "home"
-        session = home / ".pilot" / "sessions" / "pf-once"
-        session.mkdir(parents=True)
-        (session / "context-pct.json").write_text(json.dumps({"pct": 42.0, "context_window_size": 1_000_000}))
-        with (
-            patch.dict(os.environ, {"PILOT_SESSION_ID": "pf-once"}),
-            patch("spec_mode_guard.Path.home", return_value=home),
-        ):
-            first = g._opus_context_preflight()
-            second = g._opus_context_preflight()
-        assert first is not None
-        assert second is None  # once per session
-        assert (session / "preflight-context-warned").exists()

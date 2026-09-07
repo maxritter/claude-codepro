@@ -17,6 +17,7 @@ def _run_main(stdin_data: dict, session_dir: Path, awaiting_approval: bool = Fal
     with (
         patch("plan_mode_tracker._sessions_base", return_value=session_dir),
         patch("_lib.util._sessions_base", return_value=session_dir),
+        patch("native_plan_capture._sessions_base", return_value=session_dir),
         patch("plan_mode_tracker.resolve_session_id", return_value="test-session"),
         patch("plan_mode_tracker.read_hook_stdin", return_value=stdin_data),
         patch("plan_mode_tracker.spec_plan_awaiting_approval", return_value=awaiting_approval),
@@ -70,6 +71,20 @@ class TestSentinelTracking:
         }
         _run_main(stdin, tmp_path)
         assert not (tmp_path / "test-session" / "plan-mode-active").exists()
+
+    def test_unconfirmed_enter_does_not_create_an_active_leg(self, tmp_path):
+        for response in (None, "unknown response"):
+            _run_main({"tool_name": "EnterPlanMode", "tool_input": {}, "tool_response": response}, tmp_path)
+            assert not (tmp_path / "test-session" / "plan-mode-active").exists()
+
+    def test_enter_clears_a_stale_bypass_restore_marker(self, tmp_path):
+        marker = tmp_path / "test-session" / "bypass-restore-pending"
+        marker.parent.mkdir(parents=True)
+        marker.write_text("")
+
+        _run_main({"tool_name": "EnterPlanMode", "tool_input": {}, "permission_mode": "default"}, tmp_path)
+
+        assert not marker.exists()
 
     def test_pre_enter_plan_mode_records_permission_mode(self, tmp_path):
         """PreToolUse(EnterPlanMode) fires before the mode flips to plan, so
@@ -166,7 +181,7 @@ class TestSentinelTracking:
         code, _ = _run_main(stdin, tmp_path)
         assert code == 0
 
-    def test_exit_plan_mode_unlinks_sentinel_even_on_error_response(self, tmp_path):
+    def test_exit_plan_mode_keeps_sentinel_on_unconfirmed_error(self, tmp_path):
         sentinel = tmp_path / "test-session" / "plan-mode-active"
         sentinel.parent.mkdir(parents=True)
         sentinel.write_text("")
@@ -178,7 +193,22 @@ class TestSentinelTracking:
         }
         code, _ = _run_main(stdin, tmp_path)
         assert code == 0
-        assert not sentinel.exists(), "sentinel must survive a failed ExitPlanMode"
+        assert sentinel.exists(), "a failed ExitPlanMode does not prove plan mode ended"
+
+    def test_exit_plan_mode_clears_sentinel_when_runtime_confirms_mode_already_closed(self, tmp_path):
+        sentinel = tmp_path / "test-session" / "plan-mode-active"
+        sentinel.parent.mkdir(parents=True)
+        sentinel.write_text("")
+        code, _ = _run_main(
+            {
+                "tool_name": "ExitPlanMode",
+                "tool_input": {},
+                "tool_response": {"is_error": True, "message": "Not in plan mode"},
+            },
+            tmp_path,
+        )
+        assert code == 0
+        assert not sentinel.exists()
 
 
 class TestPreToolUseWarning:
@@ -312,12 +342,9 @@ class TestPlanningLegModelCheck:
         assert "claude-sonnet-5" in context
         assert "/model opusplan" in context
         assert "usage limit" in context.lower()
-        assert "/compact" in context
         assert "Manual" in context
-        # Cap applies even with the 1M entitlement on current CC versions
-        # (upstream regression) -- must not be scoped to non-entitled accounts.
-        assert "even with the Opus 1M entitlement" in context
-        assert "without 1M entitlement" not in context
+        assert "200K" not in context
+        assert "cause is not established" in context
         assert (session / "plan-model-warned").exists()
 
     def test_confirms_when_planning_leg_on_opus(self, tmp_path):

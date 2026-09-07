@@ -10,6 +10,18 @@
 
 version: 1
 entries:
+  - id: claude-display-patch
+    name: "patch-claude-code source (native display details)"
+    source_type: curl
+    source_url: https://github.com/a-connoisseur/patch-claude-code/archive/27ef91e5d7fdeeec52dba727f2d2796b5b0fcdb3.tar.gz
+    version: "commit-27ef91e"
+    commit: "27ef91e5d7fdeeec52dba727f2d2796b5b0fcdb3"
+    sha256: "9b5373a5b82e0b7fff161524ac15f2cf70c2fe6a6292a167664f151e803c414f"
+    # Build from reviewed source against the user's native Claude; never run
+    # upstream installers or download a prepatched Claude. Its frozen bun.lock
+    # pins node-lief 1.1.1; all dependency lifecycle scripts stay disabled.
+    last_audited: "2026-09-07"
+
   - id: nvm-curl
     name: nvm install.sh (v0.40.7)
     source_type: curl

@@ -14,6 +14,7 @@ PAUSE_SENTINELS = (
 # turns), consumed per honor on Codex (no stop_hook_active in its payload).
 # The skill clears it on resume.
 DISCUSSION_PAUSE = "spec-discussion-paused"
+NATIVE_SPEC_PLANNING = "native-spec-planning.json"
 
 STALE_SESSION_FILES = (
     "active_plan.json",
@@ -23,6 +24,7 @@ STALE_SESSION_FILES = (
     "plan-model-warned",
     "plan-model-confirmed",
     "preflight-context-warned",
+    NATIVE_SPEC_PLANNING,
     "spec-stop-guard",
     *PAUSE_SENTINELS,
     DISCUSSION_PAUSE,

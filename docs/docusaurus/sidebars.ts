@@ -21,6 +21,7 @@ const sidebars: SidebarsConfig = {
         "features/hooks",
         "features/rules",
         "features/context-optimization",
+        "features/knowledge",
         "features/team-memories",
       ],
     },
@@ -69,7 +70,6 @@ const sidebars: SidebarsConfig = {
       label: "Automation",
       collapsed: false,
       items: [
-        "features/bot",
         "features/remote-control",
       ],
     },

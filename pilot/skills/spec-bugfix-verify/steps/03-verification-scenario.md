@@ -6,7 +6,7 @@ Check whether the plan has a `## Verification Scenario` section (only present fo
 
 **If Verification Scenario exists:**
 
-**Resolve the driver:** first check whether the project's own rules (`.claude/rules/`, `CLAUDE.md`, `AGENTS.md`) name the tool that reaches its UI — a mobile WebView or native window has one the ladder below does not cover. Otherwise the 4-tier ladder: `mcp__claude-in-chrome__*` available → Chrome; else `mcp__plugin_chrome-devtools-mcp_chrome-devtools__*` → Chrome DevTools MCP; else playwright-cli (preferred CLI) or agent-browser (lightweight). See `browser-automation.md`.
+**Resolve the driver:** first check whether the project's own rules (`.claude/rules/`, `CLAUDE.md`, `AGENTS.md`) name the tool that reaches its UI — a mobile WebView or native window has one the ladder below does not cover. Otherwise use the available browser-control or Chrome DevTools tools according to their exposed schemas; fall back to installed playwright-cli or agent-browser when appropriate. Discover deferred tools using the current runtime's tool-discovery surface. See `browser-automation.md`.
 
 ```bash
 <!-- CC-ONLY -->
@@ -32,10 +32,10 @@ agent-browser --session "$AB_SESSION" open <url>
 4. **FAIL (attempt 1):** Analyze root cause, implement fix, re-run tests, re-execute scenario
 5. **FAIL (attempt 2):** Implement second fix, re-run tests, re-execute scenario
 <!-- CC-ONLY -->
-6. **FAIL after 2 attempts:** The bug is not fully fixed — route the loop-back through Step 7's iteration-cap check (read `Iterations:`; if `>= 3`, surface Continue/Pivot/Abandon to the user before incrementing), which sets `Status: PENDING`, increments `Iterations`, and re-invokes `Skill(skill='spec-implement', args='<plan-path>')`. Do not proceed to VERIFIED, and do not bypass the cap.
+6. **FAIL after 2 attempts:** The bug is not fully fixed — route the loop-back through Step 7's iteration-cap check (read `Iterations:`; if `>= 3`, surface Continue/Pivot/Abandon to the user before incrementing), which sets `Status: PENDING`, increments `Iterations`, and re-invokes `Skill(skill='spec-implement', args='<plan-path> $LANE_FLAG')`. Do not proceed to VERIFIED, and do not bypass the cap.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-6. **FAIL after 2 attempts:** The bug is not fully fixed — route the loop-back through Step 7's iteration-cap check (read `Iterations:`; if `>= 3`, present Continue/Pivot/Abandon to the user before incrementing), which sets `Status: PENDING`, increments `Iterations`, and continues with the `$spec-implement` skill instructions using arguments: `<plan-path>`. Do not proceed to VERIFIED, and do not bypass the cap.
+6. **FAIL after 2 attempts:** The bug is not fully fixed — route the loop-back through Step 7's iteration-cap check (read `Iterations:`; if `>= 3`, present Continue/Pivot/Abandon to the user before incrementing), which sets `Status: PENDING`, increments `Iterations`, and continues with the `$spec-implement` skill instructions using arguments: `<plan-path> $LANE_FLAG`. Do not proceed to VERIFIED, and do not bypass the cap.
 CODEX-END -->
 
 ```bash

@@ -47,7 +47,7 @@ Three failure modes are common enough to name, because each one *feels* reasonab
 
 ## Critical Constraints
 
-- **No plan file.** All state lives in this conversation. After compaction, re-read the summary and resume.
+- **No tracked spec plan file.** Preserve the current cause, evidence, changed files, active process handles, and next action in the conversation or session notes before compaction, then resume.
 - **`/fix` owns its isolation.** It parses the same branch flags `/spec` does, creates the worktree, and owns the merge-back — see *Branch & Lane Setup* below. Where Steps 2/6 branch on "worktree mode", that branch applies whenever a worktree is active, whether `/fix` created it or the session was already inside one.
 > **`$LANE_FLAG`** is `--lane <id>` when this run was dispatched as an orchestration lane, and **nothing at all** otherwise — the value the invocation parsed from its arguments. It keeps worktree and plan identity scoped to this lane; an unflagged call resolves a different identity and silently finds nothing (issue #174).
 
@@ -56,11 +56,11 @@ Three failure modes are common enough to name, because each one *feels* reasonab
 - **No approval mid-flow.** A single end-of-flow confirmation, and only when `PILOT_PLAN_APPROVAL_ENABLED` is enabled. It sits at 6.2, **ahead of** the commit and merge at 6.3 — one gate, placed in front of the step that cannot be undone. Do not add a second gate for the merge; move nothing behind it.
 - **Complex fixes stay in `/fix`.** Use a concise native plan, bounded subagents, additional regression seams, or broader verification when they materially help, while keeping every change traceable to the reported defect.
 <!-- CC-ONLY -->
-- **Use `AskUserQuestion` for user questions** — it renders a structured form; don't fall back to plain-text numbered questions.
+- **Use `AskUserQuestion` for user questions** — it renders a structured form; use a concise prose question when no permitted structured tool is available.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-- **Use the runtime's structured user-input tool when available**; otherwise present numbered options in prose, end the turn, and wait for the answer
-- **Browser tools for E2E verification:** Use playwright-cli or agent-browser (Claude Code Chrome and Chrome DevTools MCP are not available in Codex)
+- **Use the runtime's structured user-input tool when available and permitted for this question**; otherwise ask a concise question in prose and wait for required input
+- **Browser tools for E2E verification:** Use the browser or app tools exposed in this runtime, following the project's browser-automation rules. Do not infer tool availability from the agent name.
 - **The Codex plugin companion review is not available** — its broker is Claude-Code-only. The native `changes-review` custom agent still runs in Step 6.1 when the Changes Review toggle is enabled.
 CODEX-END -->
 
@@ -99,7 +99,7 @@ Pause only for a genuine blocker that cannot be resolved inside the workspace: m
 
 When the toggle is `"false"`, ask nothing and use `--worktree=no`.
 
-**For `--new-branch` or `--worktree=yes`,** read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/spec-branch-setup.md` and follow it with `<plan_slug>` = `<fix-slug>`, prefix `fix/`, and `<lane>` when one was supplied. Everything after this — the reproducing test included — is written inside the resulting checkout.
+**For `--new-branch` or `--worktree=yes`,** read `$HOME/.pilot/agents/spec-branch-setup.md` and follow it with `<plan_slug>` = `<fix-slug>`, prefix `fix/`, and `<lane>` when one was supplied. Everything after this — the reproducing test included — is written inside the resulting checkout.
 
 ⛔ **`--lane <id>` implies `--worktree=yes` and fails closed.** Reject `--lane` combined with `--worktree=no` or `--new-branch`, and abort rather than continuing if the worktree cannot be created. A lane that quietly lands in the coordinator's checkout races every sibling's edits.
 

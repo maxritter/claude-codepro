@@ -10,59 +10,20 @@ paths:
 
 ## TypeScript Development Standards
 
-**Standards:** Detect package manager | Strict types | No `any` | Self-documenting code
+### Toolchain
 
-### Package Manager - DETECT FIRST
+Use the project's declared package manager/version, lockfile, runtime, and package scripts. Check `packageManager` and repository instructions alongside `bun.lock`/`bun.lockb`, `pnpm-lock.yaml`, `yarn.lock`, or `package-lock.json`; multiple lockfiles may belong to separate workspaces. Do not mix managers or regenerate an unrelated workspace's lockfile.
 
-**Detect and use the project's existing package manager. Never mix.**
+Use the existing build, typecheck, lint, format, and test commands. Test-runner flags differ; do not assume Jest flags such as `--silent` or `--reporters=dot` work with every `npm test` script.
 
-- `bun.lockb` → **bun** | `pnpm-lock.yaml` → **pnpm** | `yarn.lock` → **yarn** | `package-lock.json` → **npm**
+### Types and behaviour
 
-No lock file? Check `packageManager` in `package.json`, or default to npm.
+- Preserve the project's TypeScript strictness and JavaScript compatibility. Do not change compiler settings, module format, or filenames incidentally.
+- Use explicit types where they clarify public contracts and inference for straightforward local code. Choose `interface` or `type` according to the existing design.
+- Prefer `unknown` with narrowing over unchecked values. Keep unavoidable `any` or assertions narrow and justified at interoperability boundaries; do not suppress errors merely to pass typechecking.
+- Validate untrusted runtime data; TypeScript declarations do not validate JSON or external input.
+- Handle promise failures and clean up resources/subscriptions. Preserve meaningful error context without swallowing failures or logging the same exception at every layer.
+- Follow configured import ordering, naming, and formatting. Use `node:` for Node built-ins when compatible with the target runtime; browser code must not acquire a Node-only dependency accidentally.
+- Add comments for non-obvious contracts or workarounds, not a restatement of every export.
 
-### Type Safety
-
-- **Explicit return types** on all exported functions
-- **Interfaces** for objects, **types** for unions
-- **Never use `any`** — use `unknown`, a specific type, or a generic instead
-
-### Code Style
-
-- Self-documenting code, minimize comments
-- One-line JSDoc for exports: `/** Calculate discounted price. */`
-- **Import order:** Node built-ins (`node:`) → External → Internal → Relative
-- **File names:** kebab-case (`user-service.ts`)
-
-### Common Patterns
-
-- Prefer `node:` prefix for built-ins: `import { readFile } from 'node:fs/promises'`
-- Use `const` assertions for literal types: `const ROLES = ['admin', 'user'] as const`
-- Don't swallow errors — log and re-throw
-
-### Testing - Minimal Output
-
-```bash
-npm test -- --silent         # Suppress console.log
-npm test -- --reporters=dot  # Minimal reporter
-npm test -- --bail           # Stop on first failure
-```
-
-### Verification Checklist
-
-Check `package.json` scripts first — projects often have custom configurations.
-
-- [ ] `tsc --noEmit` — no type errors
-- [ ] Lint clean (eslint/biome)
-- [ ] Tests pass
-- [ ] Explicit return types on exports
-- [ ] No `any` types
-- [ ] Correct lock file committed
-- [ ] File size within the limit (see `development-practices.md` → File size)
-
-### Quick Reference
-
-| Task | npm | yarn | pnpm | bun |
-|------|-----|------|------|-----|
-| Install | `npm install` | `yarn` | `pnpm install` | `bun install` |
-| Add pkg | `npm install pkg` | `yarn add pkg` | `pnpm add pkg` | `bun add pkg` |
-| Run script | `npm run x` | `yarn x` | `pnpm x` | `bun run x` |
+Run focused behavioural checks and the required project gates. Inspect dependency and lockfile changes for the intended scope; committing still requires authorization.

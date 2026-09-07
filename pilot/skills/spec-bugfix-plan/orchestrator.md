@@ -15,19 +15,23 @@ hooks:
 **Input:** Bug description (new) or plan path (continue unapproved)
 **Output:** Approved bugfix plan at `docs/plans/YYYY-MM-DD-<slug>.md` with `Type: Bugfix`
 <!-- CC-ONLY -->
-**Next:** On approval → `Skill(skill='spec-implement', args='<plan-path>')`
+**Next:** On approval → `Skill(skill='spec-implement', args='<plan-path> $LANE_FLAG')`
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-**Next:** On approval → continue immediately with the `$spec-implement` skill instructions using arguments: `<plan-path>`.
+**Next:** On approval → continue immediately with the `$spec-implement` skill instructions using arguments: `<plan-path> $LANE_FLAG`.
 CODEX-END -->
 
 **Note:** This skill is invoked when the user types `/spec "<bug description>"` — they chose the full spec workflow. For a bugfix workflow without a plan file, users invoke `/fix` directly (separate user-facing command). The two are distinct entry points — honour the user's choice.
 
 ---
 
+## Run identity on entry
+
+Parse the plan path or description separately from optional `--lane <id>` before status detection or file access. Resolve `LANE_ID` and `$LANE_FLAG` (`--lane <id>` or nothing) from these arguments at every phase entry, including verification loopbacks and resumes. Retain them with the plan identity across compaction and pass `<plan-path> $LANE_FLAG` to every subsequent phase. Shell variables from another phase do not survive. A lane argument must never become part of the plan filename or silently disappear.
+
 ## Resuming an Unapproved Plan
 
-When the argument ends with `.md`: read the plan, check `Status:` and `Approved:`. **Step 0 (toggle read + the 0.1a plan-mode/Fable sentinel that the later steps depend on) always runs first**, then resume from wherever planning left off:
+When the argument ends with `.md`: read the plan, check `Status:` and `Approved:`. **Step 0 (runtime and workflow settings) always runs first**, then resume from wherever planning left off:
 
 - No investigation yet → Step 2 (Investigation)
 - Has investigation, no tasks → Step 3 (Plan the Fix)
@@ -50,31 +54,27 @@ If Step 2 is incomplete, you cannot propose fixes. Symptom fixes are failure. Re
 
 ## Critical Constraints
 
-- **NEVER write production code during planning** — planning and implementation are separate phases. The ONE exception: temporary boundary instrumentation during Step 2 investigation (log/print lines marked `SPEC-DEBUG:`) is allowed to trace the root cause; it must be removed before the plan is written (and Step 1.5 of verification greps for the marker to catch leftovers).
+- **NEVER write production code during planning** — planning and implementation are separate phases. When the runtime permits writes, temporary boundary instrumentation during Step 2 investigation (log/print lines marked `SPEC-DEBUG:`) is allowed to trace the root cause; it must be removed before the plan is written (and Step 1.5 of verification greps for the marker to catch leftovers).
 - **NEVER assume — verify by reading files.** Trace the bug to actual file:line.
 - **Lean ≠ skipping steps.** Small bugs get short tasks, not fewer tasks. The three-task structure (Reproducing Test → Fix → Quality Gate) is non-negotiable.
 - **Plan file is source of truth** — survives across auto-compaction cycles
-- **⛔ No workflow narration** — never output text describing what step you are about to execute ("I'm investigating root cause…", "The harness injected a reminder…"). Just do the work. The user sees tool calls and the final plan, not a running commentary.
+- **Keep progress updates brief and useful.** Report evidence, decisions, and blockers during longer investigations; omit routine step narration.
 <!-- CC-ONLY -->
-- **Use the `AskUserQuestion` tool for clarifications** — it renders a structured form; don't fall back to plain-text numbered questions
+- **Use the `AskUserQuestion` tool for clarifications** — it renders a structured form; use a concise prose question when no permitted structured tool is available
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-- **Use the runtime's structured user-input tool when available**; otherwise present numbered clarification options in prose and wait for the answer
+- **Use the runtime's structured user-input tool when available and permitted for this question**; otherwise ask a concise clarification question in prose and wait for required input
 CODEX-END -->
 - **If `PILOT_PLAN_QUESTIONS_ENABLED` is `"false"` (from Step 0),** skip all `AskUserQuestion` calls (Steps 2.1, 2.5 escalation, 3 approach selection). Make reasonable default assumptions (including selecting the recommended fix approach) and document them in the plan. Continue autonomously.
 
-<!-- CODEX-START
+### Investigation depth
 
-### Codex Bugfix Planning Speed Contract
+Investigate until the root-cause claim, reproducing test plan, and proposed source-level fix are supported by evidence. Read named locations directly; use intent search or call-graph tools for unresolved locations or cross-component relationships. Reuse findings and stop broad traversal once it no longer changes the fix.
 
-For Codex, bugfix quality means a traced root cause, a reproducing RED test plan, and a source-level fix strategy. It does not mean exhaustive graph traversal.
+Preserve the full requested bug scope across compaction. Do not force a confidence level, finalize an unsupported cause, or trim requirements to meet a context percentage or tool-call quota. If progress stops, identify the specific missing signal and ask only when it cannot be obtained from the available environment.
 
-- Reach the first complete bugfix plan before context reaches 35% unless the bug is not reproducible.
-- **Planning context ceiling — total planning must not exceed ~55% of the context window (hard cap 60%).** The 35% first-draft target leaves headroom for the RED test plan and self-review, NOT deeper traversal. On the ~256K Codex window that is ≈140K tokens. If context approaches ~55% before approval, stop investigating and finalize the bugfix plan with the traced root cause, RED test name, and fix file you already have — the fix itself happens during implementation, which needs the remaining budget. Planning that eats >60% has already failed.
-- Use a bounded investigation: one reproduction attempt path, at most one CodeGraph orientation call when the entry point is unknown, one Semble intent search, then targeted reads of the suspected files. Skip CodeGraph for docs, rules, markdown, config, UI copy, reviews of a known diff, or named paths.
-- Run callers/callees/impact only after a likely root-cause function is known and the bug spans more than one component.
-- Ask at most one bundled clarification prompt before the approval prompt. If the missing signal blocks reproduction, ask; otherwise record a Medium-confidence root cause and a verification task.
-- Stop investigating once you can state `Root Cause: file:line — function() does X but should do Y`, name the RED test, and name the source file the fix must touch.
-CODEX-END -->
+Follow the registered Pilot workflow and the current runtime's actual permissions; a skill does not override native read-only restrictions.
 
-> **NOTE: During `/spec`, use the structured workflow below — not CC's native plan mode.**
+<!-- CC-ONLY -->
+Automated Claude planning uses the native-plan bridge described in Step 0.
+<!-- /CC-ONLY -->

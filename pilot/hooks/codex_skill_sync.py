@@ -13,7 +13,7 @@ the package boundary. It replicates the same transformations as
   3. Unwrap ``<!-- CODEX-START ... CODEX-END -->`` blocks
   4. Transform ``Skill()`` calls to Codex skill-instruction handoffs
   5. Replace ``/skill-name`` with ``$skill-name``
-  6. Replace ``AskUserQuestion`` with Codex alternative note
+  6. Adapt questions to native structured tools with a prose fallback
   7. Prepend Codex YAML frontmatter
 """
 
@@ -109,11 +109,6 @@ _PILOT_SKILL_NAMES = frozenset(
         "benchmark",
         "fix",
         "build",
-        "bot-boot",
-        "bot-channel-task",
-        "bot-defaults",
-        "bot-heartbeat",
-        "bot-jobs",
     }
 )
 
@@ -367,7 +362,8 @@ def _adapt(content: str) -> str:
     adapted = _SKILL_CALL_RE.sub(_replace_skill_call, adapted)
     adapted = _ASK_USER_QUESTION_BLOCK_RE.sub(
         lambda m: (
-            f"{m.group('indent')}Present numbered options in plain text using this prompt and option list:\n"
+            f"{m.group('indent')}Use a structured question if the runtime exposes and permits one for this purpose; "
+            "otherwise ask in plain text. Preserve this prompt and its choices:\n"
             f"{m.group('body').rstrip()}"
         ),
         adapted,
@@ -375,7 +371,7 @@ def _adapt(content: str) -> str:
     adapted = _SKILL_INVOCATION_RE.sub(lambda m: "$" + m.group(1), adapted)
     adapted = adapted.replace(
         "AskUserQuestion(multiSelect: true)",
-        "a structured multi-select question when the runtime exposes one, otherwise numbered options",
+        "a structured multi-select question when the runtime exposes and permits one, otherwise a concise question in prose",
     )
     for old, new in (
         ("`AskUserQuestion` tool", "Claude structured-question tool"),

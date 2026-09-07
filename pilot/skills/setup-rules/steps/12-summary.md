@@ -16,4 +16,4 @@ Report:
 - Cross-check: source coverage, rule-index parity, and issues fixed (if any)
 - Semble: available / not available
 
-Then offer: "Share via Share dashboard" (direct user to Console Share page at #/share) | "Discover more standards" | "Create skills with /create-skill" | "Done"
+End with the verified result and any material unresolved conflict or installation gap. Offer further workflow choices only when the user asked for them.

@@ -16,6 +16,10 @@ Choose the verification topology autonomously and sparingly. Keep verification i
 
 ---
 
+## Run identity on entry
+
+Parse the plan path or description separately from optional `--lane <id>` before status detection or file access. Resolve `LANE_ID` and `$LANE_FLAG` (`--lane <id>` or nothing) from these arguments at every phase entry, including verification loopbacks and resumes. Retain them with the plan identity across compaction and pass `<plan-path> $LANE_FLAG` to every subsequent phase. Shell variables from another phase do not survive. A lane argument must never become part of the plan filename or silently disappear.
+
 ## Critical Constraints
 
 - **No delegation permission gate** — apply the bounded delegation criteria yourself and continue automatically; coordinate ownership and consolidate any delegated evidence into one verdict.

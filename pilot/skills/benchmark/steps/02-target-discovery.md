@@ -40,7 +40,7 @@ ls -1 pilot/rules/ .claude/rules/ 2>/dev/null
 CODEX-END -->
 ```
 
-Skip Pilot internals like `bot-*` unless the user specifically asks for them.
+Skip internal workflow phases unless the user specifically asks for them.
 
 ## Emit the target block
 

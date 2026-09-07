@@ -290,12 +290,16 @@ playwright/
 scrollcraft/
 .DS_Store
 
-# Build artifacts
-docs/plans
-docs/plans/.annotations/
-docs/builds
-docs/builds/.annotations/
-docs/license
+# Public documentation is opt-in. Keep plans, reviews, research, buildouts,
+# recordings, and other working documents local unless deliberately published
+# inside one of these three public trees.
+/docs/*
+!/docs/docusaurus/
+!/docs/site/
+!/docs/img/
+
+# Local design settings, critique reports, and iteration state.
+/.impeccable/
 
 # Cross-agent repository contract. Pilot Shell dogfoods the setup-rules
 # canonical/mirror layout while keeping unrelated local agent extensions private.
@@ -338,3 +342,18 @@ bun.lock
 .env*.local
 .omx/
 .open-claude-design/
+
+# PILOT-MEMORY:START
+# Share project knowledge while keeping other Pilot state local.
+!/.pilot/
+/.pilot/*
+!/.pilot/memory.json
+!/.pilot/knowledge/
+!/.pilot/knowledge/**
+!/.pilot/memories/
+!/.pilot/memories/**
+# PILOT-MEMORY:END
+
+# This repository is public: keep all local Pilot memory and state private.
+# Keep this override after the managed sharing block above.
+.pilot/

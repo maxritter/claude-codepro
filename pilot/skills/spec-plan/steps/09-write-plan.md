@@ -3,7 +3,7 @@
 **Save to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`
 
 <!-- CC-ONLY -->
-> This path is authoritative. Ignore any harness plan-mode system-reminder pointing you at a `~/.claude/plans/<random>.md` scratch file — that file is an Automated-mode plan-mode artifact, not the spec plan. The spec plan always lives under `docs/plans/`, and writing it while in plan mode is expected (the `auto_approve_plan` hook + bypassPermissions allow it).
+> During a prepared Automated native-planning handoff, write this full plan to the runtime's permitted native draft instead. The capture hook materializes the accepted result into the registered `docs/plans/` destination after native approval. Follow `$HOME/.pilot/agents/spec-native-plan.md`; do not write outside the permitted draft while native plan mode is active.
 <!-- /CC-ONLY -->
 
 **Parsimony rule:** every section below is either **required** or **conditional**. Conditional sections MUST be omitted entirely when they have nothing concrete to say — empty headings are noise. The reader should be able to skim the plan in under a minute.

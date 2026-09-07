@@ -9,6 +9,7 @@ Requires: rtk >= 0.23.0
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -66,6 +67,22 @@ def _rewrite_command(cmd: str) -> str | None:
         return None
 
 
+def _hook_platform(hook_data: dict) -> str | None:
+    """Use the registration marker, with native Codex evidence for older registrations."""
+    platform = os.environ.get("CLAUDE_PROJECT_PLATFORM") or hook_data.get("platform")
+    if platform in ("claude", "codex"):
+        return platform
+    # turn_id is a Codex-specific hook field. Older sessions may instead expose
+    # their native id through the environment; match it, don't trust inheritance.
+    if isinstance(hook_data.get("turn_id"), str) and hook_data["turn_id"]:
+        return "codex"
+    session_id = hook_data.get("session_id")
+    if isinstance(session_id, str) and session_id:
+        if any(session_id == os.environ.get(name) for name in ("CODEX_THREAD_ID", "CODEX_SESSION_ID")):
+            return "codex"
+    return None
+
+
 def run_tool_token_saver() -> int:
     """Rewrite Bash commands via rtk for token savings."""
     try:
@@ -75,6 +92,12 @@ def run_tool_token_saver() -> int:
 
     cmd = hook_data.get("tool_input", {}).get("command")
     if not cmd:
+        return 0
+
+    platform = _hook_platform(hook_data)
+    if platform is None:
+        # An ambiguous host must keep the original command and its permission
+        # flow, not receive a guessed response that fails or auto-approves it.
         return 0
 
     if not shutil.which("rtk"):
@@ -91,17 +114,16 @@ def run_tool_token_saver() -> int:
     updated_input = dict(hook_data.get("tool_input", {}))
     updated_input["command"] = rewritten
 
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
-                    "updatedInput": updated_input,
-                }
-            }
-        )
-    )
+    hook_output = {
+        "hookEventName": "PreToolUse",
+        "updatedInput": updated_input,
+    }
+    if platform == "codex":
+        # Codex requires allow to apply updatedInput; this does not bypass its
+        # native sandbox/approval policy. Claude applies updatedInput independently,
+        # and allow there would skip the user's normal permission prompt.
+        hook_output["permissionDecision"] = "allow"
+    print(json.dumps({"hookSpecificOutput": hook_output}))
     return 0
 
 

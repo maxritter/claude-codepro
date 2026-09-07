@@ -7,7 +7,6 @@ from pathlib import Path
 
 HOOKS_DIR = Path(__file__).resolve().parent.parent
 ESSENTIAL_BLOCKERS = {
-    "auto_approve_plan.py": "preserves the explicit plan-approval boundary",
     "license_prompt_guard.py": "rejects only explicit unavailable Pilot workflow invocations",
     "repo_agent_sync.py": "prevents edits to the generated CLAUDE.md side before mutation",
     "spec_mode_guard.py": "rejects incompatible entry into an explicitly invoked Pilot workflow",

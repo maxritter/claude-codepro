@@ -680,7 +680,7 @@ def run_tdd_enforcer() -> int:
 
         module_name = Path(file_path).stem
         return warn(
-            f"No test covers '{module_name}' module behaviour",
+            f"No nearby test identified for '{module_name}' module",
             "Consider whether existing tests cover this behaviour. "
             "If not, add a test for the new behaviour — not necessarily a new file. "
             "See pilot/rules/testing.md § Test Parsimony.",
@@ -694,7 +694,7 @@ def run_tdd_enforcer() -> int:
             return 0
 
         return warn(
-            "No test covers this module's behaviour",
+            "No nearby test identified for this module",
             "Consider whether existing tests cover this behaviour. "
             "If not, add a test for the new behaviour — not necessarily a new file. "
             "See pilot/rules/testing.md § Test Parsimony.",
@@ -705,7 +705,7 @@ def run_tdd_enforcer() -> int:
             return 0
 
         return warn(
-            "No test covers this module's behaviour",
+            "No nearby test identified for this module",
             "Consider whether existing tests cover this behaviour. "
             "If not, add a test for the new behaviour — not necessarily a new file. "
             "See pilot/rules/testing.md § Test Parsimony.",
@@ -727,7 +727,7 @@ def run_tdd_enforcer() -> int:
             return 0
 
         return warn(
-            "No test covers this module's behaviour",
+            "No nearby test identified for this module",
             "Consider whether existing tests cover this behaviour. "
             "If not, add a test for the new behaviour — not necessarily a new file. "
             "See pilot/rules/testing.md § Test Parsimony.",

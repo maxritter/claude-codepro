@@ -5,57 +5,30 @@ paths:
 
 ## Python Development Standards
 
-**Standards:** Always use uv | pytest for tests | ruff for quality | Self-documenting code
+### Environment and tools
 
-### Package Management - UV ONLY
+Follow the project's declared Python versions, environment manager, lockfile, and scripts. Prefer `uv` for Pilot's own Python work and new projects without an existing choice; do not migrate a working Poetry, pip-tools, or other managed environment incidentally.
 
-**Use `uv` for all Python operations, not `pip` directly** — `pip` bypasses uv's environment and lockfile management, desyncing the project.
+For a uv-managed project, `uv add <package>` updates declared dependencies and the lockfile; `uv pip install` changes the environment without declaring a project dependency. Use the appropriate operation for the task.
 
-```bash
-uv pip install package-name
-uv run python script.py
-uv run pytest
-```
-
-### Testing & Quality
-
-**Use minimal output flags to avoid context bloat.**
+Typical commands, when configured:
 
 ```bash
-uv run pytest -q                                    # Quiet mode (preferred)
-uv run pytest -q --cov=src                         # Coverage report (gate is per-critical-path; see testing.md)
-# AVOID -v, -vv, -s unless actively debugging
-
-ruff format .                                       # Format
-ruff check . --fix                                  # Lint
-basedpyright src                                    # Type check (adapt to your source dirs)
+uv run pytest -q
+uv run ruff check .
+uv run ruff format --check .
+uv run basedpyright
 ```
 
-### Code Style
+Read configuration before assuming a source directory, type checker, pytest markers, coverage plugin, or CLI option. Retain enough failure output to diagnose errors. Scope automatic fixes/formatting to authorized changes.
 
-- **Docstrings:** One-line for most functions. Multi-line only for complex logic. Skip when name is self-explanatory.
-- **Type hints:** Required on public functions. Use modern syntax: `list[int]`, `Item | None` (not `List`, `Optional`).
-- **Imports:** Standard → Third-party → Local. Ruff auto-sorts.
-- **Comments:** Only for complex algorithms, non-obvious logic, or workarounds.
+### Implementation
 
-### Common Patterns
+- Use type hints for public interfaces and non-obvious contracts, consistent with project conventions and supported Python syntax.
+- Follow configured import ordering and formatting.
+- Document behaviour, invariants, or workarounds the signature does not explain; avoid boilerplate docstrings.
+- Catch specific exceptions when recovery is possible. Preserve useful failure context; avoid swallowing failures or logging and re-raising at every layer.
+- Use context managers for owned resources and existing path-handling conventions.
+- Keep mutable defaults and shared test state from leaking between calls or tests.
 
-- **No bare `except`:** Catch specific exceptions, log, and re-raise
-- **Context managers:** `with open(path) as f:` for resources
-- **Pathlib over os.path:** `Path(__file__).parent / "config.yaml"`
-
-### Project Configuration
-
-- Python 3.12+ (`requires-python = ">=3.12"`)
-- Dependencies in `pyproject.toml`
-- Use `@pytest.mark.unit` and `@pytest.mark.integration` markers
-
-### Verification Checklist
-
-- [ ] `uv run pytest` — tests pass
-- [ ] `ruff format .` — formatted
-- [ ] `ruff check .` — clean
-- [ ] `basedpyright src` — clean (adapt to your source dirs)
-- [ ] Critical-path coverage adequate (see testing.md "Test Strategy & Coverage")
-- [ ] No unused imports
-- [ ] File size within the limit (see `development-practices.md` → File size)
+Run the configured focused checks and required suite. Cover changed behaviour and relevant failure paths as described in `testing.md`; do not add numeric file-size or coverage gates from this generic rule.

@@ -23,50 +23,34 @@ paths:
 
 # Backend Standards
 
-## API Design
+## API contracts
 
-- **RESTful:** Resource-based URLs (`GET /users`, `POST /users`, `PUT /users/{id}`). Plural nouns, limit nesting to 2-3 levels.
-- **Query params:** Filtering (`?status=active`), sorting (`?sort=created_at`), pagination (`?page=2&limit=50`)
-- **Status codes:** `200` OK, `201` Created, `204` No Content | `400`/`401`/`403`/`404`/`409`/`422` | `500`/`503`
-- **Response structure:** `{ "data": {...} }` for success, `{ "error": { "code": "...", "message": "..." } }` for errors
-- **Validation:** At API boundary. Never expose internal errors (stack traces, DB errors).
+Follow the existing protocol, URL conventions, response envelopes, pagination, and error format. Do not introduce REST conventions into another protocol or change a public response shape as cleanup.
 
-## Models
+Validate untrusted input and authorize each operation at the appropriate boundary. Use protocol-appropriate status/error codes. Keep stack traces, database internals, secrets, and sensitive records out of client errors and logs.
 
-**Models define data structure and integrity. No business logic, no API calls.**
+## Data integrity
 
-- **Naming:** Models: singular PascalCase (`User`). Tables: plural snake_case (`users`).
-- **Required:** `created_at`/`updated_at` timestamps, explicit primary keys
-- **Integrity at DB level:** `unique`, `nullable=False`, `CheckConstraint`, `ForeignKey` with explicit `ondelete`
-- **Data types:** Money → DECIMAL not FLOAT. Timestamps → TIMESTAMP not VARCHAR. JSON → JSONB not TEXT. UUIDs → UUID not VARCHAR(36).
-- **Indexes:** On foreign keys and WHERE/JOIN/ORDER BY columns. Don't over-index.
-- **Scope:** Fields, relationships, properties, validation. NOT business logic, API calls, calculations.
+Model responsibilities and naming follow the project's architecture; domain models may legitimately own business invariants. Use database constraints for integrity that must survive concurrent or external writes.
+
+Choose native types supported by the actual database. Represent money with exact decimals or documented integer minor units; preserve timestamp/timezone semantics. Add timestamps and identifiers when the domain or established schema requires them, not mechanically to every table.
 
 ## Queries
 
-- **⛔ SQL injection prevention:** NEVER concatenate user input. Always parameterized queries or ORM methods.
-- **N+1 prevention:** `joinedload` for one-to-one, `selectinload` for large collections
-- **Performance:** Select only required columns, filter in DB not app, avoid leading wildcards
-- **Timeouts:** Simple 1-2s, reports 10-30s, background 60s+
-- **Transactions:** For multiple related writes and read-then-write (`FOR UPDATE`)
+- Parameterize untrusted values. Use allowlists or safe query-builder facilities for identifiers and sort expressions that cannot be bound as values.
+- Inspect generated queries and query plans for N+1 behaviour, excessive reads, and index needs. Choose loading strategies for the ORM and workload actually in use.
+- Design indexes around measured filters, joins, ordering, write cost, and database behaviour; not every foreign key or column needs a new index.
+- Use transactions for atomic groups of writes and appropriate concurrency control for read-modify-write invariants. A transaction alone does not prevent every race.
+- Choose timeouts, cancellation, pagination, and work limits for the request's latency and resource budget. Add caching only with a clear invalidation and isolation strategy.
 
 ## Migrations
 
-- **Reversible:** Every migration MUST have a working rollback
-- **One change per migration.** Never modify deployed migrations.
-- **Naming:** Timestamps + descriptive: `20241118120000_add_email_to_users.py`
-- **NOT NULL columns:** Always specify `server_default`
-- **Removing columns:** Multi-step — stop using it in code first, then remove
-- **Indexes:** Concurrent creation on large tables
-- **Data migrations:** Separate from schema changes, batch process, make idempotent
-- **Zero-downtime:** Migration must work with currently deployed code
+Treat deployed migrations as immutable. Follow the project's migration tool, naming, transactional, and rollout conventions.
 
-## Checklist
+Plan compatibility with the code that will run during the rollout. For required columns on populated tables, use a suitable backfill/default/constraint sequence; do not invent a meaningless default solely to satisfy NOT NULL. Remove consumers before dropping data they still require.
 
-- [ ] REST principles, correct status codes
-- [ ] All user input parameterized
-- [ ] Models: timestamps, constraints, appropriate types
-- [ ] No N+1 queries, only required columns
-- [ ] Migrations: reversible, one change each, backwards compatible
-- [ ] Performance: hot-path results cached, no redundant I/O per request, heavy computations async
-- [ ] Tested: success and error cases
+Use online or concurrent schema operations only when supported by the database and deployment environment. Batch large backfills and make retry behaviour explicit.
+
+Document a realistic recovery path: rollback when safe and supported, otherwise roll-forward or restoration from a verified backup. A destructive migration cannot honestly promise to recover deleted data from a schema-only downgrade. Applying migrations to a live database requires the relevant authorization.
+
+Exercise important success, authorization, error, integrity, and migration cases using the actual database semantics where doubles are insufficient.

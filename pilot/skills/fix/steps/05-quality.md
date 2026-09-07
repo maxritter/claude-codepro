@@ -6,7 +6,7 @@ Automated checks — the last green-bar gate before finalise.
 
 ```bash
 # Python project example
-ruff check . --fix && ruff format . && basedpyright <src> 2>&1 | tail -5
+ruff check <changed-python-paths> && ruff format --check <changed-python-paths> && basedpyright <src>
 # TypeScript project example
 bun run typecheck && bun run lint
 ```
@@ -29,7 +29,7 @@ Zero failures. If anything broke that's not in the immediate neighbourhood of yo
 
 ### 5.3 Auto-fix re-run
 
-If lint/format/types auto-modified files in 5.1, re-run the suite to confirm those auto-fixes didn't break anything. (This is the only reason 5.2 might run twice.)
+Step 5.2 already follows the lint/type/build work from 5.1. Re-run affected checks only if code or other check inputs changed after that successful suite. Apply formatter fixes only to this repair's own changes.
 
 ### 5.4 Least-that-works check
 

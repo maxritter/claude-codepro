@@ -76,6 +76,15 @@ class TestWebToolNudges:
         assert _is_suppressed(output)
         assert not _is_denied(output)
 
+    def test_web_advice_is_once_per_tool_and_does_not_invent_a_tool_id(self):
+        _, first = _run_with_input("WebSearch", {"query": "official API documentation"})
+        _, second = _run_with_input("WebSearch", {"query": "official release notes"})
+        assert _has_warning_context(first)
+        assert "mcp__plugin_" not in first
+        assert second == ""
+        _, fetch = _run_with_input("WebFetch", {"url": "https://example.com"})
+        assert _has_warning_context(fetch)
+
     @pytest.mark.parametrize(
         "url",
         [
@@ -421,6 +430,11 @@ def _nudge_text(output: str) -> str:
     return data.get("hookSpecificOutput", {}).get("additionalContext", "")
 
 
+@pytest.fixture(autouse=True)
+def isolate_hook_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+
 @pytest.fixture
 def fresh_throttle(tmp_path, monkeypatch):
     """Redirect the throttle sentinel to a per-test file so each test starts fresh.
@@ -555,46 +569,23 @@ class TestSearchNudgeBashFdAg:
 
 
 @pytest.mark.usefixtures("fresh_throttle")
-class TestSearchNudgeBuiltinTools:
-    """Built-in Grep / Glob tools."""
-
-    def test_nudges_grep_tool_call(self):
-        code, output = _run_with_input("Grep", {"pattern": "foo", "path": "./src"})
-        assert code == 0
-        assert _has_nudge(output)
-        text = _nudge_text(output)
-        assert "codegraph_explore" in text
-
-    def test_nudges_grep_no_path(self):
-        code, output = _run_with_input("Grep", {"pattern": "foo"})
-        assert code == 0
-        assert _has_nudge(output)
-
-    def test_nudges_glob_tool_call(self):
-        code, output = _run_with_input("Glob", {"pattern": "**/*.py"})
-        assert code == 0
-        assert _has_nudge(output)
-        assert "codegraph_explore" in _nudge_text(output)
-
-
-@pytest.mark.usefixtures("fresh_throttle")
 class TestSearchNudgeNegatives:
     """Cases that must NOT produce a nudge."""
 
-    def test_no_nudge_grep_single_file(self):
+    def test_native_read_preference_grep_single_file(self):
         code, output = _run_with_input("Bash", {"command": "grep ERROR /var/log/app.log"})
         assert code == 0
-        assert not _has_nudge(output)
+        assert "separate native tool calls" in _nudge_text(output)
 
-    def test_no_nudge_grep_n_single_file(self):
+    def test_native_read_preference_grep_n_single_file(self):
         code, output = _run_with_input("Bash", {"command": "grep -n pattern src/file.py"})
         assert code == 0
-        assert not _has_nudge(output)
+        assert "separate native tool calls" in _nudge_text(output)
 
-    def test_no_nudge_rg_single_file(self):
+    def test_native_read_preference_rg_single_file(self):
         code, output = _run_with_input("Bash", {"command": "rg pattern src/main.ts"})
         assert code == 0
-        assert not _has_nudge(output)
+        assert "separate native tool calls" in _nudge_text(output)
 
     def test_no_nudge_git_grep(self):
         code, output = _run_with_input("Bash", {"command": "git grep 'foo'"})
@@ -611,10 +602,10 @@ class TestSearchNudgeNegatives:
         assert code == 0
         assert not _has_nudge(output)
 
-    def test_no_nudge_cat_pipe_grep(self):
+    def test_native_read_preference_cat_pipe_grep(self):
         code, output = _run_with_input("Bash", {"command": "cat foo.log | grep WARN"})
         assert code == 0
-        assert not _has_nudge(output)
+        assert "separate native tool calls" in _nudge_text(output)
 
     def test_no_nudge_echo_pipe_grep(self):
         code, output = _run_with_input("Bash", {"command": "echo $PATH | grep node"})
@@ -668,10 +659,10 @@ class TestThrottleSentinelPath:
 class TestSearchNudgeThrottle:
     @pytest.mark.usefixtures("fresh_throttle")
     def test_throttle_grep_only_first_call_nudges(self):
-        code1, out1 = _run_with_input("Grep", {"pattern": "foo"})
+        code1, out1 = _run_with_input("Bash", {"command": "grep -r foo ."})
         assert code1 == 0
         assert _has_nudge(out1)
-        code2, out2 = _run_with_input("Grep", {"pattern": "bar"})
+        code2, out2 = _run_with_input("Bash", {"command": "grep -r bar ."})
         assert code2 == 0
         assert not _has_nudge(out2)
 
@@ -684,24 +675,24 @@ class TestSearchNudgeThrottle:
         assert _has_nudge(out2)
 
     @pytest.mark.usefixtures("fresh_throttle")
-    def test_throttle_glob_separate_from_grep(self):
-        _, out1 = _run_with_input("Grep", {"pattern": "foo"})
+    def test_throttle_find_separate_from_grep(self):
+        _, out1 = _run_with_input("Bash", {"command": "grep -r foo ."})
         assert _has_nudge(out1)
-        _, out2 = _run_with_input("Glob", {"pattern": "**/*.py"})
+        _, out2 = _run_with_input("Bash", {"command": "find src -name '*.py'"})
         assert _has_nudge(out2)
 
     def test_throttle_corrupt_sentinel_file(self, fresh_throttle):
         # Pre-write malformed JSON; throttle should treat as never-sent.
         fresh_throttle.parent.mkdir(parents=True, exist_ok=True)
         fresh_throttle.write_text("not json {{{")
-        code, output = _run_with_input("Grep", {"pattern": "foo"})
+        code, output = _run_with_input("Bash", {"command": "grep -r foo ."})
         assert code == 0
         assert _has_nudge(output)
 
     @pytest.mark.usefixtures("fresh_throttle")
     def test_throttle_no_session_id(self, monkeypatch):
         monkeypatch.delenv("PILOT_SESSION_ID", raising=False)
-        code, output = _run_with_input("Grep", {"pattern": "foo"})
+        code, output = _run_with_input("Bash", {"command": "grep -r foo ."})
         assert code == 0
         # With sentinel monkeypatched the env var isn't even read, but ensure no crash.
         assert _has_nudge(output)
@@ -797,13 +788,14 @@ class TestShellFileEditNudge:
         assert not _is_denied(output), command
         assert _has_edit_tool_nudge(output), command
 
-    def test_reminder_is_not_throttled(self, tmp_path):
-        """Unlike the search nudges, every shell edit gets the reminder."""
+    def test_reminder_is_once_per_session(self, tmp_path):
+        """A generic editing preference does not need repeating on every edit."""
         with patch("tool_redirect._throttle_sentinel_path", return_value=tmp_path / "nudge.json"):
-            for _ in range(2):
-                code, output = _run_with_input("Bash", {"command": "sed -i 's/a/b/' src/app.py"})
-                assert code == 0
-                assert _has_edit_tool_nudge(output)
+            code, first = _run_with_input("Bash", {"command": "sed -i 's/a/b/' src/app.py"})
+            assert code == 0
+            assert _has_edit_tool_nudge(first)
+            _, second = _run_with_input("Bash", {"command": "sed -i 's/b/c/' src/app.py"})
+            assert second == ""
 
     @pytest.mark.parametrize(
         "command",
@@ -839,3 +831,67 @@ class TestShellFileEditNudge:
             code, output = _run_with_input("Bash", {"command": "grep -rn foo . > matches.txt"})
         assert code == 0
         assert _has_edit_tool_nudge(output)
+
+
+class TestNativeFileReadPreference:
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "cat src/index.css",
+            "cat src/pages/Index.tsx src/components/Header.tsx src/components/Footer.tsx",
+            "cat app/src/lib/db-api.ts",
+            "sed -n 36,62p docs/db-api-findings.md; echo '===== vite relay'; grep -n relay app/vite.config.ts | head -30",
+            "sed -n '85,150p' app/vite.config.ts; curl -s https://example.com; sed -n '760,800p' app/src/lib/db-api.ts",
+            "head -30 'docs/my notes.md'",
+            "tail -40 src/main.ts",
+            "grep -n 'const UA' app/vite.config.ts",
+            "rg -n 'messages' app/src/lib/db-api.ts",
+            "rtk read app/src/lib/db-api.ts",
+            "rtk proxy sed -n '1,20p' app/vite.config.ts",
+        ],
+    )
+    def test_each_file_inspection_gets_a_private_native_tool_reminder(self, command: str) -> None:
+        code, first = _run_with_input("Bash", {"command": command})
+        assert code == 0
+        context = json.loads(first)["hookSpecificOutput"]["additionalContext"]
+        assert "Read" in context and "Grep" in context and "Glob" in context
+        assert "separate native tool calls" in context
+        assert "echo" in context
+        assert "permissionDecision" not in json.loads(first)["hookSpecificOutput"]
+        assert _is_suppressed(first)
+        _, second = _run_with_input("Bash", {"command": command})
+        assert second == first
+
+    @pytest.mark.parametrize(
+        "tool,arguments",
+        [
+            ("Read", {"file_path": "app/vite.config.ts", "offset": 85, "limit": 65}),
+            ("Grep", {"pattern": "relay", "path": "app/vite.config.ts"}),
+            ("Glob", {"pattern": "app/src/**/*.ts"}),
+        ],
+    )
+    def test_native_file_tools_are_silent(self, tool: str, arguments: dict) -> None:
+        assert _run_with_input(tool, arguments) == (0, "")
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "curl -s https://example.com | grep error",
+            "git diff --stat",
+            "git log -5 | head -20",
+            "bun test 2>&1 | tail -30",
+            "tail -f /tmp/service.log",
+            "cat /dev/null",
+            "cat <<'EOF'\nrequest body\nEOF",
+            'python3 -c \'import json; print(json.load(open("package.json"))["version"])\'',
+        ],
+    )
+    def test_shell_processing_and_live_streams_are_not_file_read_nudges(self, command: str) -> None:
+        _, output = _run_with_input("Bash", {"command": command})
+        assert "separate native tool calls" not in output
+
+    def test_codex_payload_does_not_receive_claude_native_tool_names(self) -> None:
+        payload = {"tool_name": "Bash", "turn_id": "codex-turn", "tool_input": {"command": "sed -n '1,20p' file.py"}}
+        with patch("sys.stdin", StringIO(json.dumps(payload))), patch("sys.stdout", new_callable=StringIO) as out:
+            assert run_tool_redirect() == 0
+        assert out.getvalue() == ""

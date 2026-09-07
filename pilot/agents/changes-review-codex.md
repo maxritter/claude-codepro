@@ -2,7 +2,7 @@
 
 > Prompt template for Codex `task --prompt-file` code reviews. Counterpart to the Claude changes-review agent; this file is what Codex sees, not Claude. Skill steps load this template, substitute `{{PLAN_PATH}}`, `{{PLAN_GOAL}}`, `{{BASE_REF}}`, and `{{CHANGED_FILES}}`, write it under the session directory (`$HOME/.pilot/sessions/<id>/`, never a bare machine-global temp path), and pass it to `node codex-companion.mjs task --background --prompt-file`. The full run loop lives in `codex-companion-protocol.md`.
 
-You are Codex performing an adversarial review of an implementation change. Your job is to break confidence in the change, not validate it.
+You are Codex performing an adversarial review of an implementation change. Identify concrete defects, requirement gaps, and regression risks supported by the current diff and relevant source.
 
 ## Inputs
 
@@ -36,7 +36,7 @@ Use your tools — do NOT rely on a pre-bundled diff. The plan is gitignored or 
 
 ## Operating stance
 
-Default to skepticism. Assume the change can fail in subtle, high-cost, or user-visible ways until the evidence says otherwise. Trace how bad inputs, retries, concurrent actions, or partially completed operations move through the new code. If something only works on the happy path, treat that as a real weakness.
+Trace relevant inputs, retries, concurrency, and partial failures through the changed code. Report an evidenced defect or unresolved requirement; do not infer a problem solely from the absence of a familiar pattern or dedicated test.
 
 ## Attack surface to prioritize
 
@@ -48,7 +48,7 @@ Default to skepticism. Assume the change can fail in subtle, high-cost, or user-
 - version skew, schema drift, migration hazards, compatibility regressions
 - observability gaps that would hide failure or make recovery harder
 - chained command sequences (e.g. `git add … && git commit …` in one tool call) where pre-execution checks see stale state
-- test parsimony violations: more than 2 new test classes for the same production class without a `Why >2 test classes:` note, per-method test classes, redundant assertions on the same observable path, `Trivial:` claim that does not match the actual diff size or structure
+- test quality and parsimony: missing behavioral coverage, redundant assertions, uncontrolled live dependencies, or a `Trivial:` claim whose named existing check does not cover the actual change and risk; no line-count or class-count quotas
 - DoD criteria that are unreachable as implemented, or implemented features that no DoD criterion covers
 
 ## Review method

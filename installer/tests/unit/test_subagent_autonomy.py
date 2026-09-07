@@ -97,22 +97,6 @@ def test_shared_rules_make_agent_stop_requests_immediate() -> None:
         assert "stop or interrupt controls" in content
 
 
-def test_bot_health_checks_do_not_spawn_model_agents() -> None:
-    for skill_name in ("bot-boot", "bot-heartbeat"):
-        text = _runtime_text(skill_name, codex=False)
-        assert "run_in_background=true" not in text
-        assert "background subagent" not in text
-
-
-def test_bot_channel_keeps_bounded_multistep_work_in_session() -> None:
-    text = _runtime_text("bot-channel-task", codex=False)
-
-    assert "bounded multi-step work" in text
-    assert "substantial time" in text
-    assert "short (1-2 tools)" not in text
-    assert "long / multi-step" not in text
-
-
 def test_hook_matrix_has_no_subagent_permission_gate() -> None:
     matrix = json.loads((ROOT / "pilot" / "hooks" / "hook-lifecycle.json").read_text())
 

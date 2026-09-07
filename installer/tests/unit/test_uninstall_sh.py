@@ -97,6 +97,59 @@ def test_pilot_directory_is_removed_only_after_external_config_cleanup() -> None
     assert main.index("remove_codex_files") < main.index("remove_pilot_dir") < main.index("print_summary")
 
 
+def test_uninstall_restores_claude_display_patch_before_removing_runtime(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    state_dir = home / ".pilot" / "claude-display-patch"
+    state_dir.mkdir(parents=True)
+    (state_dir / "state.json").write_text('{"schema":1,"entries":{}}\n')
+    migration = home / ".claude" / ".pilot-display-patch-migration.json"
+    migration.parent.mkdir()
+    migration.write_text('{"version":1}\n')
+    marker = home / "restored.txt"
+    (state_dir / "restore.py").write_text(
+        "import pathlib, sys\n"
+        "assert sys.argv[1:] == ['--restore', '--state-dir', str(pathlib.Path(__file__).parent)]\n"
+        f"pathlib.Path({str(marker)!r}).write_text('restored')\n"
+    )
+
+    result = _run_uninstall(home)
+
+    assert result.returncode == 0, result.stderr
+    assert marker.read_text() == "restored"
+    assert not state_dir.exists()
+    assert not migration.exists()
+
+
+def test_uninstall_preserves_patch_backup_when_restore_fails(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    state_dir = home / ".pilot" / "claude-display-patch"
+    state_dir.mkdir(parents=True)
+    (state_dir / "state.json").write_text('{"schema":1,"entries":{}}\n')
+    (state_dir / "restore.py").write_text("raise SystemExit(1)\n")
+    backup = state_dir / "originals" / "original"
+    backup.parent.mkdir()
+    backup.write_text("official binary")
+
+    result = _run_uninstall(home, script_args=["--yes", "--purge-data"])
+
+    assert result.returncode == 1
+    assert backup.read_text() == "official binary"
+    assert "Claude Code display patch" in result.stdout
+
+
+def test_uninstall_preserves_patch_state_when_restore_script_is_missing(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    state_dir = home / ".pilot" / "claude-display-patch"
+    state_dir.mkdir(parents=True)
+    state = state_dir / "state.json"
+    state.write_text('{"schema":1,"entries":{}}\n')
+
+    result = _run_uninstall(home)
+
+    assert result.returncode == 1
+    assert state.exists()
+
+
 def test_default_uninstall_preserves_external_tools_even_when_pilot_owned(tmp_path: Path) -> None:
     home = tmp_path / "home"
     manifest = home / ".pilot" / ".pilot-owned-tools.json"

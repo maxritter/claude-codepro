@@ -32,7 +32,7 @@ def _has_ruff_config(file_path: Path) -> bool:
 
 def check_python(file_path: Path) -> tuple[int, str]:
     """Check Python file with ruff. Returns (0, reason)."""
-    if "test_" in file_path.name or "spec" in file_path.name:
+    if file_path.stem.startswith("test_") or file_path.stem.endswith(("_test", "_spec")):
         return 0, ""
 
     length_warning = check_file_length(file_path)
@@ -53,6 +53,7 @@ def check_python(file_path: Path) -> tuple[int, str]:
             capture_output=True,
             text=True,
             check=False,
+            timeout=10,
         )
         output = result.stdout + result.stderr
         error_pattern = re.compile(r":\d+:\d+: [A-Z]{1,3}\d+")
@@ -60,7 +61,7 @@ def check_python(file_path: Path) -> tuple[int, str]:
         if error_lines:
             has_issues = True
             results["ruff"] = (len(error_lines), error_lines)
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
 
     if has_issues:
@@ -99,5 +100,5 @@ def _format_python_issues(file_path: Path, results: dict[str, tuple]) -> str:
                 msg = msg.replace("[*] ", "")
                 lines.append(f"  {code}: {msg}")
 
-    lines.append("Fix Python issues above before continuing")
+    lines.append("Review these diagnostics with the current change; fix confirmed issues before final verification.")
     return "\n".join(lines)

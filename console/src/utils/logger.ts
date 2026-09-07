@@ -5,7 +5,7 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import { memoryDataDir } from "../shared/memory-data-dir.js";
 
 export enum LogLevel {
   DEBUG = 0,
@@ -59,7 +59,7 @@ interface LogContext {
   [key: string]: any;
 }
 
-const DEFAULT_DATA_DIR = join(homedir(), ".pilot/memory");
+const DEFAULT_DATA_DIR = memoryDataDir();
 
 class Logger {
   private level: LogLevel | null = null;
@@ -391,4 +391,3 @@ class Logger {
 }
 
 export const logger = new Logger();
-

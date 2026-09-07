@@ -1,6 +1,6 @@
 ## Step 4: Quality Audit
 
-**Audit `AGENTS.md`, `CLAUDE.md`, scoped rules, project skills, and the sync checker against the shared Claude Code/Codex contract in Step 1.** Present findings as improvement suggestions — do NOT modify files without user confirmation.
+**Audit `AGENTS.md`, `CLAUDE.md`, scoped rules, project skills, and the sync checker against the shared Claude Code/Codex contract in Step 1.** For audit-only work, report findings. For an authorized setup or repair, apply evidenced corrections within scope; user confirmation is needed only for a genuinely unresolved decision.
 
 **Skip this phase if:** None of those assets exists (nothing to audit).
 
@@ -65,23 +65,16 @@ Group findings by severity and present to user:
 - 💡 **Import:** `CLAUDE.md` inlines API docs — move shared constraints to `AGENTS.md`, scoped detail to a rule, and leave only `@AGENTS.md`
 ```
 
-### Step 4.3: User Decision
+### Step 4.3: Resolve only material decisions
 
-AskUserQuestion (multiSelect): "Select improvements to apply:"
+Use the user's requested mode and prior decisions. Clear setup or repair requests authorize routine corrections; do not ask the user to approve each finding. If existing instructions conflict, first check the request and authoritative project contracts. Ask only when those cannot determine which behavior is intended.
 
-- List each finding with checkbox
-- Group by file for clarity
-- Options: **"Fix all errors & warnings"** | **"Review each"** | **"Fix errors only"** | **"Skip audit"**
+### Step 4.4: Apply in-scope fixes
 
-### Step 4.4: Apply Selected Fixes
+Read the target, make the supported correction, and inspect the resulting diff. Preserve user-authored meaning and unrelated changes. In an audit-only request, leave these as concrete recommendations rather than writing them.
 
-For each selected improvement:
 
-1. Read the target file
-2. Apply the specific fix (rewrite vague instruction, add `paths` frontmatter, split large files, remove stale references, or reconcile independently changed skill copies)
-3. Show the diff to user before writing
-4. Write the updated file
 
 **For file splits:** Keep the shared core in `AGENTS.md`. Move file-specific detail into `{slug}-`-prefixed `.claude/rules/` files with `paths` frontmatter, then add those files to the matching-rule index in `AGENTS.md`.
 
-**For conflict resolution:** Present both conflicting instructions, ask user which is correct, update both files to be consistent.
+**For unresolved conflict resolution:** present the conflicting passages and the decision needed. Once resolved, update the affected guidance consistently.

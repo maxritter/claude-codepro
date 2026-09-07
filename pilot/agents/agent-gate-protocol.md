@@ -1,107 +1,48 @@
 # Agent Gate Protocol
 
-> Shared runbook for every Pilot workflow step that puts a decision to the user:
-> plan approval (`spec-plan` 12, `spec-bugfix-plan` 6), the worktree merge-back
-> (`spec-verify` 8.1.6, `spec-bugfix-verify` 4.5), the code-review sign-off that
-> precedes `VERIFIED` (`spec-verify` 10, `spec-bugfix-verify` 6), the
-> material-discovery question in the implement phase (`spec-implement` 2, discovery
-> protocol — sentinel `spec-discussion-paused`, the user-initiated discussion pause;
-> not an agent-invented gate, and never honored for a `Type: Build` plan), `/build`'s
-> single pre-work clarification round (`01-goal-and-scope` 1.5), `/fix` 6.2, and the
-> `/prd` question steps.
->
-> That list is the audit surface for "which gates are lane-safe" — a gate missing
-> from it is a gate nobody checked. Add new ones here as they are written, and keep
-> the merge and sign-off entries above in it: those two were left out once, and
-> because a merge looks identical whether or not it was reviewed, nothing surfaced
-> it until an orchestration lane had already merged unreviewed (issue #175).
->
-> ⛔ `/build` has no approval, round-budget, or hand-back gate — it runs
-> autonomously once the goal is clear. If you are following this file inside a
-> `/build` run at any point after Step 1.5, you have invented a gate: go back and
-> take one of the run's four hand-back doors instead.
->
-> Skill steps reference this file instead of restating it. Read it when you reach
-> a gate and **cannot emit `AskUserQuestion`**.
+Shared runbook for an actual user decision in Pilot workflows: spec plan approval, worktree merge/discard, verification sign-off, material scope changes, and unresolved product questions. Read it when a caller reaches such a decision.
 
-## When this applies
+`/build` has no routine approval, round-budget, or hand-back gate after its initial scope clarification. This protocol does not add one. All workflows still respect explicit user instructions and runtime permissions.
 
-Check the capability, not the agent. The rule is "I cannot render a structured
-question right now", and that is true in at least two situations:
+## Before asking
 
-- **Codex**, where `AskUserQuestion` is rewritten to plain-text options.
-- **A Claude Code subagent** — an orchestration lane dispatched by a coordinating
-  session. `AskUserQuestion`, `TaskCreate`, `TaskList` and `TaskUpdate` are all
-  absent from a subagent's toolset.
+Reuse an explicit decision or authorization already supplied for the same scope and current reviewable result. A workflow phase boundary, compaction, or tool change does not revoke it. Do not infer approval from credentials, silence, a timeout, a hook's permission decision, green checks, or the agent's prediction of the user's choice.
 
-Keying on "am I Codex" leaves the second case undefined, which is where the
-damage happens: an agent that cannot ask, and believes it may not stop, resolves
-the contradiction by answering the gate itself.
-
-If you CAN emit `AskUserQuestion`, ignore this file and use the form.
-
-## What the caller supplies
+The caller supplies:
 
 | Value | Meaning |
 |---|---|
-| `GATE_NAME` | What is being decided, in the user's terms ("Plan approval", "Round budget") |
-| `OPTIONS` | The same options the `AskUserQuestion` form would have offered, verbatim |
-| `SENTINEL_PATH` | The pause sentinel this gate uses, or `none` when the gate needs no stop-guard permission |
+| `GATE_NAME` | The actual decision in user terms |
+| `OPTIONS` | The choices and their consequences |
+| `SENTINEL_PATH` | The caller's pause sentinel, or `none` |
+| `LANE_ID` | The invocation's parsed lane id, or empty for the main session |
 
-## The contract — both halves, always
+Resolve gate files under the caller's run directory: `sessions/<session>/lanes/<lane>/` for a lane and `sessions/<session>/` otherwise. Current stop-guard readers consume only main-session sentinels; a lane marker records its pending decision but does not claim to release that guard. Lane agents relay unresolved decisions to their coordinator and yield using their native agent lifecycle. Never create, consume, or clear a coordinator's sentinel from a lane. If the coordinator itself needs to yield, it uses a main-session sentinel only for its own registered plan and matching gate; a sibling lane's pending marker cannot approve or pause that plan.
 
-### 1. Ask, in prose
+## Ask using the current runtime
 
-State `GATE_NAME`, the context the user needs to decide, and every option from
-`OPTIONS` as a numbered list. Same content as the form; only the rendering
-changes. Then say plainly that you are waiting for their choice.
+Use a structured question tool only when it is exposed and permitted for this question in the current mode. Codex and Claude toolsets vary; neither the agent brand nor the presence of `AskUserQuestion` determines what is allowed. Follow the tool's actual schema, including restrictions on approval questions.
 
-### 2. Yield, so the answer can arrive
+If an asynchronous input tool is available, ask early and continue independent work. Keep required input pending: dependent work cannot proceed until the answer arrives. Optional preferences may use a stated reasonable default when the runtime permits that.
 
-Touch `SENTINEL_PATH` if the caller supplied one, then **end your turn**.
+Without a permitted structured tool, ask one concise question in prose with enough context for a decision. Describe relevant alternatives naturally, or as a list only when the runtime permits that format. A subagent with no user-facing question surface reports the unresolved decision to its coordinating agent; the coordinator can relay it or answer only within authority already delegated by the user.
+
+## Yield when required input is pending
+
+A synchronous permitted question needs no disk sentinel. Missing session identity blocks only an asynchronous persisted gate: keep the actual decision pending or use the permitted synchronous question surface. Never substitute a shared directory, and do not turn unavailable persistence into a task-wide denial. Before cleanup in a new shell call or after compaction, resolve and validate the same session/lane identity again.
+
+If no independent work remains, touch the caller's sentinel when applicable and end the turn so the user can answer:
 
 ```bash
-SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-}}}"
+case "$SESSION_ID" in ""|*[!A-Za-z0-9_-]*) echo "Persisted gate needs a confirmed session identity" >&2; exit 1 ;; esac
+SESS_DIR="$HOME/.pilot/sessions/$SESSION_ID"
+[ -z "$LANE_ID" ] || SESS_DIR="$SESS_DIR/lanes/$LANE_ID"
 mkdir -p "$SESS_DIR" && touch "$SESS_DIR/<sentinel-name>"
 ```
 
-The stop guard honours the sentinel for the state that gate is in, so the session
-is allowed to pause. Treat the user's **next message** as their answer. On resume,
-remove the sentinel if the caller's step says to, then act on the choice.
+On resume, interpret the response in context. Explicit approval of the presented result is sufficient; an unrelated message or routine "continue" does not silently approve a merge or verification sign-off. Follow the caller's sentinel cleanup rules and retain the actual answer across compaction.
 
-## Why both halves, and never one
+Never set `Approved: Yes` or pass a human sign-off merely because the form is unavailable. A configured workflow approval opt-out or explicit standing authorization is different from an inferred answer; apply only the authority the caller actually has.
 
-Each half alone fails, in opposite directions:
-
-- **Asking without yielding** leaves the question stranded in a turn that keeps
-  going. Nobody answers, and the gate is passed by momentum.
-- **Yielding without asking** produces a lane that halts silently. Whoever is
-  waiting — a human or a coordinating session — sees a turn end with no question
-  in it and cannot tell an approval gate from a crash.
-
-## ⛔ Never resolve the gate yourself
-
-Not being able to ask is never grounds not to ask.
-
-- **Never** write `Approved: Yes`, tick an acceptance criterion, or pick an option
-  on the user's behalf because the form was unavailable.
-- **Never** treat "I can reason about what they'd probably say" as an answer. For
-  `/prd`'s elicitation steps the same rule reads: never invent the user's answer
-  and carry on as though it were given.
-
-This is the failure `spec_stop_guard.get_approval_sentinel_path` was written to
-prevent — a literal agent, told it may not stop, editing `Approved: No -> Yes`
-itself. A plan nobody approved is worse than a plan nobody wrote, because it
-carries the appearance of review.
-
-Under orchestration the cost is concrete: a coordinating session stands in for the
-user at every gate. It can only answer a question that was actually emitted, and a
-lane that self-approves removes the only chance to catch a bad plan before
-implementation starts.
-
-## If a stop is blocked anyway
-
-The stop guard may still block when the sentinel does not apply to the plan's
-current state. Do **not** answer your own gate to escape the block. Re-state the
-question in one line, touch the sentinel again, and end the turn. A repeated block
-is a guard/sentinel mismatch to report, never a licence to decide.
+If the stop guard blocks a genuine pending question, preserve the unresolved state, re-state the question briefly, and re-touch the applicable sentinel. Repeated guard failure is a blocker to report, not permission to self-approve.

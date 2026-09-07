@@ -11,7 +11,7 @@ longer fires now that users run `claude` directly (Pilot is admin-only):
    `<PID>-<suffix>`) whose process is gone.
 
 Conservative by design: it does NOT kill orphaned wrapper processes or clean
-worktrees (those are bot/launcher concerns -- there are no wrapper processes in
+worktrees (there are no wrapper processes in
 a claude-direct session) and it never touches agent-native UUID/thread dirs
 (no PID to probe). Stdlib only (package boundary); never raises.
 """

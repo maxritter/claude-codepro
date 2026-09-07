@@ -8,6 +8,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 
 def _run_full_install_flow(
     ctx,
@@ -1391,17 +1393,49 @@ class TestCommandsToSkillsMigration:
             assert not any("my-custom-skill" in f for f in manifest["files"])
 
 
-class TestBotSkillsCategory:
-    """Test that bot skills are categorized correctly."""
+def test_retired_bot_cleanup_preserves_personal_jobs(tmp_path, monkeypatch):
+    from installer.context import InstallContext
+    from installer.steps.claude_files import ClaudeFilesStep
 
-    def test_bot_skills_categorized_as_skills(self):
-        from installer.steps.claude_files import _categorize_file
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    claude = tmp_path / ".claude"
+    neutral = tmp_path / ".pilot"
+    entries = ["skills/bot-boot/manifest.json", "skills/bot-boot/orchestrator.md", "skills/bot-boot/SKILL.md"]
+    for root in (claude, neutral):
+        for entry in entries:
+            dest = root / entry
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text("retired Pilot asset")
+    personal = claude / "skills/bot-boot/personal.txt"
+    personal.write_text("keep")
+    jobs = neutral / "bot/JOBS.yaml"
+    jobs.parent.mkdir(parents=True)
+    jobs.write_text("jobs: {personal: keep}\n")
+    (claude / ".pilot-manifest.json").write_text(json.dumps({"files": entries}))
+    ClaudeFilesStep()._cleanup_stale_managed_files(InstallContext(project_dir=tmp_path))
+    assert all(not (root / entry).exists() for root in (claude, neutral) for entry in entries)
+    assert jobs.read_text() == "jobs: {personal: keep}\n"
+    assert personal.read_text() == "keep"
 
-        assert _categorize_file("pilot/skills/bot-boot/SKILL.md") == "skills"
-        assert _categorize_file("pilot/skills/bot-heartbeat/SKILL.md") == "skills"
-        assert _categorize_file("pilot/skills/bot-jobs/SKILL.md") == "skills"
-        assert _categorize_file("pilot/skills/bot-channel-task/SKILL.md") == "skills"
-        assert _categorize_file("pilot/skills/bot-defaults/SKILL.md") == "skills"
+
+def test_retired_neutral_cleanup_does_not_follow_a_skill_alias(tmp_path, monkeypatch):
+    from installer.context import InstallContext
+    from installer.steps.claude_files import ClaudeFilesStep
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    claude = tmp_path / ".claude"
+    claude.mkdir()
+    (claude / ".pilot-manifest.json").write_text(json.dumps({"files": ["skills/bot-boot/orchestrator.md"]}))
+    personal = tmp_path / ".pilot/personal"
+    personal.mkdir(parents=True)
+    (personal / "orchestrator.md").write_text("keep")
+    skills = tmp_path / ".pilot/skills"
+    skills.mkdir()
+    (skills / "bot-boot").symlink_to(personal, target_is_directory=True)
+    ClaudeFilesStep()._cleanup_stale_managed_files(InstallContext(project_dir=tmp_path))
+    assert (personal / "orchestrator.md").read_text() == "keep"
 
 
 class TestReapplyCustomization:
@@ -2622,23 +2656,53 @@ class TestMergeHooksIntoSettings:
 
 
 class TestShippedSettingsTemplate:
-    """Contract for the shipped settings template: effort ships as an overridable
-    default, the transcript view is the user's own choice."""
+    """Model, effort, and transcript view remain the user's own choices."""
 
     SETTINGS_PATH = Path(__file__).parents[4] / "pilot" / "settings.json"
 
-    def test_template_ships_effort_only_as_overridable_default(self):
-        """`env.CLAUDE_CODE_EFFORT_LEVEL` sits above the `--effort` flag and every
-        settings file in Claude Code's precedence chain, so shipping it silently
-        discards every effort choice a user makes (issue #172). `effortLevel`
-        delivers the same xhigh default and stays overridable, including per model
-        via `/effort`, which Claude Code persists under `modelSettings`."""
+    def test_template_does_not_select_model_or_effort(self):
         data = json.loads(self.SETTINGS_PATH.read_text())
 
         assert "CLAUDE_CODE_EFFORT_LEVEL" not in data.get("env", {}), (
             "settings.json must not pin effort via env - it outranks --effort"
         )
-        assert data.get("effortLevel") == "xhigh"
+        assert "effortLevel" not in data
+        assert "model" not in data
+        assert "ANTHROPIC_MODEL" not in data.get("env", {})
+
+    def test_template_enables_flicker_free_rendering_but_preserves_explicit_opt_out(self):
+        from installer.steps.settings_merge import merge_settings
+
+        incoming = json.loads(self.SETTINGS_PATH.read_text())
+        assert incoming["env"]["CLAUDE_CODE_NO_FLICKER"] == "true"
+        current = {"env": {"CLAUDE_CODE_NO_FLICKER": "false"}}
+        merged = merge_settings({"env": {}}, current, incoming)
+        assert merged["env"]["CLAUDE_CODE_NO_FLICKER"] == "false"
+
+    def test_template_enables_workflows_and_ide_without_disabling_native_memory(self):
+        data = json.loads(self.SETTINGS_PATH.read_text())
+        assert data["env"]["CLAUDE_CODE_WORKFLOWS"] == "true"
+        assert data["env"]["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "true"
+        assert "CLAUDE_CODE_DISABLE_AUTO_MEMORY" not in data["env"]
+        assert "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING" not in data["env"]
+
+    @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
+    @pytest.mark.parametrize("has_baseline", [False, True])
+    def test_effort_migration_preserves_user_choices(self, effort: str, has_baseline: bool):
+        from installer.steps.settings_merge import merge_settings
+
+        baseline = {"effortLevel": "xhigh"} if has_baseline else None
+        current = {"effortLevel": effort, "model": "sonnet", "modelSettings": {"sonnet": {"effort": "low"}}}
+        incoming = json.loads(self.SETTINGS_PATH.read_text())
+
+        merged = merge_settings(baseline, current, incoming)
+
+        if has_baseline and effort == "xhigh":
+            assert "effortLevel" not in merged
+        else:
+            assert merged["effortLevel"] == effort
+        assert merged["model"] == current["model"]
+        assert merged["modelSettings"] == current["modelSettings"]
 
     def test_template_ships_the_concise_output_style(self):
         data = json.loads(self.SETTINGS_PATH.read_text())

@@ -39,6 +39,16 @@ class TestCheckCharset:
         f.write_text("echo 'start -> done; range a-b'\n")
         assert check_charset(f) == ""
 
+    def test_advice_preserves_intentional_unicode_literals(self, tmp_path: Path) -> None:
+        f = tmp_path / "messages.ts"
+        text = f'export const next = "Weiter {RIGHT_ARROW}";\n'
+        f.write_text(text)
+        reason = check_charset(f)
+        assert "intentional" in reason
+        assert "user-facing" in reason
+        assert "Replace with ASCII" not in reason
+        assert f.read_text() == text
+
     def test_markdown_excluded(self, tmp_path: Path) -> None:
         f = tmp_path / "README.md"
         f.write_text(f"A heading {EM_DASH} fine in prose.\n")

@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import json
 import sys
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -76,19 +77,15 @@ except ImportError:  # version-skewed _lib predating these names: legacy behavio
 
 _WARNING = (
     "[Pilot] PLAN MODE STILL ACTIVE - ExitPlanMode has NOT been called yet. "
-    "Call ExitPlanMode NOW before editing any implementation file, or the "
-    "entire implementation leg will run on Opus instead of Sonnet. "
-    "If you are inside spec-implement, call ExitPlanMode immediately as "
-    "step 1.0 requires (plan mode is only entered in Automated mode)."
+    "Keep edits within the runtime's permitted plan file. Finish native planning "
+    "and its approval boundary before editing implementation files."
 )
 
 _PRE_APPROVAL_WARNING = (
     "[Pilot] SPEC PLAN NOT APPROVED - you are editing a non-plan file during "
-    "the /spec planning leg. Do NOT start implementation and do NOT call "
-    "ExitPlanMode (it is denied until approval): finish the plan and present "
-    "it at the approval gate (AskUserQuestion - spec-plan Step 12.2 / "
-    "spec-bugfix-plan Step 6.2). Implementation starts only after the user "
-    "approves."
+    "the /spec planning leg. Keep edits within the runtime's permitted draft. "
+    "Finish planning and use its native approval boundary before implementation. "
+    "A Pilot status marker does not override native plan-mode restrictions."
 )
 
 # Written once per planning leg when the model check below fires; reset by the
@@ -102,19 +99,11 @@ PLAN_MODEL_CONFIRMED_MARKER = "plan-model-confirmed"
 _MODEL_MISMATCH_WARNING = (
     "[Pilot] PLANNING-LEG MODEL CHECK: Automated Model Switching is on and plan "
     "mode is active, but the observed session model is '{model_id}' - planning "
-    "is NOT running on Opus. Likely causes: (1) the conversation has grown past "
-    "the Opus plan leg's effective 200K window - a cap that currently applies "
-    "even with the Opus 1M entitlement (known Claude Code regression, "
-    "anthropics/claude-code#65512 and #74325), and always applies without the entitlement "
-    "or with exhausted usage credits - so Claude Code silently keeps serving the "
-    "Sonnet leg; /compact or /clear before planning fixes this; (2) Opus usage limit "
-    "fallback on your Claude plan (check /usage); (3) the session is not on the "
-    "opusplan model - run /model opusplan. Manual mode (Console -> Settings -> "
-    "Model Switching) avoids this class of surprise by letting the user pick "
-    "models explicitly. Tell the user in one short paragraph which model "
-    "planning is actually running on and why, then continue planning on the "
-    "current model. Do NOT re-call EnterPlanMode and do NOT claim planning "
-    "runs on Opus."
+    "is NOT running on Opus. The cause is not established by this observation. "
+    "The user can check /model opusplan and /usage for selection or usage limit "
+    "fallback, or choose Manual model switching. Mention the actual model once "
+    "and continue planning. Do not restart, force compaction, or claim a switch "
+    "that the runtime has not confirmed."
 )
 
 _MODEL_CONFIRMED_NOTICE = (
@@ -220,24 +209,37 @@ def main() -> int:
     # bucket a sibling same-repo session's state lives in.
     sid = resolve_session_id(str(data.get("session_id") or ""))
 
+    if data.get("hook_event_name") == "PostToolUseFailure":
+        if tool_name == "EnterPlanMode":
+            from native_plan_capture import finish_native_spec_entry
+
+            finish_native_spec_entry(sid, str(data.get("tool_use_id") or ""), {"is_error": True}, "")
+        return 0
+
     if is_post:
         # PostToolUse: update sentinel state
         if tool_name == "EnterPlanMode":
-            response = data.get("tool_response", {})
-            if isinstance(response, dict) and response.get("is_error"):
+            response = data.get("tool_response")
+            from native_plan_capture import finish_native_spec_entry
+
+            leg_id = uuid.uuid4().hex
+            finish_native_spec_entry(sid, str(data.get("tool_use_id") or ""), response, leg_id)
+            if not isinstance(response, dict) or response.get("is_error"):
                 # A failed EnterPlanMode means plan mode never engaged.
                 return 0
             sentinel = sentinel_path(sid)
-            sentinel.write_text("")
+            sentinel.write_text(leg_id)
             # New planning leg: allow the model check to report again.
             (sentinel.parent / PLAN_MODEL_WARNED_MARKER).unlink(missing_ok=True)
             (sentinel.parent / PLAN_MODEL_CONFIRMED_MARKER).unlink(missing_ok=True)
         elif tool_name == "ExitPlanMode":
-            # Unlink the sentinel even when the call errored: an ExitPlanMode
-            # that fails with "not in plan mode" proves plan mode is closed
-            # (e.g. the user exited via Shift+Tab), and a stale sentinel would
-            # otherwise re-trigger the leak checks and edit warnings all
-            # session with no recovery path.
+            response = data.get("tool_response")
+            if not isinstance(response, dict):
+                return 0
+            if response.get("is_error"):
+                message = str(response.get("message", "")).strip().lower().rstrip(".")
+                if message not in {"not in plan mode", "not currently in plan mode"}:
+                    return 0  # a rejected/failed exit does not prove the mode changed
             sentinel_path(sid).unlink(missing_ok=True)
     else:
         # PreToolUse(EnterPlanMode): the mode has not flipped to "plan" yet,
@@ -245,6 +247,10 @@ def main() -> int:
         # evidence auto_approve_plan requires to arm the post-exit restore
         # (a shift-tab plan entry records nothing - it never calls the tool).
         if tool_name == "EnterPlanMode":
+            from native_plan_capture import begin_native_spec_entry
+
+            (sentinel_path(sid).parent / "bypass-restore-pending").unlink(missing_ok=True)
+            begin_native_spec_entry(sid, str(data.get("tool_use_id") or ""))
             # Classify who this plan-mode leg belongs to BEFORE it opens. The
             # run state at exit cannot tell a /spec planning leg from native
             # plan mode opened on top of an already-approved run, so the answer
@@ -265,6 +271,9 @@ def main() -> int:
         file_path = data.get("tool_input", {}).get("file_path", "")
         if not file_path:
             return 0
+        from native_plan_capture import observe_native_spec_draft
+
+        observe_native_spec_draft(sid, file_path)
         if is_plan_file(file_path):
             # The statusline has re-rendered since EnterPlanMode, so the observed
             # planning-leg model is now verifiable.
@@ -275,6 +284,11 @@ def main() -> int:
         # Predicate last: it stats/reads session + plan state (and may shell
         # out to git), so the pure-string checks above short-circuit first.
         if spec_plan_awaiting_approval(sid):
+            from native_plan_capture import pending_native_spec
+
+            if pending_native_spec(sid) is not None:
+                print(pre_tool_use_context(_WARNING))
+                return 0
             # Planning leg with an unapproved plan: auto_approve_plan DENIES
             # ExitPlanMode right now, so the legacy "call ExitPlanMode NOW"
             # instruction would send the model straight into that denial.

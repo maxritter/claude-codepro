@@ -128,6 +128,7 @@ def _run_eslint(
             text=True,
             check=False,
             cwd=project_root,
+            timeout=10,
         )
         try:
             data = json.loads(result.stdout)
@@ -138,7 +139,7 @@ def _run_eslint(
                 results["eslint"] = (total_errors, total_warnings, data)
         except json.JSONDecodeError:
             pass
-    except Exception:
+    except (OSError, subprocess.SubprocessError, TypeError, AttributeError):
         pass
     return has_issues, results
 
@@ -169,5 +170,5 @@ def _format_typescript_issues(file_path: Path, results: dict[str, tuple]) -> str
                 remaining = len(file_result["messages"]) - 10
                 lines.append(f"  ... and {remaining} more issues")
 
-    lines.append("Fix TypeScript issues above before continuing")
+    lines.append("Review these diagnostics with the current change; fix confirmed issues before final verification.")
     return "\n".join(lines)

@@ -111,6 +111,26 @@ class TestConsoleNonInteractive:
         result = console.input("Enter value:", default="default_value")
         assert result == "default_value"
 
+    def test_next_steps_keeps_each_action_on_one_line_at_80_columns(self):
+        from installer.ui import Console
+
+        console = Console(non_interactive=True)
+        console._console.width = 80
+        items = [
+            ("Start", "claude or codex"),
+            ("Setup (optional)", "/setup-rules (Claude) · $setup-rules (Codex)"),
+            ("Console", "http://localhost:41777"),
+            ("Docs", "https://pilot-shell.com/docs"),
+            ("Update", "pilot update"),
+        ]
+        with console._console.capture() as out:
+            console.next_steps([("Next steps", items)])
+        lines = [line for line in _visible(out.get()).splitlines() if line.strip()]
+        assert len(lines) == 6
+        assert lines[0].strip() == "Next steps"
+        for line, (title, description) in zip(lines[1:], items, strict=True):
+            assert title in line and description in line
+
 
 class TestConsoleInteractiveInput:
     """Console.input() reading from the controlling terminal (non-TTY stdin)."""

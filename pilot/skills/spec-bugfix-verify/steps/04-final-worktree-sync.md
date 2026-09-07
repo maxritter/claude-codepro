@@ -1,5 +1,7 @@
 ## Step 4: Worktree Sync (if worktree active)
 
+A synchronous permitted question needs no disk sentinel. For an asynchronous persisted gate, resolve and validate the actual session identity before creating or consuming its marker; missing identity blocks only that persistence path. Keep the real decision pending or use the permitted synchronous question surface, and never substitute a shared session directory. Recompute the validated session/lane path before cleanup after a new shell call or compaction.
+
 > **`$LANE_FLAG`** is `--lane <id>` when this run was dispatched as an orchestration lane, and **nothing at all** otherwise — the value the invocation parsed from its arguments. It keeps worktree and plan identity scoped to this lane; an unflagged call resolves a different identity and silently finds nothing (issue #174).
 
 1. Detect: `~/.pilot/bin/pilot worktree detect --json <plan_slug> $LANE_FLAG`
@@ -9,10 +11,13 @@
 4. Show diff: `~/.pilot/bin/pilot worktree diff --json <plan_slug> $LANE_FLAG`
 5. Notify + AskUserQuestion: "Yes, squash merge" | "No, keep" | "Discard"
 
-   ⛔ **When you cannot emit `AskUserQuestion`** — on Codex, or as a Claude Code subagent running this bugfix as an orchestration lane, where the tool is absent entirely — the prompt will not block for an answer, so you must yield yourself. Read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/agent-gate-protocol.md` and follow it, supplying `GATE_NAME` = `Worktree sync`, `OPTIONS` = the three above, `SENTINEL_PATH` = `verify-gate-pending`:
+   ⛔ **When no structured input tool is exposed and permitted for this approval**, ask in prose and yield for the required answer. Read `$HOME/.pilot/agents/agent-gate-protocol.md` and follow it, supplying `GATE_NAME` = `Worktree sync`, `OPTIONS` = the three above, `SENTINEL_PATH` = `verify-gate-pending`:
 
    ```bash
-   SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
+   SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-}}}"
+case "$SESSION_ID" in ""|*[!A-Za-z0-9_-]*) echo "Persisted gate needs a confirmed session identity" >&2; exit 1 ;; esac
+SESS_DIR="$HOME/.pilot/sessions/$SESSION_ID"
+[ -z "$LANE_ID" ] || SESS_DIR="$SESS_DIR/lanes/$LANE_ID"
    mkdir -p "$SESS_DIR" && touch "$SESS_DIR/verify-gate-pending"
    ```
 

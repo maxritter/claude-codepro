@@ -1,60 +1,39 @@
 ## Step 6: Code Review Gate (User Confirmation)
 
-**⛔ MANDATORY before marking VERIFIED.**
+A synchronous permitted question needs no disk sentinel. For an asynchronous persisted gate, resolve and validate the actual session identity before creating or consuming its marker; missing identity blocks only that persistence path. Keep the real decision pending or use the permitted synchronous question surface, and never substitute a shared session directory. Recompute the validated session/lane path before cleanup after a new shell call or compaction.
+
+The user reviews the concrete verified change before the plan becomes `VERIFIED`. Reuse explicit approval already given for this same result; do not ask again because a phase changed or the context compacted. Changed code or unresolved new feedback may require a fresh review.
+
+### Present the reviewable result
+
+Summarize the changes, checks actually passed, runtime evidence, and material gaps. Point to the Console's Changes tab and mention that inline annotations are saved automatically.
+
+Offer the decisions naturally: approve this result, address feedback, or wait while the user tests it.
 
 <!-- CC-ONLY -->
-**⛔ MUST use `AskUserQuestion` whenever you can emit it** — the stop guard reads this tool from the transcript to recognise an answer-wait turn, so plain text alone would leave it blocking session exit while the user is being asked.
-
-⛔ **When you cannot emit it** — as a Claude Code subagent running this bugfix as an orchestration lane, where the tool is absent from the toolset entirely — asking in plain text is then the *correct* move, not a violation, but it must be paired with a yield or the question is passed by momentum. Read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/agent-gate-protocol.md` and follow it, supplying `GATE_NAME` = `Code review gate`, `OPTIONS` = the three below, `SENTINEL_PATH` = `verify-gate-pending`:
-
-```bash
-SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
-mkdir -p "$SESS_DIR" && touch "$SESS_DIR/verify-gate-pending"
-```
-
-Then **end your turn**; the guard honours the sentinel once for an approved plan at `Status: COMPLETE`. Treat the user's NEXT message as their answer, delete the sentinel on resume (`rm -f "$SESS_DIR/verify-gate-pending"`), and **re-touch it** each time you return here and ask again — it is consumed when honoured. Step 7's precondition is satisfied by this prose ask exactly as it is by the form; what it tests is that the gate was asked and answered, never which tool asked it.
-
-**⛔ Resume / compaction / idle:** if you wake into a session where the previous Step 6 is unresolved (no in-turn approve keyword received from the user), **re-ask** — via `AskUserQuestion`, or via the prose ask + yield above when you cannot emit it. Do NOT infer approval from "checks all passed," empty annotations, or a long quiet gap. Silence is never approval.
+Use `AskUserQuestion` when available and permitted for this approval. It intrinsically waits for the answer; do not add a second confirmation.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-**⛔ Present options as numbered text and wait for user response.** Do NOT infer approval from "checks all passed" or silence. Explicit approval keywords required.
+Use the runtime's structured user-input tool when exposed and permitted for approval in the current mode. Follow its actual schema. If it supports asynchronous questions, continue independent work while the answer is pending; do not finalize the plan before the required answer arrives.
+CODEX-END -->
 
-Presenting the options is only half of it: the turn must also END so the answer can arrive. Read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/agent-gate-protocol.md` and follow it, supplying `GATE_NAME` = `Code review gate`, `OPTIONS` = the three below, `SENTINEL_PATH` = `verify-gate-pending`:
+When no permitted structured tool can ask this approval, follow `$HOME/.pilot/agents/agent-gate-protocol.md` with `GATE_NAME=Code review gate` and `SENTINEL_PATH=verify-gate-pending`. Ask one concise prose question and yield:
 
 ```bash
-SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-}}}"
+case "$SESSION_ID" in ""|*[!A-Za-z0-9_-]*) echo "Persisted gate needs a confirmed session identity" >&2; exit 1 ;; esac
+SESS_DIR="$HOME/.pilot/sessions/$SESSION_ID"
+[ -z "$LANE_ID" ] || SESS_DIR="$SESS_DIR/lanes/$LANE_ID"
 mkdir -p "$SESS_DIR" && touch "$SESS_DIR/verify-gate-pending"
 ```
 
-The guard honours it once for an approved plan at `Status: COMPLETE`. Treat the user's NEXT message as their answer, `rm -f "$SESS_DIR/verify-gate-pending"` on resume, and re-touch it each time you ask again.
-CODEX-END -->
+The guard honors this sentinel for the applicable `Status: COMPLETE` state. Remove it on resume; re-touch it only when another genuine approval question needs a yield.
 
-1. Notify:
-   ```bash
-   ~/.pilot/bin/pilot notify plan_approval "Bugfix Verification Complete" "<plan-slug> — please review changes" --plan-path "<plan_path>" 2>/dev/null || true
-   ```
+### Interpret the response
 
-2. Summarize what was done (brief: fix applied, tests passed, verification results), then ask:
+- **Explicit approval of this result** — "approve", "lgtm", "looks good", or an equally clear statement in context — proceed to Step 7.
+- **Feedback** — read the annotations in Step 5 and the user's message, apply in-scope fixes, rerun affected checks, then present the updated result.
+- **Manual testing** — keep the plan `COMPLETE` while the user tests. Do not repeatedly ask for the same pending answer.
+- **Unrelated or ambiguous reply** — answer or clarify it without inventing approval. A bare "continue" or "proceed", silence, empty annotations, and green checks alone do not sign off the result.
 
-   ```
-   AskUserQuestion(
-     question="All automated checks passed. Please review the code changes in the Console's **Changes** tab.\n\nYou can leave inline annotations using the **Review** mode toggle — annotations save automatically.\n\n[brief summary of fix]\n\nChoose an option below, or type your feedback directly into the input box (free text works the same as picking 'Manual'):",
-     options=["Approve — mark spec as verified", "Fix — address my annotations from the Console", "Manual — I'll test manually and report back"]
-   )
-   ```
-
-3. Handle response — **match strictly, never auto-approve ambiguous input:**
-   - **Approve:** Response is one of: "Approve", "approve", "lgtm", "looks good" → proceed to Step 7. (Do NOT treat a bare "continue"/"proceed" as approval — those are routine resume nudges, not a verification sign-off.)
-   - **Fix:** Response matches "Fix" or mentions annotations/console feedback → re-run Step 5 (check for code review annotations in JSON), apply fixes, re-run tests, return to Step 6
-   - **Manual / custom text:** Response matches "Manual" OR is ANY other free-text/custom input → the user wants to pause. **Do NOT mark VERIFIED. Do NOT change plan status.** Use `AskUserQuestion` again (required so the stop guard allows the user to exit while waiting):
-     ```
-     AskUserQuestion(
-       question="Take your time testing. When you're done, choose an option or describe any issues you found:",
-       options=["Approve — mark spec as verified", "Issues found — describe below"]
-     )
-     ```
-     Then **stop and wait** for the user's next message.
-   - **⛔ After Manual wait — re-evaluation of follow-up:** When the user responds after a Manual pause:
-     - Explicit approval ("approve", "lgtm", "looks good") → proceed to Step 7
-     - **Any other content** (error descriptions, screenshots, images, bug reports, or ANY non-approval text) → treat as **bug reports to fix**. Investigate the reported issues, implement fixes, re-run tests, then return to Step 6 (ask again).
-   - **⛔ NEVER treat ambiguous or custom responses as approval.** Only the explicit keywords listed under "Approve" advance to Step 7.
+Preserve the actual approval and reviewed-result identity across compaction. A stop-guard instruction is not user approval.

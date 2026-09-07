@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 HOOK_PATH = Path(__file__).resolve().parent.parent / "auto_approve_plan.py"
 SESSION = "test-session"
@@ -116,7 +119,208 @@ def _decision(data: dict | None) -> dict:
     return data["hookSpecificOutput"]["decision"]
 
 
+def _prepared_native_state(tmp_path: Path, *, enter: bool = True) -> tuple[Path, Path, dict]:
+    plan = _setup_spec_state(tmp_path, approved="No", sentinel=False)
+    plan.write_text(
+        "# Test Feature\n\nCreated: 2026-09-07\nAgent: Claude Code\nStatus: PENDING\nApproved: No\n"
+        "Worktree: No\nType: Feature\nIterations: 0\n\n## Summary\n\nA concrete feature.\n"
+    )
+    marker = tmp_path / "home" / ".pilot" / "sessions" / SESSION / "native-spec-planning.json"
+    marker.write_text(
+        json.dumps(
+            {
+                "project_root": str((tmp_path / "project").resolve()),
+                "plan_path": str(plan.resolve()),
+                "sha256": hashlib.sha256(plan.read_bytes()).hexdigest(),
+                "approval_required": False,
+                "state": "prepared",
+            }
+        )
+    )
+    scratch = tmp_path / "home" / ".claude" / "plans" / "prepared.md"
+    scratch.parent.mkdir(parents=True, exist_ok=True)
+    tracker = HOOK_PATH.with_name("plan_mode_tracker.py")
+    if enter:
+        _run(
+            tmp_path,
+            hook_path=tracker,
+            payload={
+                "tool_name": "EnterPlanMode",
+                "tool_use_id": "first-enter",
+                "tool_input": {},
+                "permission_mode": "bypassPermissions",
+            },
+        )
+        _run(
+            tmp_path,
+            hook_path=tracker,
+            payload={
+                "tool_name": "EnterPlanMode",
+                "tool_use_id": "first-enter",
+                "tool_input": {},
+                "tool_response": {"is_error": False, "planFilePath": str(scratch)},
+            },
+        )
+    scratch.write_text(plan.read_text())
+    payload = {"tool_name": "ExitPlanMode", "permission_mode": "plan", "tool_input": {"planFilePath": str(scratch)}}
+    return plan, marker, payload
+
+
 class TestAutoApprovePlan:
+    def test_approval_disabled_only_allows_current_entered_matching_draft(self, tmp_path: Path) -> None:
+        _, _, payload = _prepared_native_state(tmp_path)
+
+        code, result = _run(tmp_path, payload=payload)
+
+        assert code == 0
+        decision = _decision(result)
+        assert decision["behavior"] == "allow"
+        assert decision["updatedInput"] == payload["tool_input"]
+        assert "updatedPermissions" not in decision
+
+    @pytest.mark.parametrize(
+        "case", ["no-enter", "unrelated", "changed-target", "already-approved", "later-enter", "failed-enter"]
+    )
+    def test_prepared_marker_does_not_approve_an_unbound_exit(self, tmp_path: Path, case: str) -> None:
+        plan, marker, payload = _prepared_native_state(tmp_path, enter=case not in {"no-enter", "failed-enter"})
+        tracker = HOOK_PATH.with_name("plan_mode_tracker.py")
+        if case == "unrelated":
+            payload["tool_input"] = {"plan": "# Unrelated native idea\n\n## Summary\n\nDifferent work.\n"}
+        elif case == "changed-target":
+            plan.write_text(plan.read_text() + "\nConcurrent user change.\n")
+        elif case == "already-approved":
+            plan.write_text(plan.read_text().replace("Approved: No", "Approved: Yes"))
+        elif case in {"later-enter", "failed-enter"}:
+            _run(
+                tmp_path,
+                hook_path=tracker,
+                payload={
+                    "tool_name": "EnterPlanMode",
+                    "tool_use_id": "another-enter",
+                    "tool_input": {},
+                    "permission_mode": "default",
+                },
+            )
+            _run(
+                tmp_path,
+                hook_path=tracker,
+                payload={
+                    "tool_name": "EnterPlanMode",
+                    "tool_use_id": "another-enter",
+                    "tool_input": {},
+                    "tool_response": {"is_error": case == "failed-enter"},
+                },
+            )
+
+        code, result = _run(tmp_path, payload=payload)
+
+        assert code == 0
+        assert result is None
+        assert not _marker(tmp_path).exists()
+        assert marker.exists() or case in {"later-enter", "failed-enter"}
+
+    def test_native_bridge_discards_legacy_bypass_restore_before_user_choice(self, tmp_path: Path) -> None:
+        _, marker, payload = _prepared_native_state(tmp_path)
+        data = json.loads(marker.read_text())
+        data["approval_required"] = True
+        marker.write_text(json.dumps(data))
+        _arm_marker(tmp_path)
+
+        _, result = _run(tmp_path, payload=payload)
+        _, next_result = _run(
+            tmp_path,
+            payload={
+                "tool_name": "Bash",
+                "permission_mode": "default",
+                "tool_input": {"command": "true"},
+            },
+        )
+
+        assert result is None
+        assert next_result is None
+        assert not _marker(tmp_path).exists()
+
+    def test_ordinary_native_exit_clears_an_old_restore_before_the_next_prompt(self, tmp_path: Path) -> None:
+        _arm_marker(tmp_path)
+
+        _, result = _run(tmp_path)
+        _, next_result = _run(
+            tmp_path,
+            payload={
+                "tool_name": "Bash",
+                "permission_mode": "manual",
+                "tool_input": {"command": "true"},
+            },
+        )
+
+        assert result is None
+        assert next_result is None
+        assert not _marker(tmp_path).exists()
+
+    @pytest.mark.parametrize("write_completed", [False, True])
+    def test_draft_path_fallback_requires_a_changed_native_file(self, tmp_path: Path, write_completed: bool) -> None:
+        _, _, payload = _prepared_native_state(tmp_path, enter=False)
+        tracker = HOOK_PATH.with_name("plan_mode_tracker.py")
+        _run(tmp_path, hook_path=tracker, payload={"tool_name": "EnterPlanMode", "tool_input": {}})
+        _run(
+            tmp_path,
+            hook_path=tracker,
+            payload={
+                "tool_name": "EnterPlanMode",
+                "tool_input": {},
+                "tool_response": {"result": "ok"},
+            },
+        )
+        scratch = Path(payload["tool_input"]["planFilePath"])
+        _run(
+            tmp_path,
+            hook_path=tracker,
+            payload={
+                "tool_name": "Write",
+                "permission_mode": "plan",
+                "tool_input": {"file_path": str(scratch)},
+            },
+        )
+        if write_completed:
+            scratch.write_text(scratch.read_text() + "\nThe completed implementation approach.\n")
+
+        _, result = _run(tmp_path, payload=payload)
+
+        assert (result is not None) is write_completed
+
+    def test_approval_disabled_rejects_another_scratch_file_with_matching_metadata(self, tmp_path: Path) -> None:
+        _, _, payload = _prepared_native_state(tmp_path)
+        actual = Path(payload["tool_input"]["planFilePath"])
+        unrelated = actual.with_name("unrelated.md")
+        unrelated.write_bytes(actual.read_bytes())
+        payload["tool_input"]["planFilePath"] = str(unrelated)
+
+        _, result = _run(tmp_path, payload=payload)
+
+        assert result is None
+
+    def test_native_spec_bridge_keeps_native_approval_and_permission_choice(self, tmp_path: Path) -> None:
+        plan = _setup_spec_state(tmp_path, approved="No")
+        marker = tmp_path / "home" / ".pilot" / "sessions" / SESSION / "native-spec-planning.json"
+        marker.write_text(
+            json.dumps(
+                {
+                    "project_root": str((tmp_path / "project").resolve()),
+                    "plan_path": str(plan.resolve()),
+                    "sha256": hashlib.sha256(plan.read_bytes()).hexdigest(),
+                    "approval_required": True,
+                }
+            )
+        )
+        _record_pre_plan_mode(tmp_path, "bypassPermissions")
+
+        code, decision = _run(tmp_path)
+
+        assert code == 0
+        assert decision is None
+        assert not _marker(tmp_path).exists()
+        assert "Approved: No" in plan.read_text()
+
     def test_native_plan_mode_exit_is_left_to_claude_code(self, tmp_path):
         """No registered Pilot run -> NO output, so the native plan dialog runs.
 
@@ -234,26 +438,14 @@ class TestAutoApprovePlan:
         assert "approved" not in message, f"misleading approval wording: {message!r}"
         assert "not plan approval" in message, f"missing disclaimer: {message!r}"
 
-    def test_denies_while_plan_awaits_approval(self, tmp_path):
-        """Premature ExitPlanMode during the /spec planning leg must be denied.
-
-        Regression guard for the field report where the model followed the harness
-        plan-mode reminder ("present the plan for approval via ExitPlanMode") and
-        called ExitPlanMode BEFORE the AskUserQuestion approval gate. With an active
-        plan-mode sentinel and a registered PENDING, unapproved plan, the hook must
-        deny and re-anchor the model to the approval gate - including the escape
-        hatch (sentinel path) for non-/spec or abandoned plan-mode legs.
-        """
-        _setup_spec_state(tmp_path, approved="No")
+    def test_unapproved_legacy_spec_keeps_the_native_approval_dialog(self, tmp_path):
+        """A native approval boundary must not be blocked by a second Pilot gate."""
+        plan = _setup_spec_state(tmp_path, approved="No")
         code, data = _run(tmp_path)
         assert code == 0
-        decision = _decision(data)
-        assert decision["behavior"] == "deny"
-        message = decision["message"]
-        assert "askuserquestion" in message.lower()
-        assert "plan-mode-active" in message  # escape hatch names the sentinel
-        assert "updatedPermissions" not in decision  # allow-only field per hook schema
-        assert not _marker(tmp_path).exists()  # a denied exit must not arm the restore
+        assert data is None
+        assert "Approved: No" in plan.read_text()
+        assert not _marker(tmp_path).exists()
 
     def test_allows_after_plan_approved(self, tmp_path):
         _setup_spec_state(tmp_path, approved="Yes")
@@ -288,7 +480,7 @@ class TestAutoApprovePlan:
         plan_path = _setup_spec_state(tmp_path, approved="No")
         plan_path.write_bytes(b"Status: PENDING\nApproved: No\n\xe9\xff")
         _, data = _run(tmp_path)
-        assert _decision(data)["behavior"] == "allow"  # a live leg, just an unreadable file
+        assert data is None  # unreadable state cannot authorize automatic approval
 
     def test_allows_when_plan_outside_project(self, tmp_path):
         """Cross-session bleed guard: a plan from another repo never denies here."""
@@ -376,6 +568,20 @@ class TestAutoApprovePlan:
         )
         assert code == 0
         assert data is None
+
+    def test_missing_bridge_module_cannot_fall_back_to_legacy_autoapproval(self, tmp_path: Path) -> None:
+        plan, _, payload = _prepared_native_state(tmp_path)
+        plan.write_text(plan.read_text().replace("Approved: No", "Approved: Yes"))
+        orphan_hook = tmp_path / "partial-install" / "auto_approve_plan.py"
+        orphan_hook.parent.mkdir()
+        shutil.copy(HOOK_PATH, orphan_hook)
+        shutil.copytree(HOOK_PATH.parent / "_lib", orphan_hook.parent / "_lib")
+
+        code, result = _run(tmp_path, hook_path=orphan_hook, payload=payload)
+
+        assert code == 0
+        assert result is None
+        assert not _marker(tmp_path).exists()
 
     def test_exit_allow_arms_restore_marker(self, tmp_path):
         """An allowed ExitPlanMode must arm the bypass-restore marker.

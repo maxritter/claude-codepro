@@ -1,14 +1,16 @@
 ## Step 6: Approach Selection & Design Decisions
 
-**Don't skip this step.** After exploration, weigh competing approaches before committing. Even when one approach seems obvious, considering alternatives validates the choice and surfaces blind spots.
+<!-- CC-ONLY -->
+While native plan mode is active, omit the notification command below. Ask required clarification through the permitted native input surface; defer external notifications until native exit.
+<!-- /CC-ONLY -->
 
-**Two parts — both mandatory in-process; the plan only records the chosen path:**
+Select an approach supported by the request and repository. Compare alternatives when there is a real architectural or product trade-off; do not manufacture options for an established, straightforward solution. The plan records the chosen path and consequential decisions.
 
 #### Part A: Overall Approach
 
-Internally consider 2-3 implementation approaches based on exploration findings. For each candidate, evaluate:
+When alternatives matter, compare the plausible approaches based on exploration findings:
 
-- **Name** — short label, **referencing real symbols/files from the Step 3 Workspace Scan when available** (e.g., "Extend `OrderHandler` in `src/handlers/order.py`" vs "New `OrderService` module under `src/services/`"). Generic labels ("Extend existing handler") are a regression — only use them when `Greenfield?: yes` in the scan output.
+- **Name** — short label, **referencing real symbols/files from the Step 3 Workspace Scan when available and permitted for this question** (e.g., "Extend `OrderHandler` in `src/handlers/order.py`" vs "New `OrderService` module under `src/services/`"). Generic labels ("Extend existing handler") are a regression — only use them when `Greenfield?: yes` in the scan output.
 - **How it works** — 2-3 sentences
 - **Trade-offs** — frame as **"X at the cost of Y"** — never recommend without stating what it costs
 - **Recommendation** — pick a preferred approach with reasoning
@@ -22,21 +24,21 @@ CODEX-END -->
 
 #### Part B: Design Decisions
 
-Within the chosen approach, resolve remaining design choices. Each decision gets 2-3 concrete options with trade-offs and your recommendation.
+Within the chosen approach, resolve remaining design choices. Explain trade-offs when they affect the implementation or user experience.
 
 <!-- CC-ONLY -->
-**Notify, then ask (Batch 2):**
+**If a material decision requires user input, notify, then ask (Batch 2):**
 
 ```bash
 ~/.pilot/bin/pilot notify plan_approval "Design Decisions" "<plan_name> — architecture choices" --plan-path "<plan_path>" 2>/dev/null || true
 ```
 
-Use `AskUserQuestion` — Part A (approach selection) and Part B (design decisions) can be combined into a single Batch 2 interaction when the decisions are related.
+Use `AskUserQuestion` when available and permitted. Combine related approach and design decisions. Skip this interaction when you can make a reasonable choice within the authorized scope.
 
 **When questions are disabled (`PILOT_PLAN_QUESTIONS_ENABLED=false`):** Still evaluate approaches and design decisions internally. Select the recommended approach, resolve design decisions with reasonable defaults, and document all choices with reasoning in the plan's "Autonomous Decisions" section.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-**Codex Batch 2 policy:** do not ask a second question batch for ordinary trade-offs. Resolve them internally, state the chosen approach with one cost sentence, and proceed. If a Batch 2 question is unavoidable, notify first and ask one bundled plain-text prompt; after the answer, write the plan immediately.
+**Codex Batch 2 policy:** do not ask a second question batch for ordinary trade-offs. Resolve them internally, state the chosen approach with one cost sentence, and proceed. If a Batch 2 question is unavoidable, notify first and use the current runtime's permitted structured input tool with a concise prose fallback; after the answer, write the plan immediately.
 
 **When questions are disabled (`PILOT_PLAN_QUESTIONS_ENABLED=false`):** select the recommended approach, resolve design decisions with reasonable defaults, and document non-obvious choices in the plan's "Autonomous Decisions" section.
 CODEX-END -->

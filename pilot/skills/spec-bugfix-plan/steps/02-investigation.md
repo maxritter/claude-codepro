@@ -1,24 +1,17 @@
 ## Step 2: Root Cause Investigation
 
-Complete each sub-step before the next. No shortcuts.
+Establish a reproduction, causal trace, and supported fix strategy. Use the relevant checks below; skip redundant steps when existing evidence already settles them.
 
-<!-- CODEX-START
-### Codex Investigation Budget
+### Investigation efficiency
 
-For Codex, keep investigation proportional:
-
-- Do not exceed 6 expensive investigation calls before drafting the plan. Expensive calls are CodeGraph, Semble, broad Grep, web/doc lookup, and full-file reads beyond the suspected files.
-- If the bug is local after reproduction (wrong constant, null check, typo, one renderer label, one config value), use targeted reads and skip deep graph exploration.
-- If two reproduction attempts fail because input, command, stack trace, or environment is missing, ask one bundled plain-text clarification prompt and stop guessing.
-- If three hypotheses fail, stop and ask for the missing signal instead of continuing another search loop.
-CODEX-END -->
+Use each reproduction or hypothesis test to distinguish a specific cause. When repeated attempts produce no new evidence, revisit assumptions, inspect the environment, and identify the missing signal. Ask the user when that signal cannot be obtained independently; attempt counts alone do not prove an architectural problem.
 
 ### 2.1 Reproduce & understand
 
 - Restate **symptom** (what user observes), **trigger** (when/how), **expected behaviour**.
 - Vague? One focused `AskUserQuestion`.
 - Reliable repro? Steps?
-- **Not reproducible after 2 attempts:** STOP guessing. `AskUserQuestion` for the missing signal — exact command, input, environment, stack trace, or recording.
+- **If reproduction stalls because a signal is missing:** identify the exact command, input, environment, stack trace, or recording needed. Gather it independently where possible; otherwise ask using the current permitted question mechanism.
 - **Multi-factor repro? Minimise first** (Systematic Debugging step 1 in `development-practices.md`): the minimal repro shrinks the Step 2.3 trace space and becomes the RED test in implementation.
 - **Intermittent (flaky / race):** trigger 10+ times, record state at failure. Flaky bugs need a test that **forces** the race (deterministic ordering, frozen clock, blocked event loop), not one that hopes to hit it.
 
@@ -31,7 +24,7 @@ CODEX-END -->
 ### 2.3 Trace the root cause
 
 <!-- CC-ONLY -->
-**Start with `codegraph_explore(query="<bug description and symptoms>")`** — single call, returns entry points, related symbols, and code context. Then `mcp__semble__search` for the bug's *intent* ("where does X get modified", "error handling in Y") — catches cross-language connections and mutation sites the graph misses.
+Read a named bug location directly. Use `codegraph_explore(query="<bug description and symptoms>")` when runtime relationships or entry points are unknown, and Semble for unresolved intent or cross-cutting mutation sites. Reuse source already read.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
 Use `codegraph_explore(query="<bug description and symptoms>")` only when the bug location is not already named and the problem appears to involve runtime-code structure. Add one `mcp__semble__search` only when CodeGraph is weak or the bug is cross-cutting. If the user names concrete paths, docs, rules, markdown, config, UI copy, or the symptom points to a specific file, read that file instead of spending a graph call.
@@ -51,7 +44,11 @@ CODEX-END -->
 3. Keep tracing until you find the **source** where the bad data originates.
 4. **Fix at the source, not where the error appears.**
 
-**Multi-component systems — instrument at boundaries before concluding:**
+<!-- CC-ONLY -->
+**Native plan mode:** production instrumentation and scratch diagnostic files are deferred until native exit; the only writable file is the runtime-permitted native draft. Use existing logs, read-only inspection, or non-mutating commands to trace boundaries. If fresh instrumentation is essential, document the missing signal and obtain the necessary native exit before running an isolated diagnostic; do not claim a verified root cause from missing evidence.
+<!-- /CC-ONLY -->
+
+**Multi-component systems — instrument at boundaries before concluding (only when the current mode permits those writes):**
 
 ```bash
 # Layer 1: entry point
@@ -97,4 +94,4 @@ State clearly:
 
 Low confidence → gather more evidence. Don't guess.
 
-**Escalation:** if 3+ hypotheses have failed, this is likely architectural. STOP and `AskUserQuestion` before continuing.
+**Escalation:** when hypotheses repeatedly fail without new evidence, revisit the causal model and identify what observation would distinguish the remaining possibilities. Ask for a missing signal only when it cannot be gathered safely from the workspace.

@@ -14,30 +14,6 @@ from session_announcements import (
 
 
 class TestRegistry:
-    def test_has_model_switching_modes_announcement(self) -> None:
-        entry = next((a for a in ANNOUNCEMENTS if a["id"] == "model-switching-modes"), None)
-        assert entry is not None
-        # Names all three modes, the new default, and the migration mapping.
-        assert "Automated (default)" in entry["message"]
-        assert "Manual" in entry["message"]
-        assert "Off" in entry["message"]
-        assert "no longer touches those aliases" in entry["message"]
-
-    def test_has_opus_5_announcement(self) -> None:
-        entry = next((a for a in ANNOUNCEMENTS if a["id"] == "opus-5"), None)
-        assert entry is not None
-        # Names the new opusplan pair and the surviving 200K boundary condition.
-        assert "Opus 5" in entry["message"]
-        assert "Sonnet 5" in entry["message"]
-        assert "200K" in entry["message"]
-
-    def test_model_switching_announcement_drops_stale_preflight_claim(self) -> None:
-        """The 'new pre-flight check' wording described a then-new feature; it now
-        reads as a promise to fresh installs. The check still exists, but the
-        announcement should not advertise it as new."""
-        entry = next(a for a in ANNOUNCEMENTS if a["id"] == "model-switching-modes")
-        assert "A new" not in entry["message"]
-
     def test_stale_pin_era_announcements_pruned(self) -> None:
         ids = [a["id"] for a in ANNOUNCEMENTS]
         for stale in (
@@ -46,6 +22,8 @@ class TestRegistry:
             "configurable-plan-exec-models",
             "fable-5-support",
             "opusplan-sonnet-default",
+            "model-switching-modes",
+            "opus-5",
         ):
             assert stale not in ids
 

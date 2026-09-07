@@ -127,12 +127,6 @@ const PricingSection = () => {
               <li className="flex items-start gap-3">
                 <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                 <span className="text-muted-foreground text-sm group-hover:text-foreground/80 transition-colors">
-                  Pilot Bot — 24/7 automation agent with scheduled jobs
-                </span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                <span className="text-muted-foreground text-sm group-hover:text-foreground/80 transition-colors">
                   Cross-machine skill sync — push/pull skills across all your machines
                 </span>
               </li>

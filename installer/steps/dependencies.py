@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from installer.claude_display_patch import apply_display_patch
 from installer.claude_paths import get_claude_config_dir
 from installer.context import InstallContext
 from installer.manifest import UpstreamEntry
@@ -2112,6 +2113,64 @@ def _fix_npx_peer_dependencies() -> None:
                 pass
 
 
+def _migrate_claude_display_mode() -> None:
+    """Reset verbose once per Claude profile, then preserve future user choices."""
+    profile = get_claude_config_dir()
+    marker = profile / ".pilot-display-patch-migration.json"
+    if marker.exists():
+        return
+    profile.mkdir(parents=True, exist_ok=True)
+    settings_path = profile / "settings.json"
+    before = settings_path.read_bytes() if settings_path.exists() else None
+    settings = json.loads(before) if before is not None else {}
+    if not isinstance(settings, dict):
+        raise ValueError("Claude settings are not a JSON object")
+    change = settings.get("verbose") is not False or settings.get("viewMode") == "verbose"
+    if settings.get("viewMode") == "verbose":
+        del settings["viewMode"]
+    # /config writes verbose, while viewMode takes precedence over it. Keeping
+    # a default viewMode override would hide the user's later verbose choice.
+    settings["verbose"] = False
+    with tempfile.TemporaryDirectory(prefix=".pilot-display-mode-", dir=profile) as work:
+        staged_marker = Path(work) / "marker.json"
+        staged_marker.write_text('{"version": 1}\n', encoding="utf-8")
+        staged_settings = Path(work) / "settings.json"
+        staged_settings.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+        staged_settings.chmod(settings_path.stat().st_mode & 0o777 if before is not None else 0o600)
+        if (settings_path.read_bytes() if settings_path.exists() else None) != before:
+            raise ValueError("Claude settings changed during display migration; preserving the newer settings")
+        try:
+            # Claim once before activation. An interrupted install must never
+            # repeatedly reset a user who subsequently switches verbose back on.
+            os.link(staged_marker, marker)
+        except FileExistsError:
+            return
+        try:
+            if change:
+                os.replace(staged_settings, settings_path)
+        except OSError:
+            marker.unlink(missing_ok=True)
+            raise
+
+
+def _setup_claude_display_patch(ui: Any = None) -> bool:
+    """Enable native display details after Bun/plugins, without blocking install."""
+    result = apply_display_patch()
+    if result.status == "failed":
+        if ui:
+            ui.warning(result.message)
+        return False
+    if result.status in {"patched", "unchanged"}:
+        try:
+            _migrate_claude_display_mode()
+        except (OSError, ValueError) as error:
+            if ui:
+                ui.warning(f"Claude display details enabled, but the one-time view mode migration failed: {error}")
+    if result.status == "patched" and ui:
+        ui.success(result.message)
+    return result.status in {"patched", "unchanged"}
+
+
 class DependenciesStep(BaseStep):
     """Step that installs all required dependencies."""
 
@@ -2197,6 +2256,11 @@ class DependenciesStep(BaseStep):
 
             if _setup_pilot_memory(ui):
                 installed.append("pilot_memory")
+
+            # Bun is ready and all Claude plugin invocations have finished.
+            # Stage/verify the existing native binary; never install Claude here.
+            if _setup_claude_display_patch(ui):
+                installed.append("claude_display_patch")
 
             # Browser tools run sequentially (shared Chromium download cache)
             if _install_with_spinner(ui, "agent-browser (browser automation)", install_agent_browser):

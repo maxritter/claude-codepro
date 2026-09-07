@@ -18,17 +18,13 @@ migration. Pilot adds a friendly usage label and offline pricing fallback for
 known models; unknown models stay visible as unpriced instead of silently
 reporting zero cost.
 
-Pilot recognizes `gpt-6-astra` as **GPT-6 Astra**, including its short- and
-long-context Standard pricing. The installer continues to seed GPT-5.6 Sol as
-the Codex default for now: it must not switch every user to a staged model their
-account or API project may not yet access. Once OpenAI grants access, select
-Astra in Codex with `codex --model gpt-6-astra` or your own `config.toml` choice.
-Pilot preserves provider catalog entries rather than maintaining a separate
-closed model allowlist. Its generated catalog only raises the published context
-ceiling for GPT-6 Astra and the GPT-5.6 Sol/Terra/Luna family; older models keep
-their own advertised limits.
+Pilot leaves model and reasoning effort to you in both Codex and Claude Code.
+It does not seed a model or effort on fresh installs, and preserves your saved
+choices on updates. Choose Astra, Sol, or another available model in your client.
+Codex manages its own model catalog; Pilot only requests
+[expanded context](./context-optimization.md).
 
-Opus reasons better; Sonnet is faster and cheaper. The cost-saving move is to plan on a stronger model, then drop to a cheaper one for the mechanical implementation and verification that follow. **Model Switching** controls how `/spec` handles that switch.
+**Model Switching** controls whether `/spec` keeps your selected model or uses Claude Code's native `opusplan` planning and execution legs. Choose the mode for your task and model preferences; implementation and verification can need as much reasoning as planning.
 
 ## The Three Modes
 
@@ -36,9 +32,9 @@ Opus reasons better; Sonnet is faster and cheaper. The cost-saving move is to pl
 
 | Mode | What happens | Who switches |
 |------|--------------|--------------|
-| **Automated** | `/spec` runs on the `opusplan` model: Opus 5 plans (plan mode), Sonnet 5 executes everything else | Claude Code, natively |
+| **Automated** | `/spec` uses `opusplan`: the Opus planning leg and Sonnet execution leg, subject to Claude Code's runtime availability | Claude Code, natively |
 | **Manual** (default) | `/spec` runs start to finish on your active model and never pauses to switch; interrupt and run `/model` if you want to change mid-run | You, via `/model` |
-| **Off** | No model management, no prompts, no gates | Nobody -- the active `/model` choice runs everything |
+| **Off** | No model-switch management; the active model runs every phase | Nobody -- the active `/model` choice is retained |
 
 Pilot does **not** remap model aliases behind the scenes in any mode -- your `/model` picker always means what it says.
 
@@ -46,28 +42,28 @@ Pilot does **not** remap model aliases behind the scenes in any mode -- your `/m
 
 New installs start here. You stay in control of the model at every phase:
 
-1. Type `/spec <task>` on whatever model you want planning to run on (the Step-0 message reminds you -- switch with `/model` before planning starts if needed). Fable 5, Opus 5, anything.
+1. Select an available model with `/model`, then type `/spec <task>`. Fable 5.1, Opus 5, and other available models can run the whole workflow.
 2. Plan, review, approve as usual.
-3. After you approve the plan, `/spec` finishes its turn with a switch prompt: *"switch to your implementation model now via `/model`, then send `continue`."* You get the input box back, run `/model sonnet` (or keep the current model), confirm Claude Code's dialog about carrying the conversation over to the new model, and type `continue` — implementation starts on your choice.
+3. After approval, implementation continues immediately on the active model. There is no extra switch prompt or pause. To change models during the run, interrupt and use `/model`.
 
-That's the whole contract -- one reminder, one pause. In fully-autonomous runs (Plan Approval disabled), the pause is skipped and a one-line notice is printed instead.
+Disabling Plan Approval removes that configured approval gate; it does not change the model or create another handoff gate.
 
 ## Automated
 
 `/spec` drives Claude Code's native `opusplan` model:
 
 - Pilot sets `model: opusplan` (and the matching `ANTHROPIC_MODEL` env pin) in `~/.claude/settings.json` when you select Automated.
-- The spec skills enter plan mode at planning start (Opus 5) and exit it after plan approval (Sonnet 5). Plan mode is purely the model lever here -- approval still happens at the AskUserQuestion gate.
-- The `spec_mode_guard` hook blocks `/spec` when the session is not on `opusplan` and tells you to run `/model opusplan`.
+- Before entering native plan mode, Pilot prepares the branch/worktree when requested, creates an unapproved plan header in `docs/plans/`, and registers the destination while writes are permitted.
+- Planning then uses the draft file permitted by Claude Code's native plan mode. Its native approval presents the completed draft; the capture hook transfers the accepted result into the registered plan. Pilot preserves the native permission choice, completes any deferred configured review, and continues implementation without asking for the same approval again.
+- Native restrictions still apply. The `spec_mode_guard` can block an incompatible selected model or a `/spec` invocation made while already in native plan mode. Follow its specific message: select `/model opusplan`, choose Manual/Off, or leave native plan mode through its normal controls before starting `/spec`.
 
-**Know the boundary conditions.** Claude Code decides the plan-leg model, and it can silently keep serving Sonnet when Opus is not available for the request:
+Claude Code decides which model actually serves each request. Pilot checks the observed planning model and reports a mismatch when the expected Opus leg is not active. That observation does not establish the cause: check `/model` and `/usage` for selection or usage limits.
 
-- **Conversation too large.** The Opus plan leg has an effective 200K window — and on current Claude Code versions the cap applies **even with the Opus 1M entitlement**: the v2.1.172 fix that gave entitled accounts a 1M plan leg has regressed upstream ([anthropics/claude-code#65512](https://github.com/anthropics/claude-code/issues/65512), [#74325](https://github.com/anthropics/claude-code/issues/74325)). Accounts without the entitlement, or with exhausted Max usage credits, were always capped at 200K. Once your conversation is bigger than that, plan mode silently stays on Sonnet. Pilot pre-flight-checks this at `/spec` submit and warns you to `/compact` / `/clear` first (or use Manual mode); a mid-planning check warns again if planning is observably not on Opus.
-- **Opus usage limits.** Under `opusplan`, Claude Code serves Sonnet while your Opus pool is exhausted and switches back when it frees up (`/usage` shows the state).
+Pilot no longer uses a fixed 180K/200K preflight cutoff or forces compaction to obtain a particular model. A missing notice is not proof of a switch. If the runtime lacks the required native planning tools, Pilot keeps the current model and uses the normal permitted approval path instead of inventing tool support.
 
 ## Off
 
-Pilot stays out of model management entirely. Direct requests, native Claude Code workflows, and Pilot workflows all run on the active `/model` choice with no reminders or gates. Switching away from Automated heals a Pilot-written `opusplan` back to `opus[1m]`; any model you picked yourself -- including `opusplan` -- is left alone.
+Pilot stays out of model-switch management. Direct requests, native Claude Code workflows, and Pilot workflows use the active `/model` choice; their normal approval and permission requirements still apply. Switching away from Automated removes Pilot's managed `opusplan` setting without selecting a replacement; any model you picked yourself -- including `opusplan` -- is left alone.
 
 ## Migration from earlier versions
 
@@ -75,11 +71,12 @@ The old boolean toggle (and the 9.12 configurable Plan/Execution model pair with
 
 | Old setting | New mode |
 |-------------|----------|
-| Model Switching ON (old default) | Automated |
-| Model Switching OFF | Off |
+| Explicit legacy `modelSwitch: true` | Automated |
+| Explicit legacy `modelSwitch: false` | Off |
+| Missing or invalid setting | Manual |
 
-Automated matches what ON-users were already getting, so upgrading never changes your mode; select Manual or Off in the Console if you'd rather. A fresh install is seeded Manual instead -- upgraders keep their existing behaviour, new users pick their own model from the start. Any leftover alias remaps an older Pilot wrote into `~/.claude/settings.json` are cleaned up on the next Pilot start (values you set yourself are left alone).
+Explicit mode choices are preserved. Fresh installs and missing settings use Manual, so Automated always requires an opt-in. Updates also retire the old Claude Code effort default when it still matches Pilot's installation baseline; customized effort settings remain yours.
 
 ## The env var
 
-Skills and hooks read the mode fresh from `~/.pilot/config.json` (`specWorkflow.modelSwitchMode`), so a Console change applies to the very next `/spec` -- no session restart needed. `PILOT_MODEL_SWITCH_MODE` (`automated` | `manual` | `off`) is exported for display and subagents.
+Skills and hooks read the mode fresh from `~/.pilot/config.json` (`specWorkflow.modelSwitchMode`), so the next `/spec` sees a Console change without a session restart. A mode change does not itself close an already-open native plan mode or prove that the live model changed. `PILOT_MODEL_SWITCH_MODE` (`automated` | `manual` | `off`) is exported for display and subagents; it is not a fallback that overrides the current configuration.

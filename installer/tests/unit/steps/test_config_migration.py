@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 class TestMigrationV1:
     """Migration v0 -> v1: Update model routing from v7.0 to v7.1."""
@@ -1330,7 +1332,7 @@ class TestMigrationV10:
         # v12 pruned the dead keys outright
         assert "model" not in migrated
         assert "skills" not in migrated
-        assert migrated["specWorkflow"]["modelSwitchMode"] == "automated"
+        assert migrated["specWorkflow"]["modelSwitchMode"] == "manual"
         # v12 also wrote a backup with the pre-migration state
         bak_path = config_path.with_suffix(".json.bak.v11")
         assert bak_path.exists()
@@ -1489,9 +1491,9 @@ class TestMigrationV11:
 
 
 class TestMigrationV12:
-    """Migration v11 -> v12: Strip dead model keys, seed specWorkflow.modelSwitch, write .bak.v11 once."""
+    """Migration v11 -> v12: Strip dead model keys and write .bak.v11 once."""
 
-    def test_v12_strips_dead_model_keys_and_seeds_model_switch(self, tmp_path: Path) -> None:
+    def test_v12_strips_dead_model_keys_without_enabling_model_switch(self, tmp_path: Path) -> None:
         from installer.steps.config_migration import migrate_model_config
 
         config_path = tmp_path / "config.json"
@@ -1523,7 +1525,7 @@ class TestMigrationV12:
         assert migrated["_configVersion"] == _CCV2
         for dead in ("model", "skills", "agents", "extendedContext", "extendedContextOverrides"):
             assert dead not in migrated, f"{dead} should have been pruned"
-        assert migrated["specWorkflow"]["modelSwitchMode"] == "automated"
+        assert migrated["specWorkflow"]["modelSwitchMode"] == "manual"
         assert migrated["specWorkflow"]["branchIsolation"] is True
         assert migrated["reviewerAgents"]["specReview"] is True
 
@@ -1583,7 +1585,7 @@ class TestMigrationV12:
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
         assert migrated["specWorkflow"]["modelSwitchMode"] == "automated"
 
-    def test_v12_seeds_model_switch_when_specworkflow_missing(self, tmp_path: Path) -> None:
+    def test_v12_leaves_model_switch_manual_when_specworkflow_missing(self, tmp_path: Path) -> None:
         from installer.steps.config_migration import migrate_model_config
 
         config_path = tmp_path / "config.json"
@@ -1591,7 +1593,7 @@ class TestMigrationV12:
 
         migrate_model_config(config_path)
         migrated = json.loads(config_path.read_text())
-        assert migrated["specWorkflow"]["modelSwitchMode"] == "automated"
+        assert migrated["specWorkflow"]["modelSwitchMode"] == "manual"
 
     def test_v12_in_isolation_preserves_user_model_switch_false(self) -> None:
         """v12 ALONE preserves an explicit modelSwitch=false (v13 is what force-enables)."""
@@ -2143,10 +2145,20 @@ class TestMigrationV20:
         for retired in ("modelSwitch", "planModel", "execModel"):
             assert retired not in sw
 
-    def test_absent_keys_default_to_automated(self, tmp_path: Path) -> None:
+    def test_absent_keys_default_to_manual(self, tmp_path: Path) -> None:
         result = self._migrate(tmp_path, {"_configVersion": 19, "specWorkflow": {"planApproval": True}})
-        assert result["specWorkflow"]["modelSwitchMode"] == "automated"
+        assert result["specWorkflow"]["modelSwitchMode"] == "manual"
         assert result["specWorkflow"]["planApproval"] is True  # untouched sibling
+
+    @pytest.mark.parametrize("version", range(20))
+    def test_full_migration_without_model_switch_opt_in_stays_manual(self, tmp_path: Path, version: int) -> None:
+        result = self._migrate(tmp_path, {"_configVersion": version})
+        assert result["specWorkflow"]["modelSwitchMode"] == "manual"
+
+    @pytest.mark.parametrize("legacy", [None, "true", "false", 1, 0, [], {}])
+    def test_invalid_legacy_switch_does_not_opt_in(self, tmp_path: Path, legacy: object) -> None:
+        result = self._migrate(tmp_path, {"_configVersion": 19, "specWorkflow": {"modelSwitch": legacy}})
+        assert result["specWorkflow"]["modelSwitchMode"] == "manual"
 
     def test_explicit_mode_from_newer_console_is_preserved(self, tmp_path: Path) -> None:
         result = self._migrate(
@@ -2175,7 +2187,7 @@ class TestMigrationV20:
             {"_configVersion": 19, "codeReview": {"spec": "high", "fix": "agent"}, "specWorkflow": {}},
         )
         assert "codeReview" not in result
-        assert result["specWorkflow"]["modelSwitchMode"] == "automated"
+        assert result["specWorkflow"]["modelSwitchMode"] == "manual"
 
 
 class TestMigrationV21:

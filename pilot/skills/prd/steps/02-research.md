@@ -1,15 +1,12 @@
 ## Step 2: Research (Optional)
 
-<!-- CC-ONLY -->
-**After understanding the idea, ask the user which research tier they want.** Use `AskUserQuestion` with these options:
-<!-- /CC-ONLY -->
-<!-- CODEX-START
-**Codex default:** choose Quick unless the user explicitly asked for research or the PRD depends on current external facts. If research is needed, ask one plain-text tier question with these options:
-CODEX-END -->
+Choose research depth from the request and the facts the PRD depends on. Repository-local ideas usually need only the verified project context. Current market, product, pricing, or external API claims need primary-source verification. Ask about depth only when the time/cost trade-off materially affects the user's intended work.
 
-- **Quick (Recommended for simple ideas)** — "Skip research, go straight to brainstorming or clarification"
-- **Standard** — "Light in-session web research: competitors, prior art, best practices (5-10 searches, stays in this conversation)"
-- **Deep** — "Full multi-angle research with source verification and a cited report (higher token cost)"
+- **Quick:** proceed from existing project evidence when no external fact needs research.
+- **Standard:** focused external research for facts that affect scope or decisions.
+- **Deep:** honor an explicit deep-research request with broader source checking and a cited synthesis.
+
+
 
 ### Quick Tier
 
@@ -24,7 +21,7 @@ Skip web research. Proceed to Step 3 (Ideate) if the idea is still vague and wou
    - User experience patterns ("UX patterns for X")
 <!-- CC-ONLY -->
 2. **Discover web-search tool:** `ToolSearch(query="+web-search search")`
-3. **Execute searches sequentially**, gathering key findings from each
+3. **Batch independent searches**, gathering key findings from each
 4. **Optionally fetch full pages** for promising results: `ToolSearch(query="+web-fetch fetch")` then `fetch_url(url="...")`
 <!-- /CC-ONLY -->
 <!-- CODEX-START
@@ -69,7 +66,7 @@ Deep research in Codex uses bounded parallel angles when agent tools are exposed
    - Compile findings per angle
 3. **Collect and synthesize.** Keep returned agent ids and wait using the current tool schema. Verify citations before synthesizing findings across all angles into one research summary.
 
-**Codex cap:** at most 2 research angles with 2-3 searches each unless the user explicitly asks for exhaustive research.
+Choose the minimum useful independent research angles and deepen only unresolved claims that could change the PRD. Do not stop short of the requested research scope to meet a call quota.
 CODEX-END -->
 
 **Then (both agents):** present the synthesized findings to the user — organized by source/angle, key insights and caveats highlighted — before proceeding to ideation (Step 3) or clarification (Step 4).

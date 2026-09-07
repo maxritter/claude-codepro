@@ -23,7 +23,9 @@ from _checkers.tdd import (
     has_go_test_file,
     has_python_test_file,
     has_related_failing_test,
+    has_test_importing_module,
     has_test_importing_module_dotnet,
+    has_test_importing_module_ts,
     has_typescript_test_file,
     is_dotnet_logic_free,
     is_inside_dotnet_test_project,
@@ -36,6 +38,13 @@ from _lib.util import find_git_root, post_tool_use_context
 
 # Codex apply_patch section header, e.g. "*** Update File: path/to/x.py".
 _APPLY_PATCH_FILE_MARKER = re.compile(r"\*\*\* (?:Update|Add) File:\s*(.+)")
+
+_TEST_COVERAGE_REMINDER = (
+    "TDD Reminder: No nearby test was identified for {name}. "
+    "Check whether existing behavioral tests cover the change. Add or extend a test "
+    "when behavior changes and coverage is missing; naming alone does not establish coverage. "
+    "A cosmetic or declarative edit may need only a focused check."
+)
 
 
 def _tdd_check(tool_name: str, tool_input: dict, file_path: str) -> str:
@@ -53,22 +62,19 @@ def _tdd_check(tool_name: str, tool_input: dict, file_path: str) -> str:
             if path.parent == path:
                 break
             path = path.parent
-        if has_python_test_file(file_path):
+        if has_python_test_file(file_path) or has_test_importing_module(file_path):
             return ""
-        module_name = Path(file_path).stem
-        return f"TDD Reminder: No test file found for '{module_name}' module\n    Consider creating test_{module_name}.py first."
+        return _TEST_COVERAGE_REMINDER.format(name=Path(file_path).name)
 
     if file_path.endswith((".ts", ".tsx")):
-        if has_typescript_test_file(file_path):
+        if has_typescript_test_file(file_path) or has_test_importing_module_ts(file_path):
             return ""
-        base_name = Path(file_path).stem
-        return f"TDD Reminder: No test file found for this module\n    Consider creating {base_name}.test.ts first."
+        return _TEST_COVERAGE_REMINDER.format(name=Path(file_path).name)
 
     if file_path.endswith(".go"):
         if has_go_test_file(file_path):
             return ""
-        base_name = Path(file_path).stem
-        return f"TDD Reminder: No test file found\n    Consider creating {base_name}_test.go first."
+        return _TEST_COVERAGE_REMINDER.format(name=Path(file_path).name)
 
     if file_path.endswith((".cs", ".razor")):
         # A file inside a .NET test project (MyApp.Tests, IntegrationTests, ...) is
@@ -81,8 +87,7 @@ def _tdd_check(tool_name: str, tool_input: dict, file_path: str) -> str:
             return ""
         if is_dotnet_logic_free(file_path):
             return ""
-        class_name = Path(file_path).stem
-        return f"TDD Reminder: No test file found for '{class_name}'\n    Consider creating {class_name}Tests.cs first."
+        return _TEST_COVERAGE_REMINDER.format(name=Path(file_path).name)
 
     return ""
 

@@ -14,4 +14,6 @@ Read plan, register association: `~/.pilot/bin/pilot register-plan "<plan_path>"
 | COMPLETE | * | Bugfix | `spec-bugfix-verify` |
 | VERIFIED | * | * | Report completion, done |
 
+Dispatch the selected skill with the parsed plan path plus `$LANE_FLAG`; preserve both on every transition and loopback.
+
 ARGUMENTS: $ARGUMENTS

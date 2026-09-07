@@ -1,6 +1,6 @@
 ## Step 5: Program Execution Verification
 
-**If runtime profile is Minimal:** Skip.
+**If runtime profile is Minimal:** Run the changed CLI, hook, script, or library entry point with representative inputs in an isolated environment. For prose/config-only work, validate the generated or consumed artifact and its relevant behavior. Skip server-only checks below when no service exists.
 
 **⚠️ Parallel spec warning:** Before starting a server, check port availability: `lsof -i :<port>`. If another `/spec` session occupies it, wait or use a different port.
 

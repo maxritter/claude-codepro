@@ -25,23 +25,9 @@ from installer.steps.base import BaseStep
 _CODEX_REVIEW_AGENT_MODEL = "codex-auto-review"
 _CODEX_MODEL_CATALOG_FILENAME = ".pilot-model-catalog.json"
 _CODEX_CONTEXT_MANAGEMENT_MIN_VERSION = (0, 153, 0)
-_CODEX_FULL_CONTEXT_WINDOW = 1_050_000
-_CODEX_FULL_CONTEXT_MODELS = frozenset(
-    {
-        "gpt-5.6-sol",
-        "gpt-5.6-terra",
-        "gpt-5.6-luna",
-        "gpt-6-astra",
-    }
-)
-_CODEX_MODEL_DEFAULTS = {
-    "model": '"gpt-5.6-sol"',
-    "model_reasoning_effort": '"xhigh"',
-    "plan_mode_reasoning_effort": '"xhigh"',
-    # Request Astra's full published window/input allowance. Codex clamps the
-    # context override to each selected model's catalog ceiling and caps this
-    # compaction threshold at 90% of that resolved window, so Sol and older
-    # models safely retain their smaller limits.
+_CODEX_CONTEXT_DEFAULTS = {
+    # Opt into expanded context without replacing Codex's live model catalog.
+    # Codex clamps this request and the compaction threshold to model limits.
     "model_context_window": "1050000",
     "model_auto_compact_token_limit": "922000",
 }
@@ -123,14 +109,25 @@ def _get_codex_config_dir() -> Path:
     return Path.home() / ".codex"
 
 
-def _load_model_catalog(path: Path) -> dict[str, Any] | None:
+def _retire_codex_model_catalog(content: str, codex_dir: Path) -> tuple[str, bool]:
+    """Remove only the root catalog pointer previously installed by Pilot."""
+    # Pilot only installed root keys. Leave profile overrides and catalog files
+    # alone: a user profile may still explicitly reference the old file.
+    section = re.search(r"(?m)^[ \t]*\[", content)
+    end = section.start() if section else len(content)
+    root = content[:end]
     try:
-        catalog = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(catalog, dict) or not isinstance(catalog.get("models"), list):
-        return None
-    return catalog
+        parsed = tomllib.loads(root)
+    except tomllib.TOMLDecodeError:
+        return content, False
+
+    catalog = parsed.get("model_catalog_json")
+    if catalog != str(codex_dir / _CODEX_MODEL_CATALOG_FILENAME):
+        return content, False
+    key = "model_catalog_json"
+    root = re.sub(rf"(?m)^[ \t]*(?:{key}|\"{key}\"|'{key}')[ \t]*=[^\n]*(?:\n|$)", "", root)
+    updated = root + content[end:]
+    return updated, updated != content
 
 
 def _codex_binary_candidates() -> list[Path]:
@@ -153,85 +150,6 @@ def _codex_binary_candidates() -> list[Path]:
         if path is not None
     ]
     return list(dict.fromkeys(path for path in candidates if path.is_file() and os.access(path, os.X_OK)))
-
-
-def _load_bundled_codex_model_catalog() -> dict[str, Any] | None:
-    """Read the installed Codex catalog without requiring auth or network."""
-    for codex_binary in _codex_binary_candidates():
-        try:
-            result = subprocess.run(
-                [str(codex_binary), "debug", "models", "--bundled"],
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-        except (OSError, subprocess.SubprocessError):
-            continue
-        if result.returncode != 0:
-            continue
-        try:
-            catalog = json.loads(result.stdout)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(catalog, dict) and isinstance(catalog.get("models"), list):
-            return catalog
-    return None
-
-
-def _expanded_codex_model_catalog(catalog: dict[str, Any]) -> dict[str, Any] | None:
-    models = catalog.get("models")
-    if not isinstance(models, list):
-        return None
-
-    copied_models = [dict(model) if isinstance(model, dict) else model for model in models]
-    expandable = [
-        model for model in copied_models if isinstance(model, dict) and model.get("slug") in _CODEX_FULL_CONTEXT_MODELS
-    ]
-    if not expandable:
-        return None
-    for model in expandable:
-        advertised_max = model.get("max_context_window")
-        if not isinstance(advertised_max, int) or advertised_max < _CODEX_FULL_CONTEXT_WINDOW:
-            model["max_context_window"] = _CODEX_FULL_CONTEXT_WINDOW
-    return {"models": copied_models}
-
-
-def _install_codex_model_catalog(codex_dir: Path) -> tuple[Path | None, bool]:
-    """Install a full catalog with published ceilings for current Codex models.
-
-    Codex clamps ``model_context_window`` to the selected catalog's
-    ``max_context_window``. Older bundled catalogs advertise smaller ceilings
-    for models whose published window is now 1.05M, so raise only the known
-    Astra/5.6 family while preserving every other entry and limit. The separate
-    922k auto-compaction default protects those models' published maximum input.
-    """
-    catalog_path = codex_dir / _CODEX_MODEL_CATALOG_FILENAME
-    sources = [
-        _load_model_catalog(codex_dir / "models_cache.json"),
-        _load_model_catalog(catalog_path),
-    ]
-    expanded = None
-    for source in sources:
-        if source is None:
-            continue
-        expanded = _expanded_codex_model_catalog(source)
-        if expanded is not None:
-            break
-    if expanded is None:
-        bundled = _load_bundled_codex_model_catalog()
-        if bundled is not None:
-            expanded = _expanded_codex_model_catalog(bundled)
-    if expanded is None:
-        return None, False
-
-    content = json.dumps(expanded, indent=2, ensure_ascii=False) + "\n"
-    try:
-        if catalog_path.read_text(encoding="utf-8") == content:
-            return catalog_path, False
-    except OSError:
-        pass
-    _atomic_write(catalog_path, content)
-    return catalog_path, True
 
 
 # Per-sub-install label formatters used by CodexFilesStep.run(). Each
@@ -697,24 +615,44 @@ class CodexFilesStep(BaseStep):
         it was not written by Pilot and is left alone.
         """
         rules_dir = codex_dir / "rules"
-        if not stack_rules:
-            return ""
-
         rules_dir.mkdir(parents=True, exist_ok=True)
         manifest_path = rules_dir / _CODEX_RULES_MANIFEST
         shipped = {name for name, _, _ in stack_rules}
         try:
-            previous = set(json.loads(manifest_path.read_text(encoding="utf-8")))
+            recorded = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, ValueError, TypeError):
-            previous = set()
+            recorded = []
+        previous = (
+            {
+                name
+                for name in recorded
+                if isinstance(name, str)
+                and name not in {"", ".", ".."}
+                and "/" not in name
+                and "\\" not in name
+            }
+            if isinstance(recorded, list)
+            else set()
+        )
         for stale_name in previous - shipped:
-            (rules_dir / stale_name).unlink(missing_ok=True)
+            stale = rules_dir / stale_name
+            if stale.is_file() or stale.is_symlink():
+                stale.unlink(missing_ok=True)
 
         rows: list[str] = []
+        managed: set[str] = set()
         for name, globs, body in sorted(stack_rules):
-            _atomic_write(rules_dir / name, body.rstrip("\n") + "\n")
-            rows.append(f"| `{rules_dir / name}` | {', '.join(f'`{g}`' for g in globs)} |")
-        _atomic_write(manifest_path, json.dumps(sorted(shipped), indent=2) + "\n")
+            target = rules_dir / name
+            # Same-name user rules remain user-owned across repeated updates.
+            # Do not adopt them into the manifest or replace symlink targets.
+            if not target.is_symlink() and (name in previous or not target.exists()):
+                _atomic_write(target, body.rstrip("\n") + "\n")
+                managed.add(name)
+            rows.append(f"| `{target}` | {', '.join(f'`{g}`' for g in globs)} |")
+        _atomic_write(manifest_path, json.dumps(sorted(managed), indent=2) + "\n")
+
+        if not rows:
+            return ""
 
         return (
             "## Stack Rules (read on demand)\n\n"
@@ -725,17 +663,16 @@ class CodexFilesStep(BaseStep):
         )
 
     def _install_codex_config(self, ctx: InstallContext) -> bool:
-        """Enable Pilot's Codex integration and enforce its model defaults.
+        """Enable Pilot's Codex integration without selecting a model or effort.
 
         Permissions, personality, editor, warnings, network access, and document
-        limits remain the user's Codex choices. Model, reasoning, and context-window
-        defaults are Pilot-owned so normal and Plan mode consistently use the
-        preferred model at its full window.
+        limits, model, and reasoning effort remain the user's Codex choices.
+        Pilot requests expanded context; model discovery and context ceilings
+        follow Codex's native catalog unless the user configures their own.
         """
         codex_dir = _get_codex_config_dir()
         codex_dir.mkdir(parents=True, exist_ok=True)
         config_path = codex_dir / "config.toml"
-        catalog_path, catalog_changed = _install_codex_model_catalog(codex_dir)
 
         existing = ""
         if config_path.is_file():
@@ -744,7 +681,7 @@ class CodexFilesStep(BaseStep):
             except OSError:
                 pass
 
-        changed = catalog_changed
+        existing, changed = _retire_codex_model_catalog(existing, codex_dir)
         section_match = re.search(r"(?m)^\[", existing)
         top_level_scope = existing[: section_match.start()] if section_match else existing
 
@@ -755,16 +692,8 @@ class CodexFilesStep(BaseStep):
                 existing = re.sub(pattern, "", existing)
                 changed = True
 
-        model_defaults = dict(_CODEX_MODEL_DEFAULTS)
-        if catalog_path is not None:
-            model_defaults["model_catalog_json"] = _toml_string(str(catalog_path))
-        elif ctx.ui:
-            ctx.ui.warning(
-                "Could not prepare the expanded GPT-5.6/Astra model catalog; "
-                "Codex may keep its smaller bundled context window."
-            )
-        existing, model_defaults_changed = _set_top_level_keys(existing, model_defaults)
-        changed = changed or model_defaults_changed
+        existing, context_defaults_changed = _set_top_level_keys(existing, _CODEX_CONTEXT_DEFAULTS)
+        changed = changed or context_defaults_changed
 
         if _codex_supports_context_management():
             existing, context_management_changed = _ensure_context_management_feature(existing)
@@ -818,10 +747,8 @@ class CodexFilesStep(BaseStep):
     def _install_codex_skills(self, ctx: InstallContext) -> int:
         """Install supported Pilot Shell skills to ~/.agents/skills/ for Codex.
 
-        Only skills in _CODEX_SUPPORTED_SKILLS ship to Codex. Bot skills (bot-boot,
-        bot-channel-task, bot-defaults, bot-heartbeat, bot-jobs) depend on Claude Code
-        cron/remote-control, so they stay CC-only. Stale bot-* skills from older
-        installs are cleaned up. Returns the number of adapted SKILL.md files
+        Only skills in _CODEX_SUPPORTED_SKILLS ship to Codex. Proven managed
+        artifacts of retired skills are cleaned up. Returns the number of adapted SKILL.md files
         successfully written.
         """
         # Source is the ACTIVE Claude profile: with CLAUDE_CONFIG_DIR set, a
@@ -840,7 +767,7 @@ class CodexFilesStep(BaseStep):
             for name in self._CODEX_STALE_SKILLS:
                 stale = agents_skills_dir / name
                 if stale.is_dir():
-                    shutil.rmtree(stale, ignore_errors=True)
+                    _remove_codex_skill_runtime(stale)
 
         candidates = [
             p
@@ -1446,11 +1373,6 @@ _PILOT_SKILL_NAMES = frozenset(
         "benchmark",
         "fix",
         "build",
-        "bot-boot",
-        "bot-channel-task",
-        "bot-defaults",
-        "bot-heartbeat",
-        "bot-jobs",
     }
 )
 
@@ -1892,7 +1814,7 @@ def _adapt_invocation_syntax(content: str) -> str:
     2. Unwrap ``<!-- CODEX-START`` … ``CODEX-END -->`` blocks (Codex alternatives hidden as HTML comments).
     3. Replace ``Skill(skill='X', args='Y')`` calls with Codex skill-instruction handoffs.
     4. Replace ``/skill-name`` with ``$skill-name`` for user-facing references.
-    5. Replace ``AskUserQuestion`` with plain-text alternative note.
+    5. Adapt questions to a permitted native structured tool or prose fallback.
     """
     adapted = _CC_ONLY_RE.sub("", content)
 
@@ -1909,14 +1831,17 @@ def _adapt_invocation_syntax(content: str) -> str:
 
     def _replace_ask_user_question_block(m: re.Match[str]) -> str:
         body = m.group("body").rstrip()
-        return f"{m.group('indent')}Present numbered options in plain text using this prompt and option list:\n{body}"
+        return (
+            f"{m.group('indent')}Use a structured question if the runtime exposes and permits one for this purpose; "
+            f"otherwise ask in plain text. Preserve this prompt and its choices:\n{body}"
+        )
 
     adapted = _ASK_USER_QUESTION_BLOCK_RE.sub(_replace_ask_user_question_block, adapted)
 
     adapted = _SKILL_INVOCATION_RE.sub(lambda m: "$" + m.group(1), adapted)
     adapted = adapted.replace(
         "AskUserQuestion(multiSelect: true)",
-        "a structured multi-select question when the runtime exposes one, otherwise numbered options",
+        "a structured multi-select question when the runtime exposes and permits one, otherwise a concise question in prose",
     )
     for old, new in (
         ("`AskUserQuestion` tool", "Claude structured-question tool"),

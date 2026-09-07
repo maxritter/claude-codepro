@@ -3,66 +3,38 @@ paths:
   - "**/*.cs"
   - "**/*.csproj"
   - "**/*.sln"
+  - "**/*.slnx"
 ---
 
 ## .NET / C# Development Standards
 
-**Standards:** `dotnet` CLI for everything | quiet output | analyzers + nullable enforced | self-documenting code.
+### Toolchain and checks
 
-### Tooling
+Follow `global.json`, target frameworks, solution format, central package management, and repository scripts. Preserve configured nullable/analyzer/warning policies; do not enable new global settings or change SDK versions as incidental cleanup.
+
+Typical commands, adapted to the installed SDK and project:
 
 ```bash
-dotnet build                                         # build
-dotnet run --project src/MyApp                       # run
-dotnet test -v q                                     # quiet (preferred); AVOID -v d/diag unless debugging
-dotnet test --filter "Category=Unit"                 # run a single category
-dotnet format                                        # format
-dotnet format --verify-no-changes                    # format check (CI)
-dotnet add package <Name>                            # add a dependency (never hand-edit version pins blindly)
+dotnet build
+dotnet test
+dotnet format --verify-no-changes
 ```
 
-### Project Configuration (enforce in `.csproj` / `Directory.Build.props`)
+Use configured test filters and the relevant solution/project. Keep sufficient diagnostic output for failures and scope formatting/dependency edits to the authorized change.
 
-- `<Nullable>enable</Nullable>` — fix nullable warnings, don't suppress with `null!`
-- `<ImplicitUsings>enable</ImplicitUsings>`
-- `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` — warnings fail the build
-- `<EnableNETAnalyzers>true</EnableNETAnalyzers>` with `<AnalysisLevel>latest-recommended</AnalysisLevel>`
-- Categorize tests (unit vs integration) using your test framework's category attribute
+### Implementation
 
-### Reminders
+- Prefer `Task`/`Task<T>` for asynchronous operations; `async void` belongs only to required event-handler signatures. Avoid blocking async work and propagate cancellation where relevant.
+- Use the project's managed HTTP-client lifetime, such as factory-created clients or properly configured long-lived clients; do not create and dispose a new client per request.
+- Catch specific exceptions when recovery is possible. Re-throw with `throw;` to preserve the stack.
+- Use structured logging without exposing secrets or sensitive payloads.
+- Follow the existing ASP.NET routing, options, authorization, and error contracts. Use production error handling that does not expose internal stack traces.
+- Respect nullable contracts. A null-forgiving operator or suppression needs an established invariant, not merely a failing build.
 
-- **Async:** `async Task` over `async void`; never block on async (`.Result` / `.Wait()` / `GetAwaiter().GetResult()`).
-- **HTTP:** `IHttpClientFactory` / typed clients — never `new HttpClient()` (socket exhaustion).
-- **Exceptions:** catch specific types; re-throw with `throw;` (preserves the stack), never `throw ex;`.
-- **Logging:** inject `ILogger<T>`; structured templates (`Log.Information("Order {OrderId}", id)`), not interpolation.
+### Testing
 
-### ASP.NET
+Use existing dependency seams and fixtures. Add interfaces or abstraction packages only for an architectural need, not automatically for every file or clock access. Temporary files and controllable clocks can be appropriate for isolated checks.
 
-- Minimal APIs for simple endpoints; controllers when you need shared filters/conventions.
-- Bind config to `IOptions<T>` instead of reading `IConfiguration` in services.
-- Return `ProblemDetails` for errors; configure `app.UseExceptionHandler()` (no stack traces in prod).
-- Policy-based authorization (`[Authorize(Policy = "...")]`); keep auth logic out of controllers.
+Use `WebApplicationFactory` when the project uses ASP.NET integration tests. Database tests must represent the semantics being verified: an in-memory provider or mocked repository cannot establish production query translation, constraints, or transaction behaviour. Prefer the existing fixture using the target database for those contracts.
 
-### Testing & Mocking
-
-Use constructor injection + interfaces so dependencies can be substituted in tests:
-
-| Dependency | Substitute with |
-|------------|-----------------|
-| HTTP | `IHttpClientFactory` (or a fake `HttpMessageHandler`) |
-| File I/O | `IFileSystem` (System.IO.Abstractions) |
-| Database | `DbContext` in-memory provider, or a mocked repository interface |
-| Time | `TimeProvider` (.NET 8+) or `IClock` — never `DateTime.Now` directly |
-| Config | `IOptions<T>` — `Options.Create(new MyOptions { ... })` |
-
-- ASP.NET integration tests: `WebApplicationFactory<Program>`.
-- Don't share mutable state across tests; use your framework's setup/teardown lifecycle for async init/cleanup and dispose fixtures (connections, temp files).
-- Prefer `TaskCompletionSource` over polling/`Task.Delay` when waiting on async results.
-
-### Verification Checklist
-
-- [ ] `dotnet build` — clean (zero warnings; `TreatWarningsAsErrors`)
-- [ ] `dotnet test` — pass
-- [ ] `dotnet format --verify-no-changes` — formatted
-- [ ] No analyzer / nullable warnings
-- [ ] File size within the limit (see `development-practices.md` → File size)
+Dispose resources and avoid mutable shared state. Prefer event/task completion to arbitrary delays in asynchronous tests. Follow `testing.md` for focused checks and required suites.

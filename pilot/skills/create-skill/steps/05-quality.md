@@ -7,16 +7,13 @@
 - [ ] YAML frontmatter has `---` delimiters
 - [ ] `name` field: kebab-case, no spaces, no capitals, matches folder name
 - [ ] `description` includes WHAT and WHEN (under 1024 chars, no XML tags)
-- [ ] No `README.md` inside the skill folder
-- [ ] SKILL.md under 5,000 words
+- [ ] Every bundled file serves the workflow; lengthy conditional detail is linked from the entrypoint
 - [ ] The editable project source exists only under `.agents/skills/<name>/`; `.claude/skills/<name>/` was generated, not hand-edited
 
 ### Content Checklist
 
 - [ ] Instructions are clear and actionable (commands > descriptions)
-- [ ] Error handling included (Common Issues section)
-- [ ] Examples provided (concrete input/output)
-- [ ] "When NOT to Use" section with explicit exclusions
+- [ ] Non-obvious failure handling, examples, and exclusions are included where they materially clarify the workflow
 - [ ] Verification step (how to confirm it worked)
 - [ ] No sensitive information (API keys, passwords → use env vars)
 - [ ] No hardcoded paths (use relative paths or environment variables)
@@ -28,7 +25,7 @@
 
 ### Synchronization Gate — PROJECT SKILLS
 
-After the final canonical edit, the automatic hook should already have synchronized the mirror. Run the read-only backstop:
+After the final canonical edit, verify the repository's configured synchronization contract. When this checker is installed, run:
 
 ```bash
 node scripts/sync-agent-assets.mjs --check
@@ -51,4 +48,4 @@ Should NOT trigger:
 - "[general request the skill shouldn't handle]"
 ```
 
-**Debug approach:** Ask the target agent "When would you use the [skill name] skill?" — the agent will quote the description back. Adjust based on what's missing.
+**Execution check:** when discovery changed, observe actual selection in the target runtime for representative requests and near-misses. A paraphrase of the description does not prove triggering behavior.

@@ -9,10 +9,10 @@
 | **No verification** — "deploy to staging" (how do you know it worked?) | Always include a verification command |
 | **Hardcoded paths** — `/Users/john/projects/my-app/...` | Relative paths or environment variables |
 | **Ambiguous language** — "Make sure to validate things properly" | `Before calling create_project, verify: project name non-empty, at least one team member assigned` |
-| **Premature completion** — agent declares a step done early and rushes on | Sharpen the completion criterion first (see *Steering the Agent* in Step 1) |
-| **Negation steering** — walls of "never do X" prohibitions | State the positive target (see *Steering the Agent*) |
-| **Sediment & sprawl** — stale layers accumulate; SKILL.md grows past legibility | Prune on every revision (adding feels safe, removing feels risky — remove anyway); offload per Step 1's size limits |
-| **Duplication** — the same meaning stated in two places | Single source of truth: one authoritative place, so a behavior change is a one-place edit. Deliberate repetition of a critical instruction for emphasis (Step 1: "Put critical instructions at the top") is the sanctioned exception |
+| **Premature completion** — agent declares a step done early and rushes on | Sharpen the completion criterion first (see *Writing useful instructions* in Step 1) |
+| **Negation steering** — walls of "never do X" prohibitions | State the positive target (see *Writing useful instructions*) |
+| **Sediment & sprawl** — stale layers accumulate; SKILL.md grows past legibility | Prune on every revision (adding feels safe, removing feels risky — remove anyway); move conditional detail into linked references |
+| **Duplication** — the same meaning stated in two places | Single source of truth: one authoritative place, so a behavior change is a one-place edit. Repeat a contract only when independently loaded artifacts require it; keep the copies synchronized |
 
 ### Iteration Signals
 
@@ -21,14 +21,10 @@
 | **Undertriggering** | Skill doesn't load when it should, users manually enabling it | Add more detail and trigger keywords to description |
 | **Overtriggering** | Skill loads for irrelevant queries, users disabling it | Add negative triggers ("Do NOT use for..."), be more specific |
 | **Instructions not followed** | Agent loads skill but ignores steps | Instructions too verbose (condense), buried (move critical to top), or ambiguous (use exact commands) |
-| **Large context issues** | Skill seems slow or responses degraded | Move detailed docs to `references/`, keep SKILL.md under 5,000 words |
+| **Large context issues** | Skill seems slow or responses degraded | Move conditional detail to `references/` and remove instructions that add no value |
 
-### Rationalization-Resistant Design (for discipline skills only)
+### Correcting a demonstrated workflow failure
 
-For skills that enforce discipline (TDD, verification, root-cause-before-fix), use baseline testing (Step 6.2) to capture verbatim agent rationalizations and counter them with three patterns:
+Use an observed failure to identify the missing decision rule or fragile contract. Add a specific condition, required field, or deterministic check that addresses it. Do not accumulate motivational slogans, imagined excuses, or prohibition tables merely because a workflow involves testing or verification.
 
-- **Excuse → Reality table** — each rationalization the agent produced in baseline, paired with the technical counter.
-- **Iron Laws + Red Flags list** — short numbered laws and a symptom-checklist that points back to "STOP, return to step N".
-- **Closed loopholes** — don't just state the rule, forbid specific workarounds (e.g. "Don't keep code as 'reference'. Delete means delete.").
-
-Skip these for technique/reference skills — they don't have rationalization pressure to defend against.
+Keep the correction proportional and validate it against a different realistic case. A rule that only fixes the original example is overfit.

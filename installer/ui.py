@@ -18,6 +18,7 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 from rich.rule import Rule
+from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
 
@@ -239,18 +240,21 @@ class Console:
         if self._quiet:
             return
 
-        self._console.print()
-        self._console.print(Rule("[bold cyan]📋 Next Steps[/bold cyan]", style="cyan"))
-
         step_num = 1
         for section_title, items in sections:
             self._console.print()
             self._console.print(f"  [bold]{section_title}[/bold]")
             self._console.print()
+            table = Table.grid(padding=(0, 2))
+            table.add_column(no_wrap=True)
+            table.add_column(style="muted")
             for title, description in items:
-                self._console.print(f"  [bold magenta]{step_num}.[/bold magenta] [bold]{title}[/bold]")
-                self._console.print(f"     [muted]{description}[/muted]")
+                table.add_row(
+                    f"  [bold magenta]{step_num}.[/bold magenta] [bold]{title}[/bold]",
+                    description,
+                )
                 step_num += 1
+            self._console.print(table)
             self._console.print()
 
     @contextmanager

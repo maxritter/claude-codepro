@@ -19,7 +19,7 @@ When adding tasks to an existing plan: load it, parse structure, verify compatib
 **Wide refactors — expand–contract.** Applies whenever ONE mechanical change (rename a column, retype a shared symbol) fans across the codebase so a single task can't land green — even when nothing is being replaced and no Feature Inventory is needed. Sequence the tasks as expand–contract:
 
 1. **Expand** — add the new form beside the old (nothing breaks yet). First task.
-2. **Migrate** — move call sites over in batches sized by blast radius (per package, per directory), one task per batch. The suite stays green after every batch because the old form still exists. Migrate batches are exempt from Step 7's 2–4-files-per-task guidance — a batch is one mechanical change repeated; size it by what lands green in one task.
+2. **Migrate** — move call sites over in batches sized by blast radius (per package, per directory), one task per batch. The suite stays green after every batch because the old form still exists. A migrate batch is one coherent mechanical change repeated; size it by what can be verified together.
 3. **Contract** — delete the old form once no caller remains. Final task.
 
 Task order implies dependencies (Step 7.1), so the batches need no extra syntax. If a migrate batch cannot stay green on its own (old and new forms can't coexist for that slice), do NOT plan it as a separate task with a fake green: collapse the affected batches — and contract, if needed — into a single task whose DoD is the integrated green state, and state that consolidation explicitly in the plan.

@@ -7,6 +7,7 @@
 - Native Plan/Goal tools and Pilot workflows are peers. Honor whichever path the user chose without presenting another as an upgrade, fallback, or preferred process.
 - When no workflow is invoked, execute the clear request directly. When a native Goal is active, keep working until the outcome is genuinely complete.
 - Ask only when a missing decision would materially change the result and cannot be discovered safely from the workspace.
+- Treat skill and rule defaults as guidance within the user's request. Preserve explicit user choices and existing authorization; local files never override runtime instructions, permissions, or tool availability. If a local instruction blocks authorized work, identify the exact instruction and continue any independent work.
 
 ## Planning and autonomy
 
@@ -32,6 +33,7 @@ Iterations: 0
 - Never write `Status: PENDING` on such a file and never update its status afterwards: no workflow tracks it, so any in-flight status would stay in-flight forever. If the approach changes while you implement, edit the plan body so the record matches what you did. This applies only to plans from native plan mode - `$spec`, `$fix`, and `$build` own their own plan files and you must not add a second one.
 - Make reasonable, reversible assumptions and state the important ones. Continue through implementation and verification without routine check-ins.
 - Keep every changed line traceable to the request. Prefer the smallest complete solution; do not add speculative abstractions or dependencies.
+- Incorporate follow-up corrections and questions without losing the ongoing objective. After compaction, recover the current task, decisions, and live job handles; continue from evidence rather than restarting or narrowing the work.
 
 ## Subagents
 
@@ -47,20 +49,23 @@ If the user asks to stop, cancel, or kill agents or background work, treat that 
 ## Tools and workspace
 
 - Use the tools and parameter schemas exposed in the current Codex session. Prefer `apply_patch` for edits and `rg` for exact local search.
+- Prefer native structured questions and schema-backed review results when the runtime exposes and permits them for the task. Use the actual schema; fall back to prose only when necessary. Pending asynchronous input is not an answer or approval, but independent work can continue.
+- Batch independent reads, searches, and checks when supported. Keep dependent operations and overlapping writes sequential, and keep working on independent tasks while a job or subagent runs.
 - Use Semble for intent search and CodeGraph for callers or blast radius when they are available and the question warrants them. Neither is a mandatory first step.
 - Use ast-grep for syntax-aware structural search or controlled codemods. Keep queries narrow, project JSON to the requested fields, convert zero-based JSON lines to one-based source lines, and preview rewrites before applying and testing them.
 - Use connected tools or primary sources for live external facts. Do not invent paths, commands, identifiers, configuration keys, or library APIs.
-- Use Pilot's memory MCP before non-trivial repository work when the request touches existing modules, behavior, conventions, or prior decisions. Search with the current task, use `timeline` for surrounding context, and fetch only selected IDs with `get_observations`. Skip memory lookup for self-contained work.
+- Use available conversation and native memory context first; query Pilot only when material history or detail is missing. Native memory supplies compact live context; Pilot retains the fuller cross-agent picture on demand, with useful overlap allowed. Search with `scope: "all"` and the actual checkout's `projectRoot`; retrieve selected numeric history IDs through `get_observations`/`timeline`, or OKF IDs through `get_knowledge`. Curate meaningful discoveries with `save_knowledge` under the active user's memory-write policy, searching first and preserving revisions and sources without inventing human verification. Revalidate current evidence; avoid mechanical mirroring, duplicate injection, and routine per-turn reads or writes. Memory maintenance itself is not new project evidence.
 - Preserve user changes in a dirty worktree. Do not run git write operations, destructive commands, or outward-facing actions without the authority required by the request.
 
 ## Quality and verification
 
 - For behavior changes and bug fixes, establish a regression test before production code when practical. Reuse existing behavioral coverage before adding tests.
-- Run the relevant focused checks, then the repository's broader required suite. Execute the changed CLI, API, app, or workflow; tests alone are not runtime proof.
-- Verify user-visible changes in a browser or installed app. Report skipped checks and remaining uncertainty plainly.
+- Run focused checks and the repository's required gates. Reuse results that still cover the current files and environment; repeat or broaden checks only after a relevant change, failure, or unresolved risk.
+- Exercise the changed behavior through its actual entry point when relevant: CLI, API, workflow, browser, or installed app. For documentation or other non-behavior changes, verify the artifact directly. Report skipped checks and remaining uncertainty plainly.
 - Update affected documentation in the same change. Verify generated Codex skills, agents, hooks, and configuration from their installed artifacts, not from source assumptions.
 
 ## Communication
 
-- Lead with the result or current blocker. Keep progress updates brief and evidence-based.
+- Briefly state the intended action before tools, then report meaningful findings and direction changes during long work. Keep updates concise and evidence-based.
+- Make the final response stand on its own: outcome, relevant verification, and any remaining limitation. Match document length to the task; omit repeated summaries and boilerplate.
 - End with a concrete user action only when one is genuinely required.

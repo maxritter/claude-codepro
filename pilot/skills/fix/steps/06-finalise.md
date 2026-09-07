@@ -1,5 +1,7 @@
 ## Step 6: Finalise
 
+Read `$HOME/.pilot/agents/review-state-protocol.md` before launching any enabled reviewer. Persist each returned native or companion handle atomically with the plan, lane, role, and lifecycle state before independent work; reload that record after compaction and before collection.
+
 ### 6.1 Automated changes review (when enabled)
 
 ⛔ **Step 4 (Verify End-to-End) must be complete, with concrete evidence, before any reviewer runs.** Reviewers audit the fix; they never substitute for running the program.
@@ -33,7 +35,7 @@ git diff | grep -nE "SPEC-DEBUG|^\+.*\b(console\.log|console\.error|print\()" &&
   { echo "Leftover instrumentation — remove before staging/commit"; } || echo "instrumentation clean"
 ```
 
-Remove any match and re-run.
+Remove fix-owned temporary diagnostics. Preserve intentional program output and pre-existing logging; inspect each match before editing.
 
 Then stage the change's own files. The fix and its new test sit unstaged, and a brand-new test file is untracked — which misfires reviewers both ways: one reading `git status --untracked-files=all` flags the new test as a spurious `critical` ("untracked deliverable"), while one reading only `git diff HEAD` silently omits it, leaving the test unreviewed.
 
@@ -44,14 +46,19 @@ git status --short --untracked-files=all | grep '^??' || true   # should list on
 
 A bare `git add -N` is not enough — `git status` still reports the path as untracked. **Staging is not committing**: the commit (6.3) still waits for the review and the approval gate. All reviewers scope to `git diff HEAD`, which now includes the staged additions; a committed ref-range would be empty pre-commit and scan nothing.
 
+**Mixed ownership:** if a listed file already contains unrelated user or concurrent edits, a whole-file `git add` is not a valid scope boundary. Preserve the index and distinguish this run's hunks using scoped staging or an isolated review artifact. Do not include unrelated work merely because it shares a path.
+
 <!-- CC-ONLY -->
 #### 6.1.0 Bugfix summary artifact
 
 For `/fix` the "plan" is this conversation, not a file. Both reviewers anchor on a plan artifact — the changes-review sub-agent and the Codex companion — so build one:
 
 ```bash
-SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
-RUN_DIR="$SESS_DIR"            # on a lane run (--lane <id>): "$SESS_DIR/lanes/<lane>"
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-}}}"
+case "$SESSION_ID" in ""|*[!A-Za-z0-9_-]*) echo "Review state needs a confirmed session identity" >&2; exit 1 ;; esac
+SESS_DIR="$HOME/.pilot/sessions/$SESSION_ID"
+[ -z "$LANE_ID" ] || SESS_DIR="$SESS_DIR/lanes/$LANE_ID"
+RUN_DIR="$SESS_DIR"            # already scoped to this lane, if any
 mkdir -p "$RUN_DIR"
 FIX_PLAN_FILE="$RUN_DIR/fix-review-plan-<fix-slug>.md"
 cat > "$FIX_PLAN_FILE" <<'PLAN_EOF'
@@ -65,7 +72,7 @@ PLAN_EOF
 
 Run-isolated and deterministic (no `/tmp`, no `$$`): later Bash calls, the reviewer prompt, and cleanup all reconstruct this path from outside that shell.
 
-⛔ **`<fix-slug>` is not decoration.** `$SESS_DIR` resolves identically for a coordinating session and every subagent lane it dispatches, so a fixed `fix-review-plan.md` is one file every concurrent `/fix` shares — and the reviewer then anchors on a sibling's bug summary (issue #173). Reuse the `<fix-slug>` derived in Step 1.1; on a lane run the lane directory does the work instead.
+⛔ **`<fix-slug>` is not decoration.** Reuse the `<fix-slug>` derived in Step 1.1 and the lane directory resolved above. Together they prevent concurrent fixes from sharing a summary or reviewer record.
 
 #### 6.1.a Codex companion review — launch FIRST when `PILOT_CODEX_CHANGES_REVIEW_ENABLED == "true"`
 
@@ -80,11 +87,13 @@ CODEX_FLAG="$RUN_DIR/codex-changes-review-ran-<fix-slug>.flag"
 
 ⛔ Slug-scoped, not fixed: a shared flag means a sibling lane's completed Codex run makes THIS lane skip its own review entirely, while its report still claims one ran.
 
-Otherwise **read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/codex-companion-protocol.md` and follow it end to end** (locate → render → launch → stall monitor → collect → mark). It is the single source of truth for the companion run loop. Supply:
+Otherwise **read `$HOME/.pilot/agents/codex-companion-protocol.md` and follow it end to end** (locate → render → launch → stall monitor → collect → mark). It is the single source of truth for the companion run loop. Supply:
 
 | Protocol input | Value for `/fix` |
 |---|---|
-| `PROMPT_TEMPLATE` | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/changes-review-codex.md` |
+| `PROMPT_TEMPLATE` | `$HOME/.pilot/agents/changes-review-codex.md` |
+| `ROLE` | `changes-review` |
+| `LANE_ID` | Original parsed `--lane <id>` value, or empty for this main-session run |
 | `{{PLAN_PATH}}` | `$FIX_PLAN_FILE` from 6.1.0 |
 | `{{PLAN_GOAL}}` | `Bugfix for: <one-line bug>. Root cause at <file>:<line>. The reproducing test must reliably fail before the fix and pass after.` |
 | `{{BASE_REF}}` | `HEAD` — the fix is staged, not committed |
@@ -96,15 +105,11 @@ Launch, then **continue to 6.1.b immediately** — the changes review runs while
 
 #### 6.1.b Changes review — when `PILOT_CHANGES_REVIEW_ENABLED` is not `"false"`
 
-Launch the changes-review sub-agent in the background:
+Read and reconcile the existing native review record for this plan, lane, and `changes-review` role before launching anything. Resume its live handle, collect an already completed result, or reconcile an interrupted `launching` attempt; only a confirmed terminal or missing prior attempt permits a replacement.
 
-```bash
-FINDINGS_PATH="$RUN_DIR/findings-changes-review-<fix-slug>.json"
-rm -f "$RUN_DIR"/findings-changes-review-<fix-slug>*.json   # incl. -rN files from prior runs
-LAUNCHED_AT=$(date +%s)   # freshness floor — see the collection step below
-```
+Atomically write `state: launching` with `provider: native`, this role, plan/lane identity, and `reviewed_sha256` of the exact review anchor before the spawn call below. Use `review-state-protocol.md`. If the write fails or the current mode forbids it, defer the launch; do not create an unrecorded background job.
 
-⛔ **The glob must carry `<fix-slug>`.** A bare `findings-changes-review-*` sweep deletes every sibling lane's findings, including one a reviewer is still writing (issue #173).
+Launch the changes-review sub-agent with the actual `Agent` schema and retain the returned native agent/task handle:
 
 ```
 Agent(
@@ -113,32 +118,28 @@ Agent(
   prompt="""
   **Plan file:** <$FIX_PLAN_FILE path>
   **Changed files:** <fix file> <test file>
-  **Output path:** <$FINDINGS_PATH>
 
-  Review the diff (git diff HEAD -- <fix file> <test file>) against the bugfix summary: root-cause fix quality, test quality, regressions.
-  Write findings JSON to output_path using the Write tool.
-  IMPORTANT: Include the plan file path in your output JSON as the "plan_file" field.
+  Review the diff (git diff HEAD -- <fix file> <test file>) against the bugfix summary:
+  root-cause fix quality, test quality, and regressions.
+  Remain read-only. Return ONLY valid JSON matching the changes-review schema.
+  Set "plan_file" to the supplied Plan file path.
   """
 )
 ```
 
-Wait by polling the file — ⛔ never `TaskOutput`, which dumps the whole agent transcript into context:
+Immediately persist the returned `native_agent_id` and `state: running` atomically in that same record before waiting, independent work, or a handoff. If saving fails, retain and reconcile this handle; do not spawn again.
 
-```bash
-# Freshness floor: a findings file older than the launch is NOT this review's
-# result. Namespacing makes a collision unlikely; this closes the residual window
-# where two runs derive the same slug from near-identical bug descriptions.
-# `date -r FILE` reads mtime on both BSD/macOS and GNU - do NOT swap in `stat`,
-# whose flag differs per platform (-f vs -c).
-for i in $(seq 1 150); do
-  [ -f "$FINDINGS_PATH" ] && [ "$(date -r "$FINDINGS_PATH" +%s)" -ge "$LAUNCHED_AT" ] && echo READY && break
-  sleep 2
-done
-```
+Use the current runtime's handle-based wait/result mechanism, including `TaskOutput` when exposed, or consume the final response directly from a foreground `Agent` call. Read the completed final JSON; do not request or poll an agent-authored findings file.
 
-Run that as `Bash(run_in_background=true, timeout=330000)` (the 5-min loop exceeds the foreground timeout; `sleep` is allowed in background and you are notified on exit), then Read the file once. **Treat a file whose mtime predates `$LAUNCHED_AT` as absent, not as a result.** Not READY afterwards usually means slow, not dead — relaunch ONCE with a fresh output path (`findings-changes-review-<fix-slug>-r2.json`) and poll that. Never reuse an in-flight path: a late write from the superseded agent must not be collected as the fresh run.
+At native collection, confirm terminal completion and atomically write `state: completed`; validate the final JSON schema and matching `plan_file`, then write `state: collected` with the consumed result identity. If terminal output remains invalid or unavailable after correction/recovery, write `state: incomplete` with the reason and follow the explicit fallback. Observation timeouts leave the original live state and handle intact.
 
-If the relaunch also produces nothing, continue with whatever the Codex companion returned and note the gap in the 6.6 report. ⛔ Do NOT fall back to `Skill(skill='code-review', ...)` — the call is rejected, so it produces no review at all.
+Validate the response schema and that `plan_file` matches `$FIX_PLAN_FILE`. For invalid output, request a corrected final response from the same agent when supported. If no valid result is available, record the native review as incomplete and use the documented self-review or companion fallback; never call malformed or missing output a pass.
+
+Keep waiting on the original handle while it is live. Quiet output or an observation timeout is not a restart trigger. After a confirmed terminal failure or missing handle, retry once when recoverable; retain the new handle. The parent may save validated JSON for bookkeeping when writes are permitted, but that file is not the completion signal.
+
+If no valid native result is obtained after recovery, report the gap in 6.6. Do not substitute `Skill(skill='code-review', ...)`, whose invocation is not permitted here.
+
+
 
 #### 6.1.c Apply findings
 
@@ -163,8 +164,11 @@ When `PILOT_CHANGES_REVIEW_ENABLED` is not `"false"`, run the managed Codex `cha
 1. Build a one-page bugfix summary as the review anchor:
 
 ```bash
-SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
-RUN_DIR="$SESS_DIR"            # on a lane run (--lane <id>): "$SESS_DIR/lanes/<lane>"
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-}}}"
+case "$SESSION_ID" in ""|*[!A-Za-z0-9_-]*) echo "Review state needs a confirmed session identity" >&2; exit 1 ;; esac
+SESS_DIR="$HOME/.pilot/sessions/$SESSION_ID"
+[ -z "$LANE_ID" ] || SESS_DIR="$SESS_DIR/lanes/$LANE_ID"
+RUN_DIR="$SESS_DIR"            # already scoped to this lane, if any
 mkdir -p "$RUN_DIR"
 FIX_PLAN_FILE="$RUN_DIR/fix-review-plan-<fix-slug>.md"
 cat > "$FIX_PLAN_FILE" <<'PLAN_EOF'
@@ -176,7 +180,11 @@ Reproducing test: <test file>::<test name>
 PLAN_EOF
 ```
 
-2. Use the spawn-agent tool exposed in the current Codex tool schema with `agent_type="changes-review"` and this message:
+Read and reconcile the existing native review record for this plan, lane, and `changes-review` role before launching anything. Resume its live handle, collect an already completed result, or reconcile an interrupted `launching` attempt; only a confirmed terminal or missing prior attempt permits a replacement.
+
+Atomically write `state: launching` with `provider: native`, this role, plan/lane identity, and `reviewed_sha256` of the exact review anchor before the spawn call below. Use `review-state-protocol.md`. If the write fails or the current mode forbids it, defer the launch; do not create an unrecorded background job.
+
+Use the spawn-agent tool exposed in the current Codex tool schema with `agent_type="changes-review"` and this message:
 
 ```
 Plan file: <FIX_PLAN_FILE path>
@@ -188,11 +196,15 @@ summary, not a multi-task spec — judge compliance against the bug, not absent 
 Return ONLY valid JSON matching the changes-review schema. Include the plan file path in `plan_file`.
 ```
 
+Immediately persist the returned `native_agent_id` and `state: running` atomically in that same record before waiting, independent work, or a handoff. If saving fails, retain and reconcile this handle; do not spawn again.
+
 Keep the returned agent id, then use the wait mechanism exposed in the current Codex tool schema. Follow the actual parameters shown by the tools; do not invent a namespace or reuse a call signature from another Codex version.
 
-3. Parse the final message as JSON. If parsing fails, treat the raw message as one `suggestion` finding and continue. Validate `plan_file` matches `$FIX_PLAN_FILE`; on mismatch discard the stale result and self-review instead.
+At native collection, confirm terminal completion and atomically write `state: completed`; validate the final JSON schema and matching `plan_file`, then write `state: collected` with the consumed result identity. If terminal output remains invalid or unavailable after correction/recovery, write `state: incomplete` with the reason and follow the explicit fallback. Observation timeouts leave the original live state and handle intact.
 
-4. Lineage first — a finding outside the fix file, its test, and files the fix legitimately touched is mention-only regardless of severity. Otherwise: `must_fix` → fix now; `should_fix` → fix when single-site (else summarise and let the user decide); `suggestion` → mention. After any fix, re-run the targeted test + full suite. Then `rm -f "$FIX_PLAN_FILE"`.
+Validate the final JSON schema and that `plan_file` matches `$FIX_PLAN_FILE`. If invalid, request correction from the same agent when possible. If unavailable, record the independent review as incomplete and self-review the fix; never report malformed or mismatched output as a passed review.
+
+Lineage first — a finding outside the fix file, its test, and files the fix legitimately touched is mention-only regardless of severity. Otherwise: `must_fix` → fix now; `should_fix` → fix when single-site (else summarise and let the user decide); `suggestion` → mention. After any fix, re-run the targeted test + full suite. Then `rm -f "$FIX_PLAN_FILE"`.
 CODEX-END -->
 
 ### 6.2 Approval gate (when enabled)
@@ -205,7 +217,7 @@ Read `PILOT_PLAN_APPROVAL_ENABLED`. `"false"` → skip this gate entirely and co
 
 Otherwise summarise and ask, offering: `"Approve — done"`, `"Request changes"`, and `"Explain the fix in more detail"` (present in the first ask only; drop it from any re-ask to avoid loops).
 
-⛔ **When the runtime exposes no structured question tool** — common in non-interactive Codex runs and Claude Code subagent orchestration lanes — read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/agent-gate-protocol.md` and follow it, supplying `GATE_NAME` = `Bugfix approval`, `OPTIONS` = the three above, `SENTINEL_PATH` = `none` (`/fix` registers no plan, so no stop guard is holding the session open). Ask in prose and end your turn. Never record the fix as approved because the form was unavailable, and never run 6.3 in the same turn as the ask — under orchestration this gate is the coordinator's only chance to see the diff before it lands.
+⛔ **When no structured input tool is exposed and permitted for this approval**, read `$HOME/.pilot/agents/agent-gate-protocol.md` and follow it, supplying `GATE_NAME` = `Bugfix approval`, `OPTIONS` = the three above, `SENTINEL_PATH` = `none` (`/fix` registers no plan, so no stop guard is holding the session open). Ask in prose and end your turn. Never record the fix as approved because the form was unavailable, and never run 6.3 in the same turn as the ask — under orchestration this gate is the coordinator's only chance to see the diff before it lands.
 
 ```
 AskUserQuestion(
@@ -217,7 +229,7 @@ AskUserQuestion(
 - **Approve** → continue to 6.3 (worktree mode: commit, then merge back; otherwise the fix is finished and stays uncommitted).
 - **Request changes** → the user describes the problem freely. Treat it as a new investigation: Step 1.3 (re-trace) → Step 2 onward. Nothing has landed yet, so there is nothing to revert. Reviews re-run on the new fix scoped to files changed since the previous review, not the whole diff again.
 <!-- CC-ONLY -->
-  Re-run mechanics: codex-once keeps the companion to one run per invocation. For the changes review — rebuild `$FIX_PLAN_FILE`, delete the findings file, relaunch with `Changed files:` = files changed since the previous review.
+  Re-run mechanics: codex-once keeps the companion to one run per invocation. For the native changes review, refresh `$FIX_PLAN_FILE` and ask the same agent for a new final JSON response covering files changed since the prior review; if it cannot resume, launch a replacement only after the original is terminal and retain the new handle.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
   Re-run mechanics: spawn the managed `changes-review` custom agent again on the updated diff (rebuild the one-page summary first so its `Plan file:` anchor exists), listing only the files changed since the previous review.
@@ -265,11 +277,11 @@ Best-effort — don't block on failure.
 
 Every box must hold before you write the report. Any gap → return to the step that owns it.
 
-- [ ] Reproducing test passes — fresh run, this message (Step 3.3).
+- [ ] Reproducing test passes against the current code (Step 3.3); later edits have not invalidated that evidence.
 - [ ] Full anti-regression suite green — fresh run (Step 5.2).
 - [ ] E2E executed against the actual program, concrete evidence captured (Step 4).
 - [ ] Enabled reviewers ran; every `must_fix` / `should_fix` resolved or escalated (6.1).
-- [ ] Instrumentation clean — confirmed at 6.1.pre before staging. In worktree mode, where 6.3 already committed, re-check the commit: `git show HEAD | grep -nE "SPEC-DEBUG|console\.log|console\.error|print\("` must return nothing; amend if it fires.
+- [ ] Instrumentation clean — no fix-owned `SPEC-DEBUG:` markers or temporary diagnostics remain. Check only this repair's added lines; intentional output or pre-existing logging is not a defect.
 - [ ] Diff is small and every changed line traces to the bug.
 - [ ] Docs updated if the fix changed documented behaviour, a flag, or a config default — or "no doc impact" stated deliberately.
 - [ ] Worktree mode: one bundled `fix:` commit. Otherwise: changes ready, no commit.

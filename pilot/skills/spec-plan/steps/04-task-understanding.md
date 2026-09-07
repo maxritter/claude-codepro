@@ -1,7 +1,11 @@
 ## Step 4: Task Understanding, Discuss & Clarify
 
+<!-- CC-ONLY -->
+While native plan mode is active, omit the notification command below. Ask required clarification through the permitted native input surface; defer external notifications until native exit.
+<!-- /CC-ONLY -->
+
 1. Restate the task in your own words — core problem, assumptions
-2. **Scope check:** Does this task describe multiple independent subsystems (e.g., "build chat, file storage, billing, and analytics")? If so, flag immediately — don't spend questions refining details of a task that needs decomposition first. Suggest splitting into separate plans, one per subsystem, each producing working software on its own. Proceed with the first sub-task.
+2. **Scope check:** Identify independent subsystems and dependencies. Organize them into coherent tasks while preserving the full request. Split into linked plans only when that improves execution or review; keep every requested subsystem accounted for rather than silently proceeding with only the first.
 3. Identify gray areas:
 
    | Domain      | Typical Gray Areas                                 |
@@ -25,12 +29,12 @@
 
    Each question must have 2-4 concrete options. Use `multiSelect: true` when choices aren't mutually exclusive.
 
-   Even when the task seems clear, ask about: scope boundaries (what's explicitly out), priority trade-offs (speed vs completeness), or behavioral expectations (error handling, edge cases). **Only skip if the task is a trivial single-file change.**
+   Skip this interaction when the request and workspace already resolve the material decisions. Do not manufacture questions about exclusions, priorities, or edge cases merely because a plan has several files.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
 5. **Codex Batch 1 policy:** ask only when the answer would change task boundaries, architecture, or user-visible behavior and cannot be inferred from the request or code.
 
    - If no blocking question remains, continue and record any reversible defaults in the plan under "Assumptions" or "Autonomous Decisions".
-   - If asking, notify first, then send one plain-text prompt with at most 3 short questions and 2-3 concrete options each.
+   - If asking, notify first, use the current runtime's permitted structured input tool, bundling related questions; otherwise ask a concise prose question.
    - Do not ask the user to choose between facts the codebase can answer. Read the relevant file instead.
 CODEX-END -->

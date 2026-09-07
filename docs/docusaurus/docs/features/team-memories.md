@@ -1,81 +1,42 @@
 ---
 sidebar_position: 2
 title: Team Memories
-description: Share a project's Pilot Console memories with your team by storing them in the project repository - decisions and discoveries flow to every contributor through git.
+description: Turn on Team sharing once and let project knowledge follow the code through Git automatically.
 ---
 
 # Team Memories
 
-Pilot Shell captures decisions, discoveries, and bugfixes as you work and re-injects them at the start of every session. By default they are yours alone, in a local database.
+Pilot memory works automatically on your machine. **Team sharing** extends it to coworkers through the project repository.
 
-**Team Memories** stores a project's memories inside the project repository, so everyone who pulls the repo works from the same knowledge - the reasoning behind how the code works travels with the code instead of living on one laptop.
+The only choice is whether sharing is **on or off** for that project. Team sharing requires a Team plan; local memory continues to work without it.
 
-Available on the **Team** plan.
+## Turn sharing on
 
-## How It Works
+Open **Memories** in the Console and enable **Team sharing** for the project. Pilot handles the rest:
 
-Memories are written as plain-text records under `.pilot/memories/`. Git is the transport: Pilot never stages, commits, pushes, or opens a remote on your behalf. It reads `git config user.email` to label who wrote a memory, and nothing else.
+- Existing project learnings are prepared for sharing automatically.
+- New useful findings are written to the project's shared memory as work progresses.
+- Existing daily JSONL records continue to work; unchanged generated Markdown copies are recovered into that layout without losing their records.
+- Coworkers working in the enabled project automatically receive knowledge that arrives through Git.
 
-```
-your-project/.pilot/
-  memory.json                    # shareMemories: true
-  memories/
-    alice@example.com/2026-07-29.jsonl
-    bob@example.com/2026-07-30.jsonl
-```
+The agents handle recall and keep the shared knowledge current as they work.
 
-One JSONL file per author per day, one memory per line. Because each teammate only ever writes files under their own folder, simultaneous exports cannot produce a merge conflict. File paths inside a record are repository-relative, so records are portable across checkouts.
+## Knowledge follows the code
 
-## Enabling Sharing
+Pilot writes automatic findings to `.pilot/memories/<author>/<YYYY-MM-DD>.jsonl`, one file per contributor per day. Explicitly maintained knowledge lives under `.pilot/knowledge/`; local synchronization state stays outside the repository. Your normal Git workflow carries shared files between contributors: commit and push changes as usual, and pull your coworkers' updates as usual. Pilot refreshes its local view automatically, including updates received during an existing session.
 
-Open the Console at `http://localhost:41777/#/memories` and click **Enable sharing** on the **Team Sharing** card.
+Memory files follow the same review, commit, push, and pull workflow as the code. Agents can include them in the Git work you authorize.
 
-That one click writes `"shareMemories": true` into `.pilot/memory.json`, exports every shareable memory you already have, and imports whatever your teammates have committed. Review the diff and commit it like any other change - including `.pilot/memory.json`, which is how the rest of the team turns sharing on.
+Shared memories become available for relevant agent queries. Raw prompts, session transcripts, and private session summaries stay local.
 
-## Staying In Sync
+## Turn sharing off
 
-Once enabled, sharing keeps itself current in both directions with no button to press. Both work on **Claude Code and Codex CLI**:
+Switch **Team sharing** off to stop exchanging further updates for that project. Local memory continues working, and previously received knowledge remains available locally. Committed files and existing memories are preserved.
 
-- **Outgoing** - your memories are written when the real session ends on Claude Code or Codex. Session completion waits for the export attempt before the Console worker shuts down. You still review and commit the files yourself.
-- **Incoming** - teammates' new records are imported at the start of every session, before your context is assembled, so yesterday's decision is available to your agent today.
-- **Catch-up** - session start also exports anything still pending, so a session that ended uncleanly - terminal killed, window closed, machine crashed - does not strand its memories.
+If Team access becomes unavailable, Pilot continues locally.
 
-Nothing runs on a timer. Writes are driven by content, not a clock: a session that produced no new shareable memory writes no file, so the diff you are reviewing never moves under you.
+## Background operation
 
-Imported memories behave like your own - badged with their author in the Memories view, semantically searchable, and fed into the session-start context digest.
+Capture, provider selection, synchronization, format compatibility, validation, and retrieval are handled in the background. Agents use the accumulated knowledge directly during work; the Console provides a view of remembered findings and their sources.
 
-The card itself is just a switch: enable or disable sharing for the project, with an **(i)** button explaining what runs and when.
-
-## What Gets Shared
-
-**Shared:** observations of type `decision`, `discovery`, `bugfix`, `feature`, `refactor`, and `change` - the durable "how this works and why" knowledge.
-
-**Not shared:** sessions, session summaries, and your prompts. Those are the noisiest and most personal part of the store and stay local. Other projects are never touched.
-
-:::warning Review before you commit
-Memories are written by a model reading your session. Treat `.pilot/memories/` like any other file you are about to commit and read the diff - Pilot does not scan record contents for secrets.
-:::
-
-:::warning Importing is a trust decision
-Shared memories are loaded into your agent's context, so a repository you did not write can put text in front of your agent.
-
-Enabling sharing yourself counts as that decision. But when you **clone a repo where `shareMemories` is already committed**, you have decided nothing, and the Console asks you to confirm before importing anything. The confirmation lives in `~/.pilot/memory/shared-memory-trust.json`, keyed by the repository's absolute path, so a different checkout must be confirmed on its own.
-:::
-
-## Turning It Off
-
-**Disable sharing** on the card stops exporting and importing for that project. Nothing is deleted: committed records stay in the repository, imported memories stay in your database.
-
-## Frequently Asked
-
-**Do I have to export anything by hand?**
-No - there is no export button any more. Export runs on its own, and appends only records the files do not already contain, so running it twice produces no diff.
-
-**Can I push my memories out mid-session, without waiting for it to end?**
-Not from the Console - the card is deliberately just a switch. `POST /api/memory-sharing/export` with `{"project": "<name>"}` still does it on demand if you need that from a script.
-
-**What happens if a teammate's licence lapses?**
-The records are plain text in your repository and stay there. Without a Team licence the Console stops importing and exporting them.
-
-**Can I share memories through a separate repository?**
-Not today - the shared store lives in the project repo. Extensions (skills, rules, commands, agents) are the ones shared through a dedicated git remote; see [Extensions](./extensions.md#team-sharing-team-and-enterprise).
+See [Automatic Memory](./knowledge.md) for how Pilot works alongside the native memory in Claude Code and Codex.

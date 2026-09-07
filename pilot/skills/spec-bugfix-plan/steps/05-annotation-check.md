@@ -1,5 +1,9 @@
 ## Step 5: Check for Console Annotation Feedback (Before Approval)
 
+<!-- CC-ONLY -->
+While native plan mode is active, read annotations from the registered plan and incorporate them only into the permitted native draft. Defer deletion until successful native exit. Before cleanup, reread the annotation file and remove only entries actually incorporated; preserve new or unrelated feedback.
+<!-- /CC-ONLY -->
+
 **Run this before Step 6 (approval).** Check if the user has annotated the plan in the Console's Specifications tab. Annotations auto-save to JSON — no "Send Feedback" button needed.
 
 1. Derive annotation file: `docs/plans/.annotations/<plan-filename>.json`

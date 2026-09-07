@@ -1,32 +1,11 @@
 ## Step 1: Setup — Read Plan, Detect Worktree, Set Up Task List
 
 <!-- CC-ONLY -->
-### 1.0 Plan Mode Exit Guard (MANDATORY safety net)
+### 1.0 Native mode and approval
 
-**⛔ This is the very first action — before reading the plan or doing any other work.**
+Read the registered plan and current runtime mode. If native plan mode is still active, complete its approval/exit boundary before implementation; follow `$HOME/.pilot/agents/spec-native-plan.md` when this run prepared that handoff. A missing tool or failed exit is not proof the mode changed and does not authorize writes. An explicit runtime response that plan mode is already closed is sufficient to clear a stale warning.
 
-The guard is STATE-based, not mode-based: it checks whether plan mode is actually still open (the `plan-mode-active` sentinel the plan_mode_tracker hook maintains), so it works even when the Console mode changed mid-run or the config read fails.
-
-```bash
-SPEC_SESS="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
-[ -f "$HOME/.pilot/sessions/$SPEC_SESS/plan-mode-active" ] && echo "PLAN_MODE_STILL_OPEN=true" || echo "PLAN_MODE_STILL_OPEN=false"
-MODE=$(python3 -c "import sys,os;sys.path.insert(0,os.path.expanduser('~/.pilot/hooks'));from _lib.util import read_model_switch_mode;print(read_model_switch_mode())" 2>/dev/null || echo "automated")
-echo "MODE=$MODE"
-```
-
-**If `PLAN_MODE_STILL_OPEN=true` (any mode):** `spec-plan` should have called `ExitPlanMode` before invoking this skill; it didn't (model skip, approval edge case, mid-run mode change). Exit now — implementation must never run in plan mode:
-
-```
-ToolSearch(query="select:ExitPlanMode")   # deferred — load schema first
-ExitPlanMode(...)                          # safe to call even if already exited
-```
-
-- If `ToolSearch` returns no tool: emit one visible line ("ExitPlanMode unavailable — implementation will run on current model") and continue. If `ExitPlanMode` errors with "not in plan mode", plan mode is already closed (e.g. a Shift+Tab exit) — the hook heals the stale sentinel; proceed normally.
-- **Do NOT skip this step to save tokens. An extra ExitPlanMode call costs nothing; running the entire implementation leg in plan mode is expensive and wrong.**
-
-**If `PLAN_MODE_STILL_OPEN=false` and `MODE=manual`:** when this skill was invoked directly (resume path — the 12.3/6.3 post-approval pause never ran in this session), print one line: "ℹ️ Manual model switching: implementation runs on your current /model choice (see the status bar)." Then proceed.
-
-**Otherwise:** proceed to 1.1 — nothing to exit.
+Once the approved registered plan is ready and writes are permitted, continue on the active model. Do not re-enter plan mode, emit another model-switch prompt, or repeat approval solely because this phase resumed after compaction.
 <!-- /CC-ONLY -->
 
 ### 1.1 Read Plan & Gather Context
@@ -64,7 +43,7 @@ CODEX-END -->
    Copy plan file into worktree if needed. `cd` to worktree path.
 
    ⛔ `$LANE_FLAG` here too, not just on the `detect` above. Worktree identity is keyed on `(slug, lane)`, so an unflagged create makes a worktree that the lane-flagged `sync`/`cleanup` in the verify phase can never find — the run's work ends up stranded in an orphaned checkout that never reaches the base branch.
-5. If creation fails (old git): continue without worktree — **unless this is a lane run**, which aborts instead (`spec-branch-setup.md`): a lane silently sharing the coordinator's checkout races every sibling's edits.
+5. If creation fails, diagnose a recoverable setup issue or report the isolation blocker. Do not silently continue in a shared checkout when the plan requests a worktree. A lane must abort if isolation cannot be established (`spec-branch-setup.md`).
 6. Verify: `git branch --show-current` should show `spec/<plan_slug>`
 
 All subsequent work happens inside the worktree directory.

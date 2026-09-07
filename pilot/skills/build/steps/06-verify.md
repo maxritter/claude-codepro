@@ -42,7 +42,7 @@ Record the profile in one line. Getting this right is what keeps a writing build
 
 ### 6.2 Automated checks
 
-Run the project's own commands, in order, fixing as you go: **full test suite** → **type checker** → **linter** → **build**. All green before continuing; a failure in a file this run touched is always yours. A pre-existing failure in a file the run never touched gets proven unrelated (name the paths) and recorded in `## Not Verified` — do not go fix the codebase.
+Run the project's required suite, type check, lint, and build. Batch independent non-mutating checks when safe; run formatter changes before the checks that depend on them. Reuse successful current-tree results from this run when their inputs are unchanged. All green before continuing; a failure in a file this run touched is always yours. A pre-existing failure in a file the run never touched gets proven unrelated (name the paths) and recorded in `## Not Verified` — do not go fix the codebase.
 
 Then two sweeps over the diff:
 
@@ -68,7 +68,7 @@ Whenever the artifact is code — API and Full alike — for whichever toggles a
 **Resolve the diff scope once** — never by hand:
 
 ```bash
-SCOPE=$(~/.pilot/bin/pilot review-scope --slug <slug> --json 2>/dev/null \
+SCOPE=$(~/.pilot/bin/pilot review-scope --slug <slug> $LANE_FLAG --json 2>/dev/null \
   | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)))' 2>/dev/null)
 echo "${SCOPE:-UNAVAILABLE}"
 ```
@@ -77,20 +77,27 @@ The `json.load` is a guard: a `pilot` predating the subcommand prints a banner a
 
 **`## Changed Files` is the file list** (4.3). In `working-tree` mode `git add` exactly those paths and nothing else, then check `git status --short --untracked-files=all` — anything dirty outside the ledger is the user's, so leave it unstaged and note it. In `worktree` mode do not stage; a plain `git diff HEAD` there reviews an empty diff.
 
+**Mixed ownership:** if a listed file already contains unrelated user or concurrent edits, a whole-file `git add` is not a valid scope boundary. Preserve the index and distinguish this run's hunks using scoped staging or an isolated review artifact. Do not include unrelated work merely because it shares a path.
+
 **Run Step 2.4's reviewer-launch protocol again**, gating the two independently as it does, with these inputs:
 
 | | Native reviewer (`PILOT_CHANGES_REVIEW_ENABLED` ≠ `"false"`) | Codex companion (`PILOT_CODEX_CHANGES_REVIEW_ENABLED` = `"true"`) |
 |---|---|---|
 | Agent / template | the `changes-review` agent, launched exactly the way 2.4 launches `build-review` on this agent | `changes-review-codex.md` |
+| `ROLE` | `changes-review` | `changes-review` |
+| `LANE_ID` | Original parsed lane, or empty | Original parsed lane, or empty |
+| `SLUG` | Buildout slug from Step 2.4 | Buildout slug from Step 2.4 |
 | Inputs | changed files from `## Changed Files`, plus `base_ref` and `diff_range` from the resolver, verbatim | `{{CHANGED_FILES}}` from the ledger, `{{BASE_REF}}` from the resolver |
 | Ask for | correctness, security, cleanups against the goal | same |
 | Once-per-run flag | — | `codex-changes-review-ran-<slug>.flag` |
 
+For the companion, set `PROMPT_TEMPLATE` to `$HOME/.pilot/agents/changes-review-codex.md` and `CODEX_FLAG` to `$SESS_DIR/codex-changes-review-ran-<slug>.flag` in the same resolved session/lane directory. Supply `{{PLAN_PATH}}` = absolute Buildout path and `{{PLAN_GOAL}}` = its goal sentence, alongside the changed files and base ref above. Do not carry Step 2.4's `build-review` role or flag into this changes review.
+
 The Codex companion is a Claude-Code-only feature; on Codex, only the native column applies.
 
-Poll up to 150 iterations here rather than 90 — a code diff takes longer than a criteria read. Launch Codex first so the two overlap.
+Collect the native review's completed final JSON through its returned handle, following 2.4. Keep the optional Codex companion's external job/result protocol separate. Launch independent enabled reviews so they can overlap; observation duration alone is not failure.
 
-**Apply findings, lineage first.** A finding on a file outside `## Changed Files` is mention-only whatever its severity — report it, never auto-fix it. For the rest: `must_fix` and `should_fix` now, `suggestion` if quick.
+**Validate findings against actual evidence and scope, lineage first.** A finding on a file outside `## Changed Files` is mention-only whatever its severity — report it, never auto-fix it. Fix every supported in-scope `must_fix` and `should_fix`. Treat suggested fixes as proposals; apply a suggestion only when it independently improves the requested result within scope, not merely because it is quick. Record the evidence resolving unsupported findings.
 
 ⛔ **Settle every `cannot_verify` finding and `uncertain` truth yourself.** A reviewer scoped to a diff cannot check what lives in unchanged code — silence from it is not a pass. Confirm the requirement holds, or find it missing and treat that as `must_fix`.
 
@@ -108,7 +115,7 @@ Append a `## Not Verified` section to the Buildout — the profile you skipped w
 
 ### 6.8 Final regression
 
-Re-run the suite, type checker, and build one last time. If fixes landed during this step it catches what they broke; if nothing changed it confirms 6.2 still holds.
+Confirm the required suite, type checker, and build passed against the final code. Re-run affected checks after review fixes or changed build/config inputs. Reuse unchanged successful evidence from 6.2 rather than repeating commands because the phase changed.
 
 ### 6.9 Write the verification record
 
@@ -146,7 +153,7 @@ Step 7.4 refuses `VERIFIED` unless every layer below either has real evidence in
 | **User-facing paths** | Browser E2E per `browser-automation.md`: snapshot → click → re-snapshot, on a target proven current (6.3) | API or Minimal profile — no UI exists |
 | **Code review** | `changes-review` findings collected and closed, `cannot_verify` items settled by you (6.5) | Minimal profile, or the toggle is off — then it is a `## Not Verified` row |
 | **Docs** | Files updated, or "no doc impact" recorded (6.6) | Never — the question is always answered |
-| **Regression** | Suite, types, and build re-run green after the last fix landed (6.8) | Minimal profile |
+| **Regression** | Suite, types, and build green for the final inputs, re-run where fixes invalidated earlier evidence (6.8) | Minimal profile |
 
 ⛔ **"The criteria covered that" is not evidence for these layers.** Criteria rule the artifact; these rule the thing behind it. A run whose criteria all passed and whose suite is red is a failing run — fix it, do not reconcile it.
 

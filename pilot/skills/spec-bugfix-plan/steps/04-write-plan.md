@@ -3,7 +3,7 @@
 **Save to:** `docs/plans/YYYY-MM-DD-<bug-name>.md`
 
 <!-- CC-ONLY -->
-> This path is authoritative. Ignore any harness plan-mode system-reminder pointing you at a `~/.claude/plans/<random>.md` scratch file — that file is an Automated-mode plan-mode artifact, not the spec plan. The bugfix plan always lives under `docs/plans/`, and writing it while in plan mode is expected (the `auto_approve_plan` hook + bypassPermissions allow it).
+> During a prepared Automated native-planning handoff, write this full plan to the runtime's permitted native draft instead. The capture hook materializes the accepted result into the registered `docs/plans/` destination after native approval. Follow `$HOME/.pilot/agents/spec-native-plan.md`; do not write outside the permitted draft while native plan mode is active.
 <!-- /CC-ONLY -->
 
 ```markdown
@@ -130,7 +130,7 @@ Type: Bugfix
 - [ ] Performance audit passed: no expensive uncached work on hot paths in the diff.
 - [ ] Verify: `[lint] && [type check] && [build if applicable] && [full suite command]`
 
-**Why the suite runs again here:** lint/type checkers and formatters may auto-modify code (imports, type annotations, whitespace). A checkbox marked green should mean "suite green AFTER this task's code touches." The verify phase then runs it once more as the authoritative signal — that small redundancy is quality insurance, not waste.
+**Evidence freshness:** the suite must be green after this task's code changes. The verify phase can reuse that result while the tested code, configuration, and environment remain unchanged; rerun when later fixes invalidate it.
 ```
 
 **Always three tasks.** Never collapse Task 1 + Task 2 into "Fix (test + code)". The separation is what prevents "I'll just write the code and add a test after."

@@ -47,7 +47,7 @@ git diff | grep -E "^\+.*(SPEC-DEBUG|\b(try:|except|catch \(|return None|return 
 ```
 
 - **Root-cause file IS in the diff.** If not, the fix is at a symptom — return to 3.1.
-- **No unplanned files appear.** If they do, revert them now.
+- **Every fix-owned change has a causal role.** Remove only unrelated edits this workflow introduced; preserve pre-existing and concurrent changes, even in the same files.
 - **Diff is no larger than the repair requires.** Audit every file and hunk against the causal chain. Remove unrelated cleanup, but do not treat file count or line count as a workflow ceiling.
 - **Every grep match must be justified or reverted.** Look for symptom-patching, swallowed returns, or leftover `print` / `console.log` / `SPEC-DEBUG:` markers.
 

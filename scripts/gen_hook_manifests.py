@@ -36,6 +36,7 @@ EVENTS = frozenset(
         "PermissionRequest",
         "PreToolUse",
         "PostToolUse",
+        "PostToolUseFailure",
         "Stop",
         "SessionEnd",
         "PreCompact",

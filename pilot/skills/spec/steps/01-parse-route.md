@@ -1,5 +1,7 @@
 ## Step 1: Parse & Route
 
+First parse optional `--lane <id>` into `LANE_ID` and `$LANE_FLAG`, and remove it from the remaining arguments. Route using those remaining arguments, so `<plan.md> --lane <id>` still resolves as an existing plan. Preserve the lane on pause/resume and every phase dispatch.
+
 ```
 IF arguments are exactly "pause" or "resume":
     → Discussion pause control (Section 1.0)
@@ -13,8 +15,11 @@ ELSE:
 
 The stop guard honors a session-scoped `spec-discussion-paused` marker on user-initiated turns, so the user can hold a running /spec open for free-form discussion — questioning a decision, digesting a mid-implementation discovery — without "IMMEDIATELY continue" blocks on every reply.
 
+For lane runs, read `agent-gate-protocol.md`: the lane marker records its own pending state, while the session-only stop reader remains the coordinator's responsibility. Relay the decision to the coordinator and yield through the native agent lifecycle; never touch the coordinator's marker.
+
 ```bash
 SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
+[ -z "$LANE_ID" ] || SESS_DIR="$SESS_DIR/lanes/$LANE_ID"
 ```
 
 - **`pause`:** If `$SESS_DIR/active_plan.json` is missing, report that no /spec run is active in this session and stop. Read the registered plan's `Type:` header — if `Build`, report that the discussion pause is /spec-only (the stop guard refuses it for a Buildout; /build finishes through its own hand-back doors, and the double-stop escape still force-exits) and stop. Otherwise recreate the marker fresh so a stale binding from an earlier plan cannot linger — `mkdir -p "$SESS_DIR" && rm -f "$SESS_DIR/spec-discussion-paused" && touch "$SESS_DIR/spec-discussion-paused"` — confirm "⏸ Paused — the plan holds while we discuss. Say resume (or `/spec resume`) to continue.", and end the turn. While paused, answer the user normally and re-touch the marker each discussion turn.

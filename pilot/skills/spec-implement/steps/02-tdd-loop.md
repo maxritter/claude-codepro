@@ -13,7 +13,7 @@ If you find yourself queuing 3+ RED tests before any GREEN, stop and complete th
 **For EVERY task (generic flow — features use this as-is; bugfixes use it via the Bugfix Lane overrides below):**
 
 1. **Read plan's implementation steps** — list files to create/modify/delete
-2. **Call chain analysis:** For each shared or non-trivial function being modified, run `codegraph_explore(query="function_name callers and callees")`. This traces the actual call graph in one call — Semble text search is not a substitute. A self-contained local function the plan already isolated doesn't need it.
+2. **Call chain analysis:** Reuse verified plan evidence. Use structural tracing when a changed runtime contract has non-local effects not yet understood; a local function or prose/config edit does not need another graph call merely because this is a new task.
 <!-- CC-ONLY -->
 3. **Mark in_progress:** `TaskUpdate(taskId, status="in_progress")`
 <!-- /CC-ONLY -->
@@ -29,8 +29,8 @@ If you find yourself queuing 3+ RED tests before any GREEN, stop and complete th
      - **Blocking** — cannot proceed either way: same ask, same pause.
 
      `## Deviations` entry shape: `- Task N (tactical|user-agreed): <discovery> → <what changed>`. ⛔ **A deviation that changes which files are touched must name the exact repository paths** — in the entry AND by updating the affected task's `Files:` block in the same edit. Verification scopes review staging and lineage to the plan's `Files:` blocks plus the paths in this section; a pathless entry like "used a different helper" leaves the extra file outside the review diff entirely, so it reads as out-of-scope drift.
-5. **Verify tests pass** — run test suite
-6. **Run actual program** — use plan's Runtime Environment. Check port: `lsof -i :<port>`. For browser verification: prefer Claude Code Chrome if available, then Chrome DevTools MCP, then playwright-cli, then agent-browser (see `browser-automation.md` for 4-tier selection)
+5. **Verify tests pass** — run the focused tests that cover this task; the repository's broader required suite runs after the integrated change
+6. **Execute the relevant behavior** when this task needs runtime evidence. Reuse a valid observed run or the plan's integration verification for unchanged paths; use the available browser/app tools for user-visible changes and preserve unrelated services
 7. **Check diagnostics** — zero errors
 8. **Validate Definition of Done** — all criteria from plan
 9. **Self-review:** Completeness? Names clear? YAGNI? Tests verify behavior not implementation?
@@ -45,7 +45,7 @@ If you find yourself queuing 3+ RED tests before any GREEN, stop and complete th
 
 ### Test parsimony reminder
 
-Before writing a test, re-read the testing rules § "Test Parsimony — what NOT to do". Common mistake: a refactor that moves a method between classes produces a "natural" pull to add a test class for the new location. Don't. Tests are contra-variant with code structure (Uncle Bob, *Test Contravariance*). Move existing tests; do not duplicate them. The bugfix lane below preserves its single-RED-test rule and the `Trivial:` escape does NOT apply to bugfixes.
+Follow the testing rules already loaded for this task. Reuse behavioral tests when code moves; do not mirror production structure or duplicate coverage merely because a helper changes location. The bugfix lane still requires a reproducing regression signal and does not use the `Trivial:` annotation.
 
 ---
 
@@ -93,4 +93,4 @@ Runner-only task. Code may change only via lint/type/formatter auto-fixes; if it
 4. If the suite failed from an auto-fix: revert the offending change or write a targeted correction, re-run lint/types/suite until all green.
 5. Worktree mode: amend onto Task 2's commit or add a small `chore(spec): lint/types` commit. Update plan, mark task completed.
 
-**Then hand off to `spec-bugfix-verify` (via Step 3 of this skill). Verify runs the suite once more as the authoritative final signal, plus a Behavior Contract audit and an always-on revert-test — quality insurance, not waste.**
+**Then hand off to `spec-bugfix-verify` (via Step 3).** It audits the Behavior Contract and the original user-level symptom, reuses current valid RED/suite evidence, and reruns only checks whose inputs changed or evidence is missing. Any reconstruction of pre-fix behavior happens in an isolated snapshot.

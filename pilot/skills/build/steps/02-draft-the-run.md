@@ -22,7 +22,7 @@ from the data rather than hand-written. It is the section a reader looks at firs
 
 ⛔ **Safe does not mean small.** Safe means bounded, verified, and reversible — all of which a large slice can be. Decomposing into tiny tasks feels like risk management and is usually the loop finding a way to look busy for a round.
 
-If you cannot get the work under seven tasks without each one becoming vague, the goal is probably two goals. Say so and build the first.
+Use more tasks when dependencies or distinct outcomes require them. The 3–7 range is guidance, not permission to reduce the user's scope to the first subsystem.
 
 ### 2.2 Write 3–6 acceptance criteria
 
@@ -39,7 +39,7 @@ These are judged **once per round, at the end**, never worked one at a time. Eac
 - **Is one sentence, carrying one claim.** If it needs "and" three times, it is three criteria — split it. **This rule outranks the 3–6 band**: splitting a compound criterion into two is right even when it takes the list to seven or eight, and dropping a real criterion to get back inside the band is lowering the bar with extra steps. The band describes a well-drafted set; the split rule is what makes each one judgeable.
 - **Is decidable from the finished artifact**, by someone who did not build it.
 - **Names the evidence that settles it**, so a lazy judge cannot pass it by default.
-- **Can actually be settled during this run.** A criterion whose evidence depends on a process that will not finish in this session is not a criterion; it is a blocker. Rewrite it or drop it.
+- **Names obtainable evidence.** If a required criterion depends on an external process, keep it visible and record that dependency. Continue available work; do not drop or weaken a requested outcome because its evidence takes longer.
 
 Include **at least one measurable criterion** when the goal has a measurable half — load time, bundle size, token cost, word count, pass rate, error rate. Taste plus a number beats taste alone.
 
@@ -58,7 +58,7 @@ Include **at least one measurable criterion** when the goal has a measurable hal
 
 **Where the work lands was settled in Step 1.5**, before any of this existed — it is one of the questions that round is for, offering the same three options `/spec` does: **Continue on current branch** (recommended) · **New branch from default branch** · **Use worktree (isolated, squash-merged after)**. Apply what it settled here. ⛔ Do not ask now: the Buildout is about to be registered and the stop guard is about to start holding the session, so a question at this point is one the run cannot cleanly pause for. No flag, and `PILOT_BRANCH_ISOLATION_ENABLED` not `"true"` → `--worktree=no`.
 
-**For `--new-branch` or `--worktree=yes`,** read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/spec-branch-setup.md` and follow it with `<plan_slug>` = the Buildout slug, prefix `feat/`, and `<lane>` when one was supplied. Record the outcome in the header's `Worktree:` field below.
+**For `--new-branch` or `--worktree=yes`,** read `$HOME/.pilot/agents/spec-branch-setup.md` and follow it with `<plan_slug>` = the Buildout slug, prefix `feat/`, and `<lane>` when one was supplied. Record the outcome in the header's `Worktree:` field below.
 
 ⛔ **`--lane <id>` implies `--worktree=yes` and fails closed.** Reject `--lane` with `--worktree=no` or `--new-branch`, and abort rather than continuing if the worktree cannot be created — a lane sharing the coordinator's checkout races every sibling's edits, which is the whole reason it is a lane.
 
@@ -159,7 +159,7 @@ CODEX-END -->
    _None yet._
    ```
 
-   **Omit the `**Reference:**` line entirely when there is none** (Step 1.3). An empty or hand-waved reference is worse than no reference. `**Oracle:**` and `**Misfire:**` are never omitted — they are what 1.5's grilling produced, and the criteria below are drafted from them. `**Assumed:**` is omitted only when nothing was assumed.
+   **Omit the `**Reference:**` line entirely when there is none** (Step 1.3). An empty or hand-waved reference is worse than no reference. `**Oracle:**` and `**Misfire:**` are never omitted — they capture the outcome and the failure the criteria must catch. `**Assumed:**` is omitted only when nothing was assumed.
 
    `Type: Build` is what makes the statusline render the loop and the Console file it under **Buildouts** — the header, never the directory, is what identifies a Buildout, so a file moved between `docs/plans/` and `docs/builds/` keeps working either way. `Status:` is a closed set — `PENDING` | `COMPLETE` | `VERIFIED`, bare keyword, no trailing prose. `Rounds:` starts at 0 and is incremented by the judge, never by hand. `Worktree:` records what 2.2a settled — `Yes` when this run owns an isolated checkout, `No` otherwise.
 
@@ -177,6 +177,8 @@ CODEX-END -->
 
 ### 2.4 Have the criteria reviewed before they become the contract
 
+Read `$HOME/.pilot/agents/review-state-protocol.md` before launching any enabled reviewer. Persist each returned native or companion handle atomically with the plan, lane, role, and lifecycle state before independent work; reload that record after compaction and before collection.
+
 You wrote these criteria, so you are the last one who can tell they are undecidable. This is the one pre-loop round-trip worth paying for.
 
 **Gate the two reviewers independently** — the Console exposes them separately, so neither may depend on the other. Skip 2.4 only when `PILOT_BUILD_REVIEW_ENABLED` is `"false"` **and** `PILOT_CODEX_BUILD_REVIEW_ENABLED` is not `"true"`.
@@ -184,30 +186,53 @@ You wrote these criteria, so you are the last one who can tell they are undecida
 **Slug** = the Buildout filename minus the `YYYY-MM-DD-` prefix and `.md`.
 
 <!-- CC-ONLY -->
-> **Reviewer-launch protocol** (Step 6.5 reuses this; only its inputs differ)
+> **Native reviewer-launch protocol** (Step 6.5 reuses this with its own inputs)
 >
-> ```bash
-> SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
-> mkdir -p "$SESS_DIR"; OUTPUT_PATH="$SESS_DIR/findings-<agent>-<slug>.json"; rm -f "$OUTPUT_PATH"
-> ```
+> Read and reconcile the existing native review record for this plan, lane, and selected role (`build-review` here, `changes-review` when reused by Step 6.5) before launching anything. Resume its live handle, collect an already completed result, or reconcile an interrupted `launching` attempt; only a confirmed terminal or missing prior attempt permits a replacement.
 >
-> Launch with `Agent(subagent_type=..., run_in_background=true, ...)`, passing the Buildout path, the agent's inputs, and `**Output path:** $OUTPUT_PATH`. Tell it to `Write` findings JSON there and to include the Buildout path as the `plan_file` field.
+> Atomically write `state: launching` with `provider: native`, this role, plan/lane identity, and `reviewed_sha256` of the exact review anchor before the spawn call below. Use `review-state-protocol.md`. If the write fails or the current mode forbids it, defer the launch; do not create an unrecorded background job.
 >
-> ⛔ **Never `TaskOutput`** — poll:
-> ```bash
-> for i in $(seq 1 90); do [ -f "$OUTPUT_PATH" ] && echo "READY" && break; sleep 2; done
-> ```
-> Read once. `plan_file` must match this Buildout — a mismatch is another run's findings, so delete and relaunch. Not READY → relaunch once, synchronously.
+
+> Launch with the actual `Agent` schema, using `subagent_type` and background execution when supported. Pass the Buildout path and required context. Request a read-only review and **ONLY valid JSON in the final response**, matching that agent's schema and identifying the supplied Buildout in `plan_file`.
+>
+> Immediately persist the returned `native_agent_id` and `state: running` atomically in that same record before waiting, independent work, or a handoff. If saving fails, retain and reconcile this handle; do not spawn again.
+>
+
+> Retain the returned agent/task handle. Consume the completed final response through the runtime's wait/result mechanism, including `TaskOutput` when exposed, or directly from a foreground `Agent` return. Do not ask the agent to write a findings file, poll a file for completion, or invent a `jsonSchema` launch/frontmatter field.
+>
+> At native collection, confirm terminal completion and atomically write `state: completed`; validate the final JSON schema and matching `plan_file`, then write `state: collected` with the consumed result identity. If terminal output remains invalid or unavailable after correction/recovery, write `state: incomplete` with the reason and follow the explicit fallback. Observation timeouts leave the original live state and handle intact.
+>
+
+> Validate the final JSON and `plan_file`. Ask the same agent to correct malformed or mismatched output when supported; otherwise record the independent review as incomplete and self-review. Quiet output and observation timeouts do not justify a restart: inspect the original handle and wait while it is live. Replace it only after confirmed terminal failure or a missing handle.
+>
+> Persist the native handle and validated result identity using `review-state-protocol.md`. If native read-only planning is active, defer the launch until native exit permits the durable record; retaining a handle only in context is insufficient for recovery.
+
+
 
 **Native reviewer** — when `PILOT_BUILD_REVIEW_ENABLED` is not `"false"`: run the protocol with `subagent_type="build-review"`, inputs = the goal as the user stated it and the reference choice if one was made.
 
-**Codex companion** — when `PILOT_CODEX_BUILD_REVIEW_ENABLED` is `"true"`, whether or not the native reviewer ran. Skip if `$SESS_DIR/codex-build-review-ran-<slug>.flag` exists (codex-once). Otherwise follow `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/codex-companion-protocol.md` with `PROMPT_TEMPLATE` = `build-review-codex.md`, `{{PLAN_PATH}}` = the Buildout, `{{PLAN_GOAL}}` = the goal sentence, `{{CONTEXT_FILES}}` = whatever the goal names as a reference or pattern.
+**Codex companion** — when `PILOT_CODEX_BUILD_REVIEW_ENABLED` is `"true"`, whether or not the native reviewer ran. Resolve `SESS_DIR` to this run's session/lane directory using `review-state-protocol.md`. Skip if `$SESS_DIR/codex-build-review-ran-<slug>.flag` exists (codex-once). Otherwise follow `$HOME/.pilot/agents/codex-companion-protocol.md` with these explicit supplies:
+
+| Protocol input | Value for Buildout review |
+|---|---|
+| `PROMPT_TEMPLATE` | `$HOME/.pilot/agents/build-review-codex.md` |
+| `ROLE` | `build-review` |
+| `LANE_ID` | Original parsed `--lane <id>` value, or empty for this main-session run |
+| `SLUG` | Buildout filename minus the `YYYY-MM-DD-` prefix and `.md` |
+| `CODEX_FLAG` | `$SESS_DIR/codex-build-review-ran-<slug>.flag` |
+| `{{PLAN_PATH}}` | Absolute Buildout path |
+| `{{PLAN_GOAL}}` | The goal sentence |
+| `{{CONTEXT_FILES}}` | Newline-separated absolute paths named as references or patterns |
 
 ⛔ **`task --prompt-file`, never `adversarial-review --base`.** A diff-scoped launch reviews the working tree, and at this point nothing has been built — so the reviewer would receive an empty diff (and nothing at all where `docs/builds/` is gitignored). `task` lets Codex read the Buildout directly.
 
 Launch Codex first so it overlaps, then collect the native reviewer. If the companion returns nothing after its one retry, continue without it and say so in 2.5.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
+Read and reconcile the existing native review record for this plan, lane, and `build-review` role before launching anything. Resume its live handle, collect an already completed result, or reconcile an interrupted `launching` attempt; only a confirmed terminal or missing prior attempt permits a replacement.
+
+Atomically write `state: launching` with `provider: native`, this role, plan/lane identity, and `reviewed_sha256` of the exact review anchor before the spawn call below. Use `review-state-protocol.md`. If the write fails or the current mode forbids it, defer the launch; do not create an unrecorded background job.
+
 Use the spawn-agent tool exposed in the current Codex tool schema with `agent_type="build-review"`. Supply this message:
 
 ```
@@ -220,12 +245,16 @@ Return ONLY valid JSON matching the build-review schema.
 Include the Buildout path in the `plan_file` field.
 ```
 
+Immediately persist the returned `native_agent_id` and `state: running` atomically in that same record before waiting, independent work, or a handoff. If saving fails, retain and reconcile this handle; do not spawn again.
+
 Keep the returned agent id, then use the wait mechanism exposed in the current Codex tool schema. Follow the tool's actual parameter schema rather than inventing a namespace or copying parameters from another Codex version.
 
-Parse the final message as JSON; on a parse failure treat it as one `suggestion` and continue — do not relaunch. `plan_file` must match this Buildout; discard a mismatch and self-review instead.
+At native collection, confirm terminal completion and atomically write `state: completed`; validate the final JSON schema and matching `plan_file`, then write `state: collected` with the consumed result identity. If terminal output remains invalid or unavailable after correction/recovery, write `state: incomplete` with the reason and follow the explicit fallback. Observation timeouts leave the original live state and handle intact.
+
+Validate the final JSON schema and `plan_file`. On malformed or mismatched output, request correction from the same agent when possible. If no valid result is available, record the independent review as incomplete and self-review the contract before proceeding; do not call the missing review passed.
 CODEX-END -->
 
-**Fix every `must_fix` and `should_fix` before 2.5**, using each finding's `suggested_fix` as the replacement wording; `suggestion` if quick. This reviewer is what replaced the human approval gate: nobody else reads the criteria before they become the contract, so its blocking findings are not advisory.
+**Validate every finding against the actual plan, evidence, and requested scope. Fix every supported in-scope `must_fix` and `should_fix` before 2.5.** Treat `suggested_fix` as a proposal to evaluate, not authoritative replacement wording. Apply a suggestion only when it independently improves the requested result within scope; speed alone does not justify additional work. Record unsupported findings with the evidence that resolves them. Supported blocking findings must be closed before the criteria become the contract.
 
 ### 2.5 Post the contract, then start
 

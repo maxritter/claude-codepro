@@ -14,11 +14,15 @@ user-invocable: false
 
 ---
 
+## Run identity on entry
+
+Parse the plan path or description separately from optional `--lane <id>` before status detection or file access. Resolve `LANE_ID` and `$LANE_FLAG` (`--lane <id>` or nothing) from these arguments at every phase entry, including verification loopbacks and resumes. Retain them with the plan identity across compaction and pass `<plan-path> $LANE_FLAG` to every subsequent phase. Shell variables from another phase do not survive. A lane argument must never become part of the plan filename or silently disappear.
+
 ## ⛔ KEY CONSTRAINTS
 
 <!-- CC-ONLY -->
-1. **Run the changes review when enabled** — active whenever `PILOT_CHANGES_REVIEW_ENABLED` is not `"false"` (read in Step 0). Step 1 launches the `changes-review` sub-agent in the background; Step 3 collects its findings file. To disable, use Console Settings → Spec Workflow → Review Agents → Changes Review.
-2. **Do not reuse `spec-review` as a changes review** — its planning findings are stale in this phase. Beyond the required `changes-review`, keep verification in the current agent unless a concrete independent check would materially protect context; then use the minimum useful count without asking for delegation permission. `findings-changes-review-*.json` is valid only when this run's Step 1 launch wrote it.
+1. **Run the changes review when enabled** — active whenever `PILOT_CHANGES_REVIEW_ENABLED` is not `"false"` (read in Step 0). Step 1 launches the `changes-review` sub-agent in the background; Step 3 collects its completed final JSON response through the returned native handle. To disable, use Console Settings → Spec Workflow → Review Agents → Changes Review.
+2. **Do not reuse `spec-review` as a changes review** — its planning findings are stale in this phase. Beyond the required `changes-review`, keep verification in the current agent unless a concrete independent check would materially protect context; then use the minimum useful count without asking for delegation permission. Only the completed final result from this run's Step 1 agent/task handle is this review's evidence; a saved findings file alone is not.
    ⛔ **Never `Skill(skill='code-review', ...)`.** That specific skill carries `disable-model-invocation`, so the call is rejected. If a concrete independent review is explicitly required beyond the managed reviewer and meets the bounded delegation criteria above, use the minimum available agent tools directly.
 <!-- /CC-ONLY -->
 <!-- CODEX-START

@@ -1351,9 +1351,27 @@ print("\n".join(values))
 	fi
 }
 
+restore_claude_display_patch() {
+	local state_dir="$PILOT_DIR/claude-display-patch"
+	if [ ! -f "$state_dir/state.json" ]; then
+		return
+	fi
+	local restore_script="$state_dir/restore.py"
+	if [ -L "$state_dir" ] || [ -L "$restore_script" ] || [ ! -f "$restore_script" ] || ! pilot_python_available; then
+		mark_cleanup_failure "Could not restore Claude Code display patch; preserving its original binary backup"
+		return
+	fi
+	if pilot_python "$restore_script" --restore --state-dir "$state_dir"; then
+		echo "    [OK] Restored Pilot-managed Claude Code display patches where still applicable"
+	else
+		mark_cleanup_failure "Could not restore Claude Code display patch; preserving its original binary backup"
+	fi
+}
+
 remove_pilot_baselines() {
 	local files=(
 		"$CLAUDE_DIR/.pilot-settings-baseline.json"
+		"$CLAUDE_DIR/.pilot-display-patch-migration.json"
 		"$CLAUDE_DIR/.pilot-claude-baseline.json"
 		"$HOOKS_BASELINE_FILE"
 		"$MCP_BASELINE_FILE"
@@ -1406,6 +1424,7 @@ remove_pilot_dir() {
 		"agents"
 		"bin"
 		"codex"
+		"claude-display-patch"
 		"hooks"
 		"installer"
 		"node_modules"
@@ -2024,6 +2043,7 @@ echo "  Uninstalling Pilot Shell..."
 echo ""
 
 stop_pilot_worker
+restore_claude_display_patch
 remove_shell_aliases
 remove_manifest_files
 remove_pilot_settings

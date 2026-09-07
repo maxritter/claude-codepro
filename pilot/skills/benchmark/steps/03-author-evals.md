@@ -42,37 +42,21 @@ Two safe ways to specify where outputs go:
 
 ## What makes an assertion good
 
-**Discriminating.** The baseline (`without`) must plausibly FAIL the assertion. If both configs always pass it, the assertion measures nothing. The modern models already know "write tests, mock subprocess, use descriptive names" — assertions have to reach further than baseline habits to detect the rule's effect.
+**Outcome-relevant.** Assertions must represent behavior users need, whether the baseline passes or fails. Include cases where the guidance plausibly helps and controls where it should not regress. A baseline that already succeeds is useful evidence that an instruction may add no value.
 
 **Observable.** The grader reads the transcript and output files. Assertions like "the output is high quality" are unverifiable. Assertions like "the plan file contains sections named `## Summary`, `## Scope`, and `## Risks and Mitigations`" are observable.
 
 **Genuine signal, not surface compliance.** "The output file is named `plan.md`" can pass by coincidence. Prefer "the plan.md contains a ### Task N heading for at least 3 tasks" — would pass only if the skill actually did structured task breakdown.
 
-**Rule-specific, not industry common sense.** If the assertion tests common knowledge the base model already has (write some tests, avoid bare except), baseline passes and your rule gets no credit for teaching. Aim for the parts of the rule that are project-specific, stricter, or surprising — pytest marker requirements, exact naming patterns with multiple segments, coverage gates, property-based testing for parsers, mock-audit procedures.
+**Test the intended outcome, not added ceremony.** Exact names, headings, or tool use belong in assertions only when a real parser, runtime, or user contract requires them. Do not reward more tests, more steps, or stricter formatting solely because the rule asks for them.
 
-## The falsifiability gate — mandatory
+## Validate the eval before expanding the run
 
-Before committing to a full eval set:
+Try a representative case and inspect whether its assertions can distinguish a correct artifact from a plausible wrong one. Use the same assertions and initial state for both configurations.
 
-1. Hand-author one eval for this target.
-2. Run baseline only:
-<!-- CC-ONLY -->
-   ```bash
-   PYTHONPATH="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/benchmark" uv run python -m scripts.runner \
-       --config benchmarks/<target>/evals.json --configs without --runs 1 \
-       --skip-permissions
-   ```
-<!-- /CC-ONLY -->
-<!-- CODEX-START
-   ```bash
-   PYTHONPATH=~/.agents/skills/benchmark uv run python -m scripts.runner \
-       --config benchmarks/<target>/evals.json --configs without --runs 1 \
-       --skip-permissions --agent codex --grader-timeout 600
-   ```
-CODEX-END -->
-3. Inspect the baseline output (read `grading.json` for each run). If baseline passes 3/3 assertions, **rewrite the assertions** — they're not discriminating.
+If the baseline passes every assertion, retain that result. Inspect for an invalid or trivial assertion, but do not rewrite a valid assertion merely to make baseline fail. Expand with realistic cases only when they cover an important missing behavior. Freeze the evaluation set before comparing revisions; changing both target and assertions prevents attribution.
 
-Only after the baseline fails at least one assertion do you have evidence that the eval measures something real. Skip the gate only when the user explicitly says they want a quick smoke test.
+
 
 ## Examples by type
 
@@ -81,15 +65,16 @@ Only after the baseline fails at least one assertion do you have evidence that t
 - "Response references the existing skill-creation pattern from `pilot/skills/create-skill/orchestrator.md`"
 - "Response suggests at least one test prompt for the new skill"
 
-**Rules target** (e.g., `testing.md` — aim past baseline habits):
-- "Each new test function is decorated with `@pytest.mark.unit` — baseline Claude rarely adds this marker by default"
-- "Test names match the regex `test_[a-z]+_[a-z_]+_[a-z_]+` (≥4 underscore-separated segments after `test`)"
-- "The test file contains at least one property-based test using `hypothesis` (`@given(...)`) for parser/serializer behavior"
-- "A coverage invocation like `pytest --cov-fail-under=80` appears in the transcript or a generated script"
+**Rules target** (examples of behavioral requirements):
+- "The user-provided record survives a failed update unchanged."
+- "The regression test fails for the original bug and passes after the repair."
+- "The report distinguishes source inspection from an actually executed runtime check."
 
-## Commit the config
 
-Save to `benchmarks/<target-name>/evals.json`. Show the user the final config and get explicit sign-off before spending compute in Step 4.
+
+## Save the config
+
+Save to `benchmarks/<target-name>/evals.json`. State the concrete run scope and expected resource use. Proceed when that execution is already authorized; ask only for a material expansion of cost, live side effects, or required permissions. Do not commit without separate authorization.
 
 ## Exit
 

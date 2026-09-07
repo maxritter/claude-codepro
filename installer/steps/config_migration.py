@@ -563,7 +563,7 @@ def _migration_v11(raw: dict[str, Any]) -> bool:
 
 
 def _migration_v12(raw: dict[str, Any]) -> bool:
-    """v11 -> v12: Strip dead model keys; seed specWorkflow.modelSwitch=true.
+    """v11 -> v12: Strip dead model keys while preserving switching preferences.
 
     After this migration, model selection is controlled entirely via Claude
     Code's `/model` slash command - `~/.pilot/config.json` no longer stores
@@ -572,11 +572,8 @@ def _migration_v12(raw: dict[str, Any]) -> bool:
     rewriting `model:` lines in skill / agent frontmatter; the source files
     are authoritative.
 
-    `specWorkflow.modelSwitch` is the new opt-out toggle: when true (default)
-    the spec-plan skill ends its turn with a handoff message after approval
-    so the user can `/clear` + `/model <...>` before implementation; when false
-    the spec workflow continues plan -> implement -> verify in one session on
-    whichever model is active.
+    The historical modelSwitch=true seed is retired: v20 must distinguish
+    explicit opt-ins from absent settings, which now default to manual.
 
     The caller writes `~/.pilot/config.json.bak.v11` (single-file safety
     copy, written exactly once per machine) before this migration runs, so
@@ -594,10 +591,6 @@ def _migration_v12(raw: dict[str, Any]) -> bool:
         spec_workflow = {}
         raw["specWorkflow"] = spec_workflow
         modified = True
-    if "modelSwitch" not in spec_workflow:
-        spec_workflow["modelSwitch"] = True
-        modified = True
-
     return modified
 
 
@@ -786,10 +779,9 @@ def _migration_v20(raw: dict[str, Any]) -> bool:
     """v19 -> v20: three-way ``modelSwitchMode`` replaces the pin-era keys.
 
     The window-scoped slot-pin machinery (boolean ``modelSwitch`` plus the
-    configurable ``planModel``/``execModel`` pair) was removed. Mapping
-    (``automated`` is the default -- it matches what pre-mode users on the old
-    ON toggle were already getting): ``modelSwitch`` ``False`` -> ``"off"``,
-    anything else (true / absent) -> ``"automated"``. An explicit valid
+    configurable ``planModel``/``execModel`` pair) was removed. Mapping:
+    ``modelSwitch`` ``False`` -> ``"off"``, ``True`` -> ``"automated"``;
+    missing or invalid values -> ``"manual"``. An explicit valid
     ``modelSwitchMode`` written by a newer Console build is preserved. The
     retired keys are deleted either way.
     """
@@ -800,7 +792,8 @@ def _migration_v20(raw: dict[str, Any]) -> bool:
     modified = False
     mode = workflow.get("modelSwitchMode")
     if not (isinstance(mode, str) and mode in _V20_MODEL_SWITCH_MODES):
-        workflow["modelSwitchMode"] = "off" if workflow.get("modelSwitch") is False else "automated"
+        legacy = workflow.get("modelSwitch")
+        workflow["modelSwitchMode"] = "off" if legacy is False else "automated" if legacy is True else "manual"
         modified = True
     for retired in ("modelSwitch", "planModel", "execModel"):
         if retired in workflow:

@@ -1,5 +1,9 @@
 ## Step 3: Plan the Fix
 
+<!-- CC-ONLY -->
+While native plan mode is active, omit the notification command below. Ask required clarification through the permitted native input surface; defer external notifications until native exit.
+<!-- /CC-ONLY -->
+
 ### Gate — before writing the plan
 
 Re-confirm the three Step 0 **Enforcement** questions (root cause stated as `file:lineN — function() does X but should do Y`; WHY it causes the symptom; confidence High or Medium). If any is NO → return to Step 2. No exceptions, even for "obvious" bugs.
@@ -15,7 +19,7 @@ Re-confirm the three Step 0 **Enforcement** questions (root cause stated as `fil
 When a genuine choice exists AND `PILOT_PLAN_QUESTIONS_ENABLED` is not `"false"`: use `AskUserQuestion` to pick.
 
 <!-- CODEX-START
-Codex override: if the source-level fix is clearly correct and reversible, choose it without asking and record the decision in `## Fix Approach`. Ask one bundled plain-text question only when the wrong choice would change multiple tasks, add a new dependency, or alter user-visible behavior outside the bug.
+Codex override: if the source-level fix is clearly correct and reversible, choose it without asking and record the decision in `## Fix Approach`. Use the current runtime's permitted structured input tool, with a concise prose fallback, only when the wrong choice would change multiple tasks, add a new dependency, or alter user-visible behavior outside the bug.
 CODEX-END -->
 
 ```bash

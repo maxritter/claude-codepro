@@ -16,69 +16,43 @@ paths:
 
 ## Mobile Development
 
-Loaded only in a repository that actually builds a mobile app — the path list above is the gate, so this costs nothing to anyone else.
+Use the project's build, install, signing, device, and verification instructions. Read relevant project rules before choosing a generic driver or command. Confirm actual bundle/package ids, SDK/toolchain pins, target devices, and build variants; do not guess them.
 
-### ⛔ This file is the starting point, not the answer
+### Verify the installed app
 
-**A project's own rules outrank every line below.** These are platform constants and the traps that catch a first attempt; a repository that has shipped to a store has measured things this file cannot know — its emulator name, its JDK pin, its bundle id, which of two drivers actually reached its UI. Grep `.claude/rules/`, `CLAUDE.md` and `AGENTS.md` before acting on anything here.
+For changes that affect native integration, packaging, permissions, or release behaviour, build and exercise the installed app. A desktop dev server does not prove the native artifact works. Record the build identity and whether it was a simulator/emulator or physical device.
 
-The failure this ordering prevents: reading a generic page, feeling informed, and never opening the file where the answer was written down.
+Choose a supported driver for the actual surface:
 
-### Reaching the UI
+| Surface | Verification approach |
+|---------|-----------------------|
+| Android WebView | The project's WebView/CDP bridge when debugging is available, or its UI automation harness |
+| Android native | The project's supported accessibility/UI automation driver |
+| iOS WebView | The project's supported Web Inspector/WebView bridge or native UI automation harness |
+| iOS native | The project's XCTest/accessibility/device automation harness |
 
-**A mobile app's UI is not a page in a desktop browser**, so the 4-tier ladder in `browser-automation.md` does not reach it. That rule says so and sends you here.
+Inspect current driver capabilities. Reading and acting may use different tools; selectors, accessibility identifiers, and screenshots each have limits. Prefer stable selectors/identifiers when available and use fresh screenshots/bounds for coordinate interactions. A desktop browser driver cannot be assumed to reach a mobile WebView.
 
-| Platform | Read the screen | Drive the app |
-|---|---|---|
-| Android, WebView (Capacitor / Cordova / RN WebView) | a11y-tree reader (Maestro, UIAutomator) or CDP | **CDP** over `adb forward` — see below |
-| Android, native | a11y-tree reader | the same reader, or UIAutomator |
-| iOS, WebView | a chii-style bridge, or screenshots | the bridge, else coordinate taps |
-| iOS, native | screenshots | coordinate taps (`xcrun simctl`, mobile-mcp) |
+### Debugging and device state
 
-⛔ **Reading and driving are usually different tools, and reaching for one to do both is the expensive mistake.** An a11y-tree reader gives you the whole flattened tree — excellent for asserting what is on screen, poor for hitting one specific control, because its text matchers are full-string regexes over that flattened tree and match things you never meant. Where a WebView exposes CSS selectors, drive by selector.
+- For Android WebView debugging, identify the target package/process and its actual debugging socket before forwarding a port. Do not pick the first socket on a device with multiple apps. Revalidate the forward after a process restart.
+- Debugging availability depends on the build and framework. Keep remote debugging and injected bridges out of production builds; use the project's documented development gates.
+- For iOS, use a driver explicitly supporting that platform and WebView; do not assume desktop Chrome CDP applies.
+- An Android `INSTALL_FAILED_VERSION_DOWNGRADE` means the artifact's version code is below the installed one. Use the documented test-build path and preserve app data; do not uninstall, reset data, or change release versioning merely to bypass it.
+- Poll device boot, app readiness, and asynchronous work with a timeout. Do not wait indefinitely.
+- Keyboard-dismiss actions can behave as BACK or navigation. Inspect the resulting screen before assuming the app crashed.
+- Clear or replace app state only when authorized for the selected test target. Preserve inputs and user data during an ongoing workflow.
 
-**Android WebView → CDP**, the one bridge worth memorising:
+### Device-specific UI checks
 
-```bash
-adb forward tcp:9222 localabstract:$(adb shell 'cat /proc/net/unix' \
-  | grep -o 'webview_devtools_remote_[0-9]*' | head -1)
-curl -s http://localhost:9222/json/version    # sanity check: expect Android-Package
-```
+Use the interaction and advisory detector guidance in `browser-automation.md`. An SPA's built HTML may be only a shell; use relevant source or a rendered view obtained through the supported driver.
 
-⛔ **The socket name carries the app's PID, so this must be redone after every app launch.** A forward set up before a relaunch points at a dead socket and the tooling reports an empty page list — which reads as "the app has no UI" and is not that.
+Inspect relevant screen sizes, OS text scaling, keyboard-visible states, safe areas, and supported themes. On devices, check clipped content at the notch/status bar/home indicator and whether controls remain reachable.
 
-Debug builds enable the socket by themselves. Release builds do not, and should not — an app that sets `webContentsDebuggingEnabled` unconditionally ships a debugger to its users.
+Follow `standards-frontend.md` for WebView accessibility. Meet applicable WCAG target-size requirements and the platform's touch guidance using its own units. Existing native components and platform conventions usually provide the right baseline.
 
-⛔ **iOS has no CDP.** WKWebView speaks a different protocol, and Safari's Web Inspector has no automation surface. Either a chii-style bridge with a **dev-only** script injection, or coordinate taps read back with screenshots. If a project injects such a bridge, check the injection is gated on the dev server *and* an env var — a bridge that ships in a release build is a remote debugger in production.
-
-### Traps that cost a first attempt
-
-- **Reinstalling fails with `INSTALL_FAILED_VERSION_DOWNGRADE`** when the local build's version code is below what is already installed. Android reports it to the user as "App not installed", which reads as a corrupt build. Pass a higher version code, and stay well below whatever offset CI uses for real releases.
-- **Wait for the condition, not the clock.** `until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 3; done` beats any fixed sleep, and the same holds for a scan or a build finishing inside the app.
-- **A driver that dismisses the keyboard may be sending BACK.** With the keyboard already down that unwinds a wizard, and from the first screen it exits the app to the launcher — which looks exactly like a crash.
-- **Clearing app state between runs throws away what you just typed.** Convenient for a clean start, expensive in the middle of a flow.
-- **Coordinate taps drift** the moment an overlay opens: the same percentage means two different things one call apart. Resolve fresh bounds, or use selectors.
-
-### Design checks on a device
-
-Impeccable's hook-first, fallback-only detector contract in `browser-automation.md` applies unchanged. Two things are specific here:
-
-- **A mobile app's built `index.html` is an SPA shell** — scanning it undercounts badly. The bridge you set up for driving is also how you get real markup: pull `document.documentElement.outerHTML` through the WebView's CDP session, write it to a file, and point `impeccable detect` at that file.
-- **Bound the target to the UI files the change touched.** Never the repo root: a mobile repo carries a whole native tree, and directory mode walks all of it.
-
-**Some things only a device shows, and no detector catches them.** Take a screenshot on a real screen size and look:
-
-- Content under the notch, the status bar, or the home indicator.
-- A control the thumb cannot reach, or two controls too close to hit individually.
-- Text that fits the design and not the OS font-size setting the user actually chose.
-- A dark-theme surface that borrows the host's background because the page never set its own.
-
-### What the desktop frontend rules miss on a phone
-
-`standards-frontend.md` supplies the implementation requirements and Open Claude Design's `open-claude-design-quality` skill owns visual judgment for user-visible changes. Meet WCAG 2.2 AA's 24×24 CSS-pixel target rule or its spacing exception, then follow the platform's larger touch guidance (commonly 44×44 on iOS and 48×48 on Android). These are the mobile-specific additions:
-
-- **Safe areas.** Use `env(safe-area-inset-*)` for anything at a screen edge, and set `viewport-fit=cover` in the viewport meta — without it those insets are zero and the padding silently does nothing. Recent Android enforces edge-to-edge by target SDK, so the insets are not optional on either platform.
-- **`100vh` is wrong on a phone.** It ignores the browser chrome and the on-screen keyboard. Use `100dvh`, and expect the viewport to resize when the keyboard opens.
-- **The keyboard covers the bottom of the screen.** A submit button pinned there is unreachable exactly when it is needed; scroll the focused field into view, or keep the action above the fold.
-- **The WebView follows the OS theme.** A surface with no explicit background inherits whatever the host paints, so a light-only design can render as unreadable in dark mode. Set background and colour explicitly.
-- **Native text scaling is a real range, not a rounding error.** Layouts that only survive the default size break on the size a lot of people actually use.
+- Account for safe-area and edge-to-edge insets using the project's framework. On the web, verify viewport configuration together with `env(safe-area-inset-*)` rather than assuming an inset is present.
+- Select viewport units and keyboard handling for the actual platform; `dvh` alone does not guarantee the keyboard cannot cover an action.
+- Keep focused fields and primary actions usable when the keyboard opens.
+- Set intentional surface/background colours and test interaction with the OS theme.
+- Support text scaling without clipping, overlap, or inaccessible navigation.

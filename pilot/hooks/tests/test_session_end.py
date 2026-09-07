@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 import session_end
 
 
@@ -17,6 +18,30 @@ def _find_call(mock: MagicMock, needle: str) -> tuple[tuple, dict] | None:
         if any(needle in str(token) for token in argv):
             return (args, kwargs)
     return None
+
+
+@pytest.mark.parametrize("is_session_end", [False, True])
+def test_native_spec_marker_cleanup_is_scoped_to_real_session_end(tmp_path, is_session_end):
+    base = tmp_path / "sessions"
+    own = base / "session-a"
+    sibling = base / "session-b"
+    for directory in (own, sibling):
+        directory.mkdir(parents=True)
+        (directory / "native-spec-planning.json").write_text("{}")
+    (own / "worktree.json").write_text("{}")
+    args = ["session_end.py", *(["--session-end"] if is_session_end else [])]
+    with (
+        patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "session-a"}, clear=True),
+        patch.object(session_end, "SESSIONS_DIR", base),
+        patch.object(session_end.sys, "argv", args),
+        patch("session_end.read_hook_stdin", return_value={"session_id": "session-a"}),
+        patch("session_end._complete_session"),
+        patch("session_end._has_other_active_sessions", return_value=True),
+    ):
+        assert session_end.main() == 0
+    assert (own / "native-spec-planning.json").exists() is not is_session_end
+    assert (sibling / "native-spec-planning.json").exists()
+    assert (own / "worktree.json").exists()
 
 
 def test_skips_stop_when_other_sessions_active(tmp_path: Path):

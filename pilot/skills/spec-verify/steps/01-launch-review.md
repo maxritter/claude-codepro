@@ -2,25 +2,15 @@
 
 ## Step 1: Early Background Review Launch
 
-### 1a: Clean Up Stale Review Findings (always run, before any launch)
+Read `$HOME/.pilot/agents/review-state-protocol.md` before launching any enabled reviewer. Persist each returned native or companion handle atomically with the plan, lane, role, and lifecycle state before independent work; reload that record after compaction and before collection.
 
-**Always run this first**, whether or not changes-review is enabled. Spec-review findings are planning-phase artifacts already addressed during implementation; a leftover changes-review findings file is the *previous* run's output and would be read as if it reviewed this iteration's diff.
+### 1a: Establish this review's identity
 
-⛔ **Scope the sweep to THIS plan's slug.** A bare `findings-*-review-*.json` wildcard deletes every concurrent orchestration lane's findings too — including one a reviewer is still writing — because `$SESS_DIR` resolves identically for a coordinating session and every subagent it dispatches (issue #173). On a lane run (`--lane <id>`), sweep `$SESS_DIR/lanes/<lane>` instead, where nothing else can collide.
+Derive this plan's slug and retain the current plan path, lane (if any), and the actual agent/task handle returned by each native reviewer launch. Step 3 consumes that handle's completed final JSON response.
 
-```bash
-SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
-RUN_DIR="$SESS_DIR"            # on a lane run: "$SESS_DIR/lanes/<lane>"
-FIND_BIN="/usr/bin/find"
-[ -x "$FIND_BIN" ] || FIND_BIN="$(command -v find)"
-test -d "$RUN_DIR" && "$FIND_BIN" "$RUN_DIR" -maxdepth 1 -name 'findings-spec-review-<plan-slug>*.json' -delete
-test -d "$RUN_DIR" && "$FIND_BIN" "$RUN_DIR" -maxdepth 1 -name 'findings-changes-review-<plan-slug>*.json' -delete
-LAUNCHED_AT=$(date +%s)   # freshness floor for Step 3's collection
-```
+Prior planning findings, saved JSON, or another run's transcript are not completion evidence for this review. Do not sweep findings files or poll their timestamps. The parent may persist a validated result for bookkeeping only when writes are permitted, scoped to this plan and lane; a saved copy never replaces the authoritative agent result.
 
-Use the absolute `FIND_BIN` form: the Pilot shell hook may rewrite a plain `find` to RTK, which rejects the `-delete` predicate shape this needs.
 
-**Carry `LAUNCHED_AT` to Step 3.** A findings file whose mtime predates the launch is a stale artifact, not this review's result — treat it as absent. Namespacing makes that unlikely; the timestamp closes the residual window.
 
 ### 1b: Resolve the review diff scope and stage (before ANY reviewer launches)
 
@@ -68,6 +58,8 @@ git status --short --untracked-files=all | grep '^??' || true   # anything still
 
 A bare `git add -N` is not enough — `git status` still treats the path as untracked and a later commit can record empty content. **Staging is not committing**: the commit still waits for the review, doc-sync, and the Phase B worktree sync. `git add` is pre-authorized; the push is not.
 
+**Mixed ownership:** if a listed file already contains unrelated user or concurrent edits, a whole-file `git add` is not a valid scope boundary. Preserve the index and distinguish this run's hunks using scoped staging or an isolated review artifact. Do not include unrelated work merely because it shares a path.
+
 **Reviewable file preflight:** the `Files:` block must contain at least one non-ignored repository artifact. `docs/plans/...` is workflow state and may be gitignored, so it cannot be the sole review target — and do NOT `git add -f` an ignored plan file to force it in. If every planned file is ignored, outside the repo, or only the plan itself, set `Status: PENDING`, add a fix task producing a reviewable non-production artifact, and return to implementation before launching any reviewer.
 
 ---
@@ -75,11 +67,15 @@ A bare `git add -N` is not enough — `git status` still treats the path as untr
 <!-- CC-ONLY -->
 #### Launch the changes-review sub-agent NOW, in the background
 
-**Only when `PILOT_CHANGES_REVIEW_ENABLED` is not `"false"`.** It works while you run the Step 2 automated checks, and Step 3 collects its findings file.
+**Only when `PILOT_CHANGES_REVIEW_ENABLED` is not `"false"`.** It works while you run the Step 2 automated checks, and Step 3 collects its completed final JSON response.
 
 ⛔ **This sub-agent is the changes review — there is no deeper mode to select.** `Skill(skill='code-review', ...)` is rejected (`disable-model-invocation`), so reaching for it here yields no review at all. `/code-review` is the user's to type.
 
-**Derive the plan slug** from the filename (strip `YYYY-MM-DD-` and `.md`). Output path: `$SESS_DIR/findings-changes-review-<plan-slug>.json` (1a already removed any stale file).
+Read and reconcile the existing native review record for this plan, lane, and `changes-review` role before launching anything. Resume its live handle, collect an already completed result, or reconcile an interrupted `launching` attempt; only a confirmed terminal or missing prior attempt permits a replacement.
+
+Atomically write `state: launching` with `provider: native`, this role, plan/lane identity, and `reviewed_sha256` of the exact review anchor before the spawn call below. Use `review-state-protocol.md`. If the write fails or the current mode forbids it, defer the launch; do not create an unrecorded background job.
+
+Use the plan identity from 1a and retain the returned native agent/task handle as `CHANGES_REVIEW_AGENT_ID`.
 
 ```
 Agent(
@@ -89,18 +85,21 @@ Agent(
   **Plan file:** <plan-path>
   **Changed files:** <paths from the plan's Files: blocks + files named under the plan's ## Deviations section>
   **Runtime environment:** <plan's Runtime Environment section, if present>
-  **Output path:** <absolute findings path above>
   **Base ref:** <the `base_ref` field from the Step 1b resolver output, verbatim. Substitute the real value; never leave the placeholder, and never let the reviewer fall back to a guessed branch name.>
   **Diff range:** <the `diff_range` field from the Step 1b resolver output, verbatim.>
 
   Review the diff (`git diff <diff_range> -- <changed files>`, exactly as resolved in Step 1b) against the plan: compliance, quality, goal achievement.
-  Write findings JSON to output_path using the Write tool.
+  Remain read-only. Return ONLY valid JSON matching the changes-review schema as your final response.
   IMPORTANT: Include the plan file path in your output JSON as the "plan_file" field.
   """
 )
 ```
 
-⛔ **Never `TaskOutput`** — Step 3 polls the findings file.
+Immediately persist the returned `native_agent_id` and `state: running` atomically in that same record before waiting, independent work, or a handoff. If saving fails, retain and reconcile this handle; do not spawn again.
+
+Use the runtime's actual handle-based wait/result mechanism in Step 3, including `TaskOutput` when exposed. Do not request or poll an agent-authored findings file.
+
+Step 3 performs collection after the independent automated checks. At native collection, confirm terminal completion and atomically write `state: completed`; validate the final JSON schema and matching `plan_file`, then write `state: collected` with the consumed result identity. If terminal output remains invalid or unavailable after correction/recovery, write `state: incomplete` with the reason and follow the explicit fallback. Observation timeouts leave the original live state and handle intact.
 
 #### Codex adversarial review (optional — launch NOW, in the background)
 
@@ -109,16 +108,21 @@ Agent(
 **Codex-once:** at most one companion run per `/spec` invocation. Verify-phase iterations — re-verify after fixes, review-gate annotation fixes — never trigger a second run.
 
 ```bash
-SESS_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
-CODEX_FLAG="$HOME/.pilot/sessions/$SESS_ID/codex-changes-review-ran-<plan-slug>.flag"
+SESS_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-}}}"
+case "$SESS_ID" in ""|*[!A-Za-z0-9_-]*) echo "Review state needs a confirmed session identity" >&2; exit 1 ;; esac
+SESS_DIR="$HOME/.pilot/sessions/$SESS_ID"
+[ -z "$LANE_ID" ] || SESS_DIR="$SESS_DIR/lanes/$LANE_ID"
+CODEX_FLAG="$SESS_DIR/codex-changes-review-ran-<plan-slug>.flag"
 [ -f "$CODEX_FLAG" ] && echo "Codex already reviewed this plan in this session — skipping (codex-once)."
 ```
 
-Otherwise **read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/codex-companion-protocol.md` and follow §1–§3 now** (locate → render → launch). Step 3 runs §4–§6. Supply:
+Otherwise **read `$HOME/.pilot/agents/codex-companion-protocol.md` and follow §1–§3 now** (locate → render → launch). Step 3 runs §4–§6. Supply:
 
 | Protocol input | Value for changes review |
 |---|---|
-| `PROMPT_TEMPLATE` | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/changes-review-codex.md` |
+| `PROMPT_TEMPLATE` | `$HOME/.pilot/agents/changes-review-codex.md` |
+| `ROLE` | `changes-review` |
+| `LANE_ID` | Original parsed `--lane <id>` value, or empty for this main-session run |
 | `{{PLAN_PATH}}` | absolute path to the plan file |
 | `{{PLAN_GOAL}}` | the Goal sentence from the plan's `## Summary` |
 | `{{BASE_REF}}` | the `base_ref` from the Step 1b resolver, verbatim — `HEAD` in working-tree mode (the template then falls back to the staged `git diff HEAD`), the detected base branch in worktree mode. Never a hardcoded branch name. |
@@ -143,13 +147,9 @@ git status --short
 
 Collect: changed files list, runtime environment info, test framework constraints, and plan risks section. Derive the plan slug from the plan filename by stripping the date prefix and `.md`.
 
-Persist the returned agent id so Step 3 can survive long checks or compaction. Use a deterministic session file:
+Read and reconcile the existing native review record for this plan, lane, and `changes-review` role before launching anything. Resume its live handle, collect an already completed result, or reconcile an interrupted `launching` attempt; only a confirmed terminal or missing prior attempt permits a replacement.
 
-```bash
-SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
-AGENT_ID_FILE="$SESS_DIR/changes-review-agent-id-<plan-slug>.txt"
-mkdir -p "$SESS_DIR"
-```
+Atomically write `state: launching` with `provider: native`, this role, plan/lane identity, and `reviewed_sha256` of the exact review anchor before the spawn call below. Use `review-state-protocol.md`. If the write fails or the current mode forbids it, defer the launch; do not create an unrecorded background job.
 
 Use the spawn-agent tool exposed in the current Codex tool schema with `agent_type="changes-review"` and this message:
 
@@ -167,9 +167,13 @@ Return ONLY valid JSON matching the changes-review schema.
 Include the plan file path in the `plan_file` field.
 ```
 
+Immediately persist the returned `native_agent_id` and `state: running` atomically in that same record before waiting, independent work, or a handoff. If saving fails, retain and reconcile this handle; do not spawn again.
+
 Capture the returned id as `CHANGES_REVIEW_AGENT_ID`. Follow the current tool's actual parameters rather than copying a namespace or signature from another Codex version.
 
-After spawning, write `CHANGES_REVIEW_AGENT_ID` to `$AGENT_ID_FILE`.
+After spawning, atomically persist `CHANGES_REVIEW_AGENT_ID` in the `changes-review` record from `review-state-protocol.md`, including this plan and lane identity.
+
+Step 3 performs collection after the independent automated checks. At native collection, confirm terminal completion and atomically write `state: completed`; validate the final JSON schema and matching `plan_file`, then write `state: collected` with the consumed result identity. If terminal output remains invalid or unavailable after correction/recovery, write `state: incomplete` with the reason and follow the explicit fallback. Observation timeouts leave the original live state and handle intact.
 
 Do NOT wait here. Proceed directly to Step 2.
 

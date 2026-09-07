@@ -48,6 +48,16 @@ def _make_skill(skills_dir: Path, name: str, body: str = "Do the thing.") -> Pat
     return skill_dir
 
 
+def test_retired_owned_skill_cannot_self_heal(tmp_path: Path) -> None:
+    skills = tmp_path / "skills"
+    retired = _make_skill(skills, "bot-boot")
+    personal = _make_skill(skills, "bot-jobs")
+    for _ in range(2):
+        assert _rebuild_cc_skills(skills, {"bot-boot"}) == 0
+        assert not (retired / "SKILL.md").exists()
+    assert (personal / "SKILL.md").read_text() == "BUILT bot-jobs"
+
+
 @pytest.fixture()
 def claude_tree(tmp_path: Path) -> Path:
     """~/.claude with a Pilot skill (`spec`) and a user skill (`myskill`).

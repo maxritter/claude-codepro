@@ -94,7 +94,7 @@ class TestKillStaleWorker:
     @patch("installer.steps.finalize.time.sleep")
     @patch("installer.steps.finalize.subprocess.run")
     def test_kills_pids_found_by_lsof(self, mock_run, _mock_sleep):
-        """Sends SIGTERM first, then SIGKILL if still alive."""
+        """Kills only listening processes, using SIGTERM before SIGKILL."""
         from installer.steps.finalize import FinalizeStep
 
         mock_run.side_effect = [
@@ -106,8 +106,15 @@ class TestKillStaleWorker:
             MagicMock(returncode=1),  # kill -0 5678 (already dead)
         ]
 
-        FinalizeStep._kill_stale_worker()
+        with patch("installer.steps.finalize.get_worker_port", return_value=41777):
+            FinalizeStep._kill_stale_worker()
 
+        assert mock_run.call_args_list[0] == call(
+            ["lsof", "-ti", ":41777", "-sTCP:LISTEN"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         mock_run.assert_any_call(["kill", "1234"], capture_output=True, timeout=5)
         mock_run.assert_any_call(["kill", "-9", "1234"], capture_output=True, timeout=5)
         mock_run.assert_any_call(["kill", "5678"], capture_output=True, timeout=5)
@@ -210,22 +217,20 @@ class TestFinalSuccessPanel:
 
                 sections = mock_next_steps.call_args[0][0]
                 section_titles = [title for title, _ in sections]
-                assert section_titles == ["Getting Started"]
-                getting_started = dict(sections)["Getting Started"]
+                assert section_titles == ["Next steps"]
+                getting_started = dict(sections)["Next steps"]
                 assert len(getting_started) == 5
                 labels = [label for label, _ in getting_started]
                 assert labels == [
-                    "Start a session",
-                    "Add project context",
-                    "Open the Console",
-                    "Explore capabilities",
-                    "Check for updates",
+                    "Start",
+                    "Setup (optional)",
+                    "Console",
+                    "Docs",
+                    "Update",
                 ]
-                assert ("Check for updates", "Run 'pilot update' to update Pilot Shell") in getting_started
+                assert ("Update", "pilot update") in getting_started
                 rendered = " ".join(f"{label} {detail}" for label, detail in getting_started)
-                assert "direct requests" in rendered
-                assert "native Plan/Goal tools" in rendered
-                assert "Pilot workflows use the same harness" in rendered
+                assert ("Start", "claude or codex") in getting_started
                 assert "/setup-rules" in rendered and "$setup-rules" in rendered
                 assert "pilot-shell.com/docs" in rendered
                 assert "Design visually" not in rendered

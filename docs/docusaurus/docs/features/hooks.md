@@ -28,7 +28,7 @@ Codex runs the skill refresh, session registration, memory observer, and turn su
 | `codegraph_init.py` | Claude Code | Initializes CodeGraph for the current project. |
 | Skill sync | Both | Refreshes managed skills for the active agent. |
 | Repository asset sync | Both | Silently synchronizes project rules and skills. A bounded scoped-rule index is supplied to the agent as suppressed context without printing in the session UI or hook-status log. |
-| Worker context bootstrap | Claude Code | Restores the memory digest and active session context through the Console worker. Codex retrieves relevant cross-session memory on demand through `mem-search`. |
+| Memory synchronization | Both | Refreshes shared storage silently. Agents retrieve task-relevant history and OKF knowledge on demand through `mem-search`; no automatic digest is injected. |
 | `post_compact_restore.py` | Both | Re-injects active plan and task state after compaction. |
 | `session_clear.py` | Both | Resets Pilot session state after `/clear`. |
 
@@ -48,8 +48,10 @@ Codex runs the skill refresh, session registration, memory observer, and turn su
 | Hook | Applies to | Description |
 |------|------------|-------------|
 | `tool_redirect.py` | Claude Code | Privately nudges recursive Bash, built-in search, and web calls toward the preferred indexed/MCP tools without denying the original operation. It also reminds the agent when a shell command edits a project file (`sed -i`, heredocs or redirects into a file, `tee`, inline scripts that write files) that changes belong in `Edit`/`Write`, where they show as a diff. Writes to `/tmp` and the scratchpad get no reminder. |
-| `tool_token_saver.py` | Both | Rewrites eligible Bash commands through RTK for 60–90% smaller output. |
+| `tool_token_saver.py` | Both | Rewrites eligible Bash commands through RTK using the response format required by the calling agent. |
 | `plan_mode_tracker.py` | Claude Code | Tracks `/spec` plan-mode state, records who owns the plan-mode leg being entered (the only moment `/spec` and native plan mode are distinguishable), verifies the observed planning-leg model, and reports the result once per leg. |
+
+The RTK hook registrations explicitly identify Claude or Codex. Codex rewrites include `permissionDecision: "allow"` alongside `updatedInput`; Claude rewrites omit that decision so normal permission checks remain in place. Older Codex registrations can be recognized from native hook metadata. If the runtime cannot be identified, the hook leaves the command unchanged.
 
 ## PermissionRequest *(Claude Code only)*
 
@@ -71,6 +73,10 @@ Codex runs the skill refresh, session registration, memory observer, and turn su
 | `context_monitor.py` | Claude Code | Tracks context use and privately nudges the agent as compaction approaches. |
 | Memory observer | Both | Saves decisions, discoveries, and bugfixes. |
 | Repository asset sync | Both | Silently reconciles supported edits across the Claude Code and Codex project-asset trees. Temporarily incomplete multi-file updates are deferred and retried instead of blocking an edit that already landed. |
+
+## PostToolUseFailure
+
+After a failed `EnterPlanMode` call, Claude Code runs `plan_mode_tracker.py` to retire the unsuccessful native-planning handoff. The registered plan and draft remain available, and a later ordinary native plan can still be captured normally. This cleanup is silent and does not change permissions.
 
 ## PreCompact
 
@@ -97,5 +103,5 @@ Codex runs the skill refresh, session registration, memory observer, and turn su
 | `session_end.py --session-end` | Both | Completes the real session, waits for the team-memory export attempt, then stops the Console worker only when no other session remains. Codex now uses its native SessionEnd event rather than treating every Stop as a session boundary. |
 
 :::info Compaction resilience
-When a client emits the compaction lifecycle: **PreCompact** captures active state → compaction runs → **SessionStart** restores it via `post_compact_restore.py`. Codex's experimental context manager separately preserves notes and searchable thread history; Pilot does not automatically inject its memory digest into Codex.
+When a client emits the compaction lifecycle: **PreCompact** captures active state → compaction runs → **SessionStart** restores it via `post_compact_restore.py`. Native context management remains separate from cross-session memory; Pilot does not automatically inject a memory digest into either agent.
 :::

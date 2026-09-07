@@ -6,6 +6,7 @@ import io
 import json
 from unittest.mock import patch
 
+import pytest
 from file_checker import _tdd_check, main
 
 EM_DASH = "\u2014"
@@ -93,6 +94,41 @@ def test_nonexistent_file_returns_zero():
     with patch("sys.stdin", _make_stdin("Edit", "/nonexistent/file.py")):
         result = main()
         assert result == 0
+
+
+@pytest.mark.parametrize(
+    ("extension", "test_name", "test_body"),
+    [
+        (".py", "test_login_flow.py", "from src.auth import authenticate\n"),
+        (".ts", "login-flow.test.ts", "import { authenticate } from '../src/auth';\n"),
+    ],
+)
+def test_registered_checker_accepts_behavioral_coverage(tmp_path, extension, test_name, test_body):
+    """The installed hook must accept coverage from tests named after a behavior."""
+    source = tmp_path / "src"
+    source.mkdir()
+    implementation = source / f"auth{extension}"
+    implementation.write_text("pass\n")
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / test_name).write_text(test_body)
+
+    with patch("file_checker.should_skip", return_value=False):
+        assert _tdd_check("Write", {"file_path": str(implementation)}, str(implementation)) == ""
+
+
+@pytest.mark.parametrize("extension", [".py", ".ts", ".go", ".cs"])
+def test_missing_test_reminder_does_not_require_a_new_test_file(tmp_path, extension):
+    """File heuristics cannot prove a behavior is untested or mandate test layout."""
+    implementation = tmp_path / f"auth{extension}"
+    implementation.write_text("def authenticate(): return True\n")
+    with patch("file_checker.should_skip", return_value=False):
+        reason = _tdd_check("Write", {"file_path": str(implementation)}, str(implementation))
+
+    assert reason
+    assert "existing" in reason.lower()
+    assert "creating" not in reason
+    assert "No test covers" not in reason
 
 
 class TestContextOutput:

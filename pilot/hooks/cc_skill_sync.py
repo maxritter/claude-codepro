@@ -35,6 +35,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _lib.util import claude_config_dir, pilot_owned_skill_names  # noqa: E402
 
+_RETIRED_SKILLS = frozenset({"bot-boot", "bot-channel-task", "bot-defaults", "bot-heartbeat", "bot-jobs"})
+
 
 def _check_license() -> bool:
     pilot_bin = Path.home() / ".pilot" / "bin" / "pilot"
@@ -151,6 +153,9 @@ def _rebuild_cc_skills(skills_dir: Path, names: set[str]) -> int:
     for name in names:
         skill_dir = skills_dir / name
         skill_md = skill_dir / "SKILL.md"
+        if name in _RETIRED_SKILLS:
+            skill_md.unlink(missing_ok=True)
+            continue
         try:
             manifest = json.loads((skill_dir / "manifest.json").read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):

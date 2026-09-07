@@ -1,5 +1,7 @@
 ## Step 8: Worktree Sync & Post-Merge Verification (if worktree active)
 
+A synchronous permitted question needs no disk sentinel. For an asynchronous persisted gate, resolve and validate the actual session identity before creating or consuming its marker; missing identity blocks only that persistence path. Keep the real decision pending or use the permitted synchronous question surface, and never substitute a shared session directory. Recompute the validated session/lane path before cleanup after a new shell call or compaction.
+
 ### 8.1 Worktree Sync
 
 1. Extract plan slug from path (strip date prefix and `.md`)
@@ -23,10 +25,13 @@
    ```
    AskUserQuestion: "Yes, squash merge" (Recommended) | "No, keep worktree" | "Discard all changes"
 
-   ⛔ **When you cannot emit `AskUserQuestion`** — on Codex, where it renders as a plain-text list rather than an interactive control, or as a Claude Code subagent running this plan as an orchestration lane, where the tool is absent entirely — the prompt above will not block for an answer, so you must yield yourself. Read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents/agent-gate-protocol.md` and follow it, supplying `GATE_NAME` = `Worktree sync`, `OPTIONS` = the three above, `SENTINEL_PATH` = `verify-gate-pending`:
+   ⛔ **When no structured input tool is exposed and permitted for this approval**, ask in prose and yield for the required answer. Read `$HOME/.pilot/agents/agent-gate-protocol.md` and follow it, supplying `GATE_NAME` = `Worktree sync`, `OPTIONS` = the three above, `SENTINEL_PATH` = `verify-gate-pending`:
 
    ```bash
-   SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
+   SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-}}}"
+case "$SESSION_ID" in ""|*[!A-Za-z0-9_-]*) echo "Persisted gate needs a confirmed session identity" >&2; exit 1 ;; esac
+SESS_DIR="$HOME/.pilot/sessions/$SESSION_ID"
+[ -z "$LANE_ID" ] || SESS_DIR="$SESS_DIR/lanes/$LANE_ID"
    mkdir -p "$SESS_DIR" && touch "$SESS_DIR/verify-gate-pending"
    ```
 

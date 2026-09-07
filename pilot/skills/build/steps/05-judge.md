@@ -15,10 +15,10 @@ First tier that yields a target wins:
 | 1 | Reuse a running server — `curl -s --max-time 3 -o /dev/null -w '%{http_code}' http://localhost:<port>/` | Nothing listening |
 | 2 | Start the documented dev server in the background, poll health up to 60s | No documented start command |
 | 2b | **The artifact is something you install, not something you serve** — a mobile app, a desktop app, an extension, a CLI binary. Build it and install it the way this project's own docs say (emulator, simulator, device, local install), then drive the installed copy | No documented build-and-install path |
-| 3 | Detect a deploy backend (`vercel.json`, `fly.toml`, `netlify.toml`, `wrangler.toml`, `render.yaml`, `cdk.json`, `Procfile`, `.github/workflows/deploy*.yml`), run its auth check, preview-deploy with an authenticated one | No markers, or every auth check fails — quote command and output |
-| 4 | No live target: rule what you honestly can, record the rest unresolved | Only after 1–3 were attempted and their outcomes written down |
+| 3 | Use an identified remote preview or deployment only when the target and operation are already authorized; verify the project's actual command and environment first | No authorized target or a concrete deploy failure |
+| 4 | No live target: rule what you honestly can, record the rest unresolved | Applicable authorized local/remote options cannot establish a target |
 
-⛔ Tier 4 needs three recorded attempts, not an assumption — a marker file present means its auth check runs before Tier 3 is called unavailable.
+Record applicable attempts and the exact blocker. Credentials and backend marker files do not authorize deployment; never attempt a generic deploy solely to satisfy this checklist.
 
 ⛔ **A dev server is not automatically the artifact.** For a mobile or desktop app the running dev server serves the *source*, while what the criteria rule is the installed build — a different thing, with a different bundle, sometimes different transport. Tier 2b exists so that project does not fall through to Tier 4 and get its UI criteria ruled from source. When both apply, take 2b: judge the thing the user would actually open.
 

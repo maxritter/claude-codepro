@@ -1,6 +1,6 @@
 ## Step 8: Hand Off to /spec or /build
 
-This is the single terminal confirmation — Step 7 already settled the PRD content, so do NOT ask "does anything need to change?" again here.
+Step 7 already settled and approved the PRD content. Show the hand-off command without another confirmation.
 
 **⛔ Never auto-invoke `/spec`, `/build`, `Skill('spec')`, or `Skill('build')`.** The user MUST type the command themselves (global rule in `task-and-workflow.md`). This skill's terminal action is to PRINT the command, then stop and wait.
 
@@ -14,11 +14,9 @@ This is the single terminal confirmation — Step 7 already settled the PRD cont
 
 Size is not the discriminator — a large PRD is not automatically `/spec`.
 
-**Ask** (`AskUserQuestion`, or plain-text numbered options on Codex):
-- **"Show me the hand-off command"** — print the ready-to-run command below
-- **"I'm done for now"** — just confirm the PRD path
+Print the appropriate hand-off command for the user to run; do not invoke it yourself. If the user explicitly said they are done for now, just confirm the saved PRD path.
 
-Either way, print the hand-off command for the user to run (do not run it yourself):
+
 
 ```
 PRD saved to docs/prd/YYYY-MM-DD-slug.md

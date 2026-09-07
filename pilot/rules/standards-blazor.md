@@ -7,28 +7,23 @@ paths:
 
 ## Blazor Standards
 
-Framework-specific guidance for Blazor components.
+Follow the project's supported Blazor version, render model, and component conventions. These defaults do not require reorganizing existing components.
 
 ### Components
 
 - **Parameters:** `[Parameter]` properties with sensible defaults; `[EditorRequired]` for mandatory ones.
 - **Parent notification:** use `EventCallback<T>` — never call `StateHasChanged()` from a child to refresh a parent (`EventCallback` triggers it automatically).
 - **Shared state:** prefer `[CascadingParameter]` or an injected, registered state service over deep parameter drilling.
-- **Code organization:** keep markup in `.razor`, logic in a code-behind partial class (`MyComponent.razor.cs`) — avoid large `@code` blocks.
+- **Code organization:** use an inline `@code` block or code-behind partial class according to component complexity and project conventions.
 
 ### Styling
 
-- Use CSS isolation (`MyComponent.razor.css`); styles auto-scope via `b-{hash}` — no BEM/naming needed. Use `::deep` to reach child markup.
+- Follow the established styling system. With CSS isolation (`MyComponent.razor.css`), account for generated scope attributes and use `::deep` deliberately when descendant markup requires it.
 
 ### Rendering & Lifecycle
 
-- Choose render mode deliberately: `InteractiveServer` / `InteractiveWebAssembly` only when interactivity is needed — don't default to interactive when static SSR suffices.
-- Lists: set `@key` so the diff algorithm tracks items; override `ShouldRender()` to skip needless re-renders on hot paths.
+- Use render modes supported by the project's framework version. Where static SSR is available and sufficient, do not add interactivity solely from a template.
+- Use stable `@key` values where preserving list-item identity matters. Optimize rendering only after identifying unnecessary work; a `ShouldRender()` override must not suppress required updates.
 - Dispose: `@implements IDisposable` / `IAsyncDisposable` to release timers, event handlers, and subscriptions (a common leak source in `InteractiveServer`).
 
-### Checklist
-
-- [ ] Parameters typed with `[Parameter]`; mandatory ones `[EditorRequired]`
-- [ ] Parent updates via `EventCallback<T>`, not child-side `StateHasChanged()`
-- [ ] Logic in code-behind; CSS isolation for component styles
-- [ ] `@key` on lists; render mode intentional; disposables implemented
+Verify affected lifecycle, state, and user interactions using the project's existing checks and the relevant browser evidence.

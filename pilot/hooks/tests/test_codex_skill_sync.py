@@ -162,7 +162,8 @@ class TestAdapt:
   options=["Yes", "No"]
 )"""
         result = _adapt(content)
-        assert "Present numbered options in plain text" in result
+        assert "runtime exposes and permits" in result
+        assert "otherwise ask in plain text" in result
         assert 'question="Ready?"' in result
         assert 'options=["Yes", "No"]' in result
         assert "AskUserQuestion" not in result
@@ -225,9 +226,13 @@ class TestBuildCodexSkill:
         assert "spawn-agent tool exposed in the current Codex tool schema" in result
         assert "wait mechanism exposed in the current Codex tool schema" in result
         assert 'agent_type="changes-review"' in result
-        assert "changes-review-agent-id-" in result
+        assert "review-state-protocol.md" in result
+        assert "atomically persist `CHANGES_REVIEW_AGENT_ID`" in result
+        assert "native_agent_id" in result
+        assert "verifying this plan and lane identity" in result
         assert "Do not silently skip review" in result
-        assert 'FIND_BIN="/usr/bin/find"' in result
+        assert "completed final JSON response" in result
+        assert "Do not sweep findings files" in result
         assert "Reviewable file preflight" in result
         assert "Broad-check failure classification" in result
         assert "Final-status-only findings are not implementation fixes" in result

@@ -2,64 +2,36 @@
 
 ### Default Posture: Parsimonious
 
-**Reuse existing behavioural tests first.** When a new public production class genuinely needs new tests, the ceiling is 1 unit test class + 1 functional test class (the latter only when the behaviour can't be exercised through unit tests). Multiply test classes only when the production class has genuinely independent behavioural axes.
+Reuse existing behavioural coverage first. Add or extend tests for changed behaviour and credible failure modes; organize them around contracts rather than production classes or methods. There is no global quota for test counts, class counts, or coverage percentages. Project requirements and explicitly selected workflows may define stronger gates.
 
-Tests should be **structure-insensitive**: the signal responds to behaviour change, not to where a method happens to live today. A behaviour-preserving refactor must not break the suite.
+Tests should survive behaviour-preserving refactors. Reversible, low-impact edits do not need new tests that merely mirror the implementation. Documentation, formatting, and static copy normally use existing validation or rendered inspection; configuration and dependency changes need checks of the behaviour they can affect.
 
-**Local override:** a project that wants strict-TDD or blanket-coverage behaviour ships `.claude/rules/testing-project.md`, which shadows this rule.
+### Regression testing and TDD
 
-### TDD — default, with documented escapes
+For bug fixes and meaningful behaviour changes, establish a focused failing check before production edits when practical. Confirm it fails for the intended reason, implement the change, and run it again. Use existing tests or a reproducible command when they already expose the defect.
 
-**⛔ Default: have a failing test before you write production code.**
+If an automated reproducer is impractical, capture the actual failing interaction or artifact and explain the coverage limit. If implementation already exists, verify regression sensitivity in an isolated copy or with a controlled mutation; do not discard work to reenact TDD. An explicitly selected workflow's recorded RED requirement still applies unless the user changes that requirement.
 
-RED (one minimal test for the desired *behaviour*) → verify it fails for the right reason, not a syntax error → GREEN (simplest thing that passes) → verify the full suite → refactor with tests green.
+The optional `Trivial:` plan field records why existing verification is sufficient and names that check. It is evidence to assess against the actual change, not a line-count exemption or proof of correctness. Do not use it to conceal missing regression evidence.
 
-Applies to new functions, endpoints, business logic, behaviour changes, and bug fixes (reproduce first).
+### Choosing useful checks
 
-**Skip RED for:** docs, config, dependency bumps, formatting. Also for a plan task carrying a `Trivial:` justification that names the existing covering test (≤5 net new lines, no new branch/loop/try with a real body, no new public symbol, no new error path) — the changes review audits that claim against the diff, so the planner's word is not authoritative.
+- Unit checks exercise isolated behaviour. Use fakes or mocks for costly, unavailable, or nondeterministic boundaries; temporary files or in-process collaborators can be simpler and more faithful than mocking every call.
+- Integration checks exercise contracts that doubles cannot establish, including database semantics, subprocess invocation, serialization, and third-party adapters. Keep them isolated from user data and external mutations.
+- E2E checks exercise the affected user workflow. Browser or device interaction evidence is required for claims about the rendered UI; see `browser-automation.md` and `mobile-development.md`.
+- Cover material security, data-integrity, business-rule, and error paths explicitly. Use coverage reports to find gaps, not to manufacture tests for a number.
+- When a dependency changes, inspect existing consumer tests for isolation assumptions and exercise the real integration where relevant.
 
-**⛔ Bugfixes never qualify for `Trivial:`.** A bugfix without a reproducing test is a rubber stamp.
+Run focused checks, then the repository's required suite. Once those pass, repeat or broaden only after relevant edits, failures, environment changes, or unresolved concerns. Results remain valid for the unchanged artifact and environment across messages.
 
-If you wrote code before the test, don't revert — write the test now and confirm it catches the regression.
+### Assertions
 
-### Strategy and coverage
+Assert the observable contract using independently justified expected values. A test should fail for a plausible defect in that contract. Inspect relevant boundaries such as empty input, invalid input, authorization, state changes, and error handling; do not add cases mechanically where the contract excludes them.
 
-External deps? No → unit. Yes → integration. Complete user workflow? → E2E.
+Avoid expectations copied from the implementation, redundant cases on the same path, and assertions that only prove a mock was installed. Interaction assertions are appropriate when the interaction itself is the contract, such as preventing a write or sending the correct request.
 
-Unit tests must mock every external dependency — HTTP, subprocess, file I/O, database, third-party clients — at the point of *import*, not definition. A unit test taking >1s is a sign of unmocked I/O. Locally-installed tools are the classic CI-only failure: they pass on your machine and vanish in CI.
-
-**When a function gains a new dependency, update every existing test for it.** Grep the function name across the test tree and check each call site mocks the new subprocess or I/O. This is the most common cause of CI-only failures.
-
-Coverage is a diagnostic, not a quota. Critical paths — business logic, security, data integrity, error handling — need explicit behavioural coverage. Glue code, config plumbing, and trivial bindings get no numeric gate.
-
-### ⛔ Frontend changes require browser verification
-
-Verify user-visible changes with browser automation in direct work, native tools, and Pilot workflows. Unit tests don't catch stale bundles, layout breakage, or wiring. Procedure and tool tiers: `browser-automation.md`.
+Source-text assertions rarely prove runtime behaviour. Prefer executing the build, transform, parser, command, or rendered artifact. Exact text checks can protect an actual syntax or packaging contract; they cannot establish that a model follows prose instructions. Keep tests independent and avoid adding production APIs solely to expose internals to a test.
 
 ### Failing tests outside the request
 
-Run the repository's required suite after focused checks. When a failure appears outside the requested change, reproduce and attribute it before calling it pre-existing. Report the evidence and request authority before changing unrelated code. Fix it only when the requested change caused it, the fix is required to validate the requested result, or the user separately authorizes that work.
-
-### Assertions are where tests go wrong
-
-Industry research across four LLMs found **>62% of generated test assertions were incorrect** — passing tests asserting the wrong field. False confidence is worse than no test. Before committing an assertion, check that a one-character bug in the implementation would actually fail it, that it targets the field carrying the meaning, that any hand-derived expected value came from an independent source, and that it asserts the behaviour the spec names rather than internal mechanics.
-
-**Name the break first.** Before writing the test body, name the production change that would make this test fail. Can't name one → redesign around an observable behaviour. Only *intentional* decisions could fail it → it's a change detector; test the behaviour that depends on the decision instead.
-
-**Then run the mutation check** before you finish: mentally mutate the implementation — wrong constant or argument, wrong branch taken, missing state change or side effect, empty/default return, missing validation for zero, empty, nil, unauthorized, or malformed input — and confirm at least one test fails for each. A mutation nothing catches marks the behaviour as unprotected, or the test as tautological.
-
-If the spec is too ambiguous to write a precise assertion, **stop and ask** — don't pattern-match a plausible value.
-
-### Anti-patterns
-
-- **Tautological tests** — the expectation recomputes the value the way the implementation does, so it passes by construction. Expected values come from a known-good literal, a worked example, or the spec. (A spec-named invariant asserted property-style is fine; deriving the expectation from the implementation's own logic is not.)
-- **Testing implementation, not behaviour** — asserting which mocks were called rather than the observable result. `assert result == expected`, not `mock.assert_called_with(...)`.
-- **String-presence tests on source files** — asserting that a script, skill, prompt, or config file *contains* a line proves only that the source is the source, and it fails on every harmless rewording. Run the artifact and assert its effects: outputs, side effects, exit codes. Documents that instruct agents are tested by the consuming agent's behaviour; prose written for humans earns no test. (Asserting on text your test just *produced* — the output of a build, render, or transform it ran — is the correct form, not this trap.)
-- **Change detectors** — `assert MAX_RETRIES == 5` can only fail when someone deliberately changes the constant, so it fires on redesign and sleeps through bugs. Assert the behaviour that depends on the decision: a failing call is retried 5 times and the 6th attempt never happens.
-- **Asserting on the mock itself** — a `*-mock` test id or "the double was installed" assertion passes when the mock is present and fails when it is absent; it says nothing about the component. Assert the real component's behaviour, or unmock it.
-- **Partial mocks** — a mock mirroring only the fields you think you need hides coupling and breaks against real data.
-- **One test class per method**, or mirroring code structure in tests. One test class per production class is the ceiling, not the floor.
-- **Redundant assertions on the same path** — three tests covering one observable behaviour through three internal routes is one test plus maintenance tax.
-- **Coverage padding** — tests written to move a number rather than to catch a behaviour change.
-- **Test-only production code** — never add a method, property, or flag purely for test access; refactor so the behaviour is observable through the public interface.
-- **Dependent tests** — each must pass on its own, in any order.
+Reproduce and attribute a failure before calling it pre-existing. Fix failures caused by the change or required to validate the requested result. Report unrelated failures with evidence, and obtain authority before expanding into unrelated repairs. Do not claim a broad suite passed while it contains failures.

@@ -155,6 +155,20 @@ class TestCheckPythonRuffIssues:
         assert exit_code == 0
         assert "2 ruff" in reason
 
+    def test_production_spec_module_is_linted(self, tmp_path: Path) -> None:
+        py_file = tmp_path / "spec_validator.py"
+        py_file.write_text("value = undefined\n")
+        with (
+            patch("_checkers.python.check_file_length", return_value=""),
+            patch("_checkers.python._has_ruff_config", return_value=True),
+            patch("_checkers.python.shutil.which", return_value="/usr/bin/ruff"),
+            patch(
+                "_checkers.python.subprocess.run",
+                return_value=MagicMock(returncode=1, stdout="spec_validator.py:1:9: F821 undefined name\n", stderr=""),
+            ),
+        ):
+            assert "F821" in check_python(py_file)[1]
+
     def test_ruff_clean_output_no_issues(self, tmp_path: Path) -> None:
         """Ruff with no errors means clean."""
         py_file = tmp_path / "app.py"

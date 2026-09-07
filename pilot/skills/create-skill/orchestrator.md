@@ -10,11 +10,8 @@ user-invocable: true
 
 ## Editing existing skills
 
-For NEW skills, Step 6 runs the with-skill vs baseline subagent comparison — no skill ships without it.
+For new or behavior-changing skills, validate structure, references, invocation boundaries, and affected behavior. Use Step 6's isolated execution comparison when the workflow is complex, risky, or a demonstrated behavior failure needs measurement. Cosmetic edits need only the checks they can affect.
 
-For EDITS, classify the change first:
+Preserve existing invocation policy and user-owned resources. Scale evaluation to the change; a wording edit does not automatically require a multi-agent benchmark.
 
-- **Behavioural** — adds/removes a step, changes a rule, reorders critical sections, edits the description, changes Iron Laws / red flags / rationalization tables, modifies trigger keywords. **Re-run Step 6 (or write 2–3 prompts if none exist).** These changes shift trigger accuracy and step compliance.
-- **Cosmetic** — typo, prose polish, link fix, formatting, example clarification with no semantic shift. Skip the test re-run.
-
-When uncertain, treat as behavioural. Skill changes that go unverified are how skill quality drifts.
+When uncertain, identify the behavior at risk and verify that behavior.

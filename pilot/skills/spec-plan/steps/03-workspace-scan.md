@@ -1,63 +1,27 @@
-## Step 3: Workspace Scan (MANDATORY, BEFORE QUESTIONS)
+## Step 3: Workspace Scan (before clarification)
 
-**Why this step exists.** Batch 1 clarifying questions (Step 4) are generated *before* exploration. Without code context, options collapse to generic shapes ("extend existing" vs "new module") instead of grounded ones ("Extend `LicenseAuth` in `launcher/auth.py:42`"). A single ~2-second scan up front fixes that — and the same scan is reused in Step 5 so we never pay for `codegraph_explore` twice.
+Ground the plan in the current workspace before asking the user about repository facts. This also applies when `PILOT_PLAN_QUESTIONS_ENABLED=false`.
 
-**Always runs**, regardless of `PILOT_PLAN_QUESTIONS_ENABLED`. Autonomous mode benefits *more* from grounded defaults, not less — when there is no user to disambiguate, the codebase has to.
+### 3.1: Orient on the affected area
 
-<!-- CODEX-START
+Read concrete paths or an identified diff directly. When the location is unknown, use Semble for intent search; use `codegraph_explore` when runtime entry points, callers, or component relationships are the uncertainty. Use the exposed tool schemas and available fallbacks. A docs or config change does not need a call graph merely because it touches several files.
 
-### Codex 3.1 Replacement: Bounded Scan
+Batch independent reads or searches. Follow relevant results to source; if a result is irrelevant, change the query or tool based on what is missing rather than repeating the same search.
 
-For Codex, this replaces the generic 3.1 scan below.
+### 3.2: Capture working context
 
-Run at most two orientation calls total:
-
-1. `codegraph_explore(query="<task description from user>")` only when the task likely modifies runtime code and the entry points are not already named.
-2. `mcp__semble__search(query="<2-3 key nouns from task>", top_k=5)` only when CodeGraph is weak, the task is cross-cutting, or the task is docs/config/rules-heavy.
-
-If the user names concrete paths, docs, rules, markdown, config, UI copy, or a known diff, read those files directly instead of spending a graph call. If CodeGraph returns irrelevant symbols, treat that as a signal to stop graph exploration, not to retry with more graph tools.
-
-Capture no more than five bullets in the Workspace Scan. The scan is a routing aid, not a research report.
-CODEX-END -->
-
-<!-- CC-ONLY -->
-### 3.1: Run the scan
-
-1. **CodeGraph orientation** (always):
-
-   ```
-   codegraph_explore(query="<task description from user>")
-   ```
-
-   Returns entry points, related symbols, and key code locations.
-
-2. **Semble intent search** (always — catches cross-cutting code, mutation sites, and cross-language connections that CodeGraph's structural graph misses):
-
-   ```
-   mcp__semble__search(query="<2-3 key nouns from task>")
-   ```
-
-   Use natural-language intent for conceptual tasks ("how does auth work"); use identifier-like queries when the task names a symbol ("LicenseAuth save_pretrained"). One call, top-k default.
-<!-- /CC-ONLY -->
-
-### 3.2: Capture structured output (in-context, NOT in the plan file yet)
-
-Record the scan results in this shape so Steps 3, 4, and 5 can all consume them:
+Keep a concise Workspace Scan in context:
 
 ```
 Workspace Scan
-- Entry points: [file:line, file:line, ...]
+- Entry points: [file:line, ...]
 - Related symbols: [Name @ file:line, ...]
-- Similar patterns: [Semble hit @ file:line — 1-line summary, ...]
-- Greenfield?: [yes | no]
+- Similar patterns: [file:line — relevant pattern]
+- Greenfield?: [yes | no | unresolved]
 ```
 
-`Greenfield?: yes` ⇔ both CodeGraph and Semble returned no relevant hits for this task. Set this explicitly — Steps 4 and 6 use it to decide whether to ground options in real code or fall back to generic options.
+Use `Greenfield?: yes` only when inspected workspace evidence establishes that the requested component does not exist. Empty tool results alone are not proof of absence.
 
-### 3.3: Hand-off to downstream steps
+### 3.3: Reuse downstream
 
-- **Step 4 (Batch 1 questions)** consumes the scan output and grounds every option label in real files/symbols when they exist. If `Greenfield?: yes`, falls back to generic options and documents the fallback under "Autonomous Decisions".
-- **Step 5 (Exploration)** starts from this scan instead of re-running `codegraph_explore` — that work happened here. It proceeds directly to deeper exploration and dependency analysis.
-- **Step 6 (Batch 2 questions)** applies the same labeling discipline to approach and design options.
-
-**Do NOT write scan output into the plan file at this step** — the plan file is composed in Step 9. The scan output is working context for the planning phase.
+Step 4 uses these findings to avoid unnecessary questions. Step 5 deepens only unresolved areas; it does not repeat this scan. Step 6 grounds consequential choices in actual components. The scan is working context; Step 9 writes the relevant findings into the plan.

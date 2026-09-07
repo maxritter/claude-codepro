@@ -26,14 +26,15 @@ All Pilot workflows run on both agents. Use `/` on Claude Code and `$` on Codex:
 
 The installer enables Codex's experimental native context manager by default on Codex 0.153.0 and newer while preserving an explicit opt-out in `config.toml`. On older releases it keeps `[features]` boolean-only and removes Pilot's incompatible structured setting during upgrades. Eligible ChatGPT-backed sessions then keep notes across context windows and can search earlier thread history instead of repeatedly reducing it to one compaction summary.
 
-Pilot keeps recording durable decisions, discoveries, and bugfixes for cross-session use. Codex relies on native thread history when eligible and searches the local `mem-search` MCP when prior project context is relevant; Pilot does not inject a recency-based memory digest automatically. Claude Code keeps Pilot's existing automatic memory lifecycle.
+Pilot retains a broader history across agents and editable [OKF knowledge](../features/knowledge.md) for on-demand recall. Both agents use available native context first and query `mem-search` when useful details are missing; neither receives a Pilot startup digest. Useful overlap between native memory and Pilot is allowed without mechanically copying records between stores.
+
+Background capture automatically uses available Claude Code or Codex resources, including Codex-only setups. It handles provider selection, quota failures, retries, and memory maintenance automatically. Saved memory remains usable when no background provider can run. The only memory choice is whether to enable Team sharing for a project; local and shared knowledge are then handled automatically.
 
 Pilot installs the same five Open Claude Design skills for both agents. For the real Claude Design service, `open-claude-design` supplies the cross-platform CLI bridge; `pilot design` remains a forwarding alias. Claude Code is not required for authentication: the first desktop use connects in a browser, while headless containers use `pilot design login --manual` in an interactive terminal. See [UI Design and Claude Design](../workflows/ui-design.md).
 
 ## Claude Code Only
 
 - **Status line** — real-time session metrics below every response
-- **Pilot Bot** — scheduled tasks and background automation
 - **Remote control** — connect from the Claude app / browser, plus channels (Telegram, Discord, iMessage)
 - **Language Server integration** — LSP-driven diagnostics, hover docs, and go-to-definition (Codex uses repository lint/type commands during verification rather than an edit-time file-checker hook)
 - **Model switching** — `/model` command to change models mid-session (Codex sets model via `codex --model` or `config.toml`)

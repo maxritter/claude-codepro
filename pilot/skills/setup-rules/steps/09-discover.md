@@ -12,14 +12,14 @@
    # Read representative files directly
    ```
 3. Prioritize by: frequency, uniqueness, mistake likelihood
-4. AskUserQuestion (multiSelect): which areas to document
-5. For each: ask clarifying questions, draft rule using search results and code examples, confirm before creating
+4. Select useful, non-obvious guidance within the requested scope; do not generate a rule for every observed pattern
+5. Draft from verified source and project contracts when updates are authorized. Ask only about a consequential ambiguity
 6. **Place in correct directory** based on scope:
    - Repo-wide → matching section in `AGENTS.md`
    - Path-specific, single-product repo → `.claude/rules/{slug}-{pattern-name}.md` with `paths` frontmatter
    - Product-specific → `.claude/rules/{product}/{slug}-{product}-{pattern-name}.md` with `paths` frontmatter
    - Team-specific → `.claude/rules/{product}/{team}/{slug}-{team}-{pattern-name}.md` (**must** have `paths` frontmatter)
-   - If nested directories exist (from Step 2), always ask which scope level the rule belongs to
+   - Follow established ownership and matching paths in nested directories; ask only if the intended scope is unresolved
    - Create product/team directories as needed (`mkdir -p`)
 
 Add every detailed file to the `AGENTS.md` matching-rule index. Use this rule format: Standard Name → When to Apply → The Pattern (code examples) → Why (if not obvious) → Common Mistakes → Good/Bad examples.

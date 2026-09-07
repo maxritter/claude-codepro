@@ -87,6 +87,35 @@ Pilot installs three browser tools automatically: **Chrome DevTools MCP**, **pla
 - **Claude Code:** also install the [Claude Code Chrome extension](https://code.claude.com/docs/en/chrome) for the richest browser context. Tier order: Chrome extension → Chrome DevTools MCP → playwright-cli → agent-browser.
 - **Codex CLI:** the Chrome extension is not available. Tier order: Chrome DevTools MCP → playwright-cli → agent-browser.
 
+## Claude Code display patch
+
+For supported native Claude Code installs, Pilot applies
+[patch-claude-code](https://github.com/a-connoisseur/patch-claude-code) from a
+checksum-verified source revision. It shows detailed tool calls, subagent prompts,
+and live thinking summaries without verbose mode. Pilot preserves the original
+branding and spinner tips; model and effort choices remain yours.
+
+After successful patching, Pilot turns verbose mode off once for the active
+Claude profile. Later changes through `/config` are preserved; future Pilot
+updates do not repeat the reset. Flicker-free rendering remains enabled by
+default through `CLAUDE_CODE_NO_FLICKER`.
+
+The installer patches a copy, verifies its version, and retains the original in
+`~/.pilot/claude-display-patch/` before replacing the executable. On macOS, the
+patched copy is ad-hoc signed. The binary is shared across Claude config profiles.
+Unsupported binaries or patch failures leave Claude unchanged. Claude's own
+updates can remove the patch; the next Pilot installation or update reapplies it
+when compatible. Claude updates are never disabled or pinned by this integration.
+If an upstream change breaks the required patch patterns, only the extra display
+features are unavailable until the patcher is updated; Claude remains usable.
+
+Pilot's uninstaller restores originals only while the installed binaries still
+match Pilot's patches. You can also restore them directly:
+
+```bash
+uv run --python 3.12 ~/.pilot/claude-display-patch/restore.py --restore
+```
+
 ## Codex Companion Plugin (Included)
 
 The [Codex companion plugin](https://github.com/openai/codex-plugin-cc) is installed automatically by the Pilot installer. It provides adversarial code review powered by OpenAI — an independent second opinion during Claude Code's `/spec` planning and verification.

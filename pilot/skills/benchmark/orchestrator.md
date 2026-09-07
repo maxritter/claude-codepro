@@ -33,10 +33,10 @@ CODEX-END -->
 Workflow-style skills like `/spec` are benchmarked as `type=skill` — present vs absent.
 
 <!-- CC-ONLY -->
-**Model selection:** Pilot-shipped skills (`spec-plan`, `fix`, `prd`, `create-skill`, `setup-rules`, …) don't carry a `model:` in their frontmatter — active model is controlled by Claude Code's `/model`. The runner defaults those benchmarks to `claude-sonnet-5`; pass `--model opus` (or `--model fable`) explicitly to run them on Opus or Fable instead. Bot-* skills still carry hard-coded `model: sonnet`.
+**Model selection:** Pilot-shipped skills (`spec-plan`, `fix`, `prd`, `create-skill`, `setup-rules`, …) don't carry a `model:` in their frontmatter — active model is controlled by Claude Code's `/model`. The runner defaults those benchmarks to `claude-sonnet-5`; pass `--model opus` (or `--model fable`) explicitly to run them on Opus or Fable instead.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-**Model selection:** When `--agent codex` is used and no `--model` is passed, the runner omits `--model` and lets Codex use its active default model. Pass an explicit Codex model with `--model` only when comparing models.
+**Model selection:** Pass the intended Codex model explicitly with `--model <model-id>`, including when benchmarking the current session's model. The runner isolates user configuration with `--ignore-user-config`, so omitting the flag selects Codex's built-in default, not necessarily this session's model or profile. Use that fallback only deliberately, and retain its `codex-default` label rather than attributing the run to an unverified model.
 CODEX-END -->
 
 ## Isolation guarantees
@@ -55,10 +55,10 @@ Follow these steps sequentially:
 
 1. **Intake** (`steps/01-intake.md`) — Detect what the user wants to benchmark. If an existing `benchmarks/<target>/evals.json` exists, skip to execute.
 2. **Target discovery** (`steps/02-target-discovery.md`) — Help the user pick a target and determine its type.
-3. **Author evals** (`steps/03-author-evals.md`) — Draft 3 falsifiable, discriminating assertions for the target. Get user sign-off before spending compute.
+3. **Author evals** (`steps/03-author-evals.md`) — Draft realistic, outcome-based assertions and validate the concrete run scope against existing authorization.
 4. **Execute** (`steps/04-execute.md`) — Run the runner, watch for failures, summarize results inline.
 5. **Present findings** (`steps/05-review-iterate.md`) — Parse benchmark.json + per-run grading.json, render a per-eval matrix with evidence quotes in chat.
-6. **Improvement plan** (`steps/06-improvement-plan.md`) — Classify each assertion into Signal / Baseline / Unreachable / Regression, propose concrete edits to the target or to evals.json, ask the user which path to take, apply & re-run.
+6. **Improvement plan** (`steps/06-improvement-plan.md`) — Interpret Signal / Baseline / Unreachable / Regression from evidence, propose or apply supported changes within the user's scope, and rerun when justified.
 
 ## Quick reference
 

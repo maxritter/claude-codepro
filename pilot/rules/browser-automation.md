@@ -8,147 +8,66 @@ paths:
 
 ## Browser Automation for E2E Testing
 
-**MANDATORY for E2E testing of any app with a UI.** API tests verify backend; browser automation verifies what the user sees.
+Use actual interaction and rendered-state evidence for claims about a UI. API responses, source inspection, typechecks, and a page that loads without errors establish narrower facts.
 
-### ⛔ Ask the project first — the ladder below is the fallback
+### Choose the driver for the actual interface
 
-**Before taking the 4-tier ladder, check whether the project already says which driver reaches ITS interface.** Grep `.claude/rules/`, `CLAUDE.md` and `AGENTS.md` for the tool it names, and use that.
+Read the project's documented verification path first. These rules apply to browser pages; mobile WebViews, native mobile/desktop windows, extensions, terminal UIs, and canvas surfaces may need a platform-specific driver. For mobile, see `mobile-development.md`.
 
-The ladder is written for a page in a desktop browser. These do not have one, and each has a different driver a project usually has already learned the hard way:
+Use the current runtime's supported browser interface or the project's existing test harness. Prefer a suitable already-connected session when it has the required access; use an isolated profile for tests that need their own state. Driver capabilities and availability determine the choice, not a fixed vendor order.
 
-| The UI actually is | The ladder reaches it |
-|---|---|
-| A mobile WebView (Capacitor, Cordova, React Native WebView) | No — needs the platform's own remote-debug bridge; see `mobile-development.md` |
-| A native mobile screen | No — see `mobile-development.md` |
-| A native desktop window (Electron main, Swift, GTK, WinUI) | No — needs the platform's UI-automation driver |
-| A terminal UI | No |
-| A canvas or game surface | Partly — pixels only, no a11y tree |
+| Need | Available options to consider |
+|------|-------------------------------|
+| Existing authenticated browser session | The runtime's browser/computer-use tool; Claude Code Chrome when exposed |
+| DevTools inspection, network/performance tracing | Chrome DevTools MCP or the project's CDP-capable harness |
+| Repeatable E2E with fixtures, network isolation, multiple pages | Existing Playwright/Cypress tests or `playwright-cli` |
+| A bounded click-and-inspect check | Runtime browser tools or `agent-browser` |
 
-A project that names a tool has measured something. Taking the generic ladder over it is how a verification pass turns into an afternoon of selectors that never land.
+Discover actual tool schemas or CLI `--help`. Do not assume a provider prefix, locator API, session flag, or capability is present in both Claude Code and Codex. If the driver fails, inspect the error and current UI state, then repair the concrete cause or use a suitable available alternative. Repeated selector failures warrant checking the target, frame/WebView, stale references, overlays, and documented driver; a fixed retry count does not prove the driver is wrong.
 
-### Tool Selection: 4-Tier Priority
+### Interaction evidence
 
-Applies when the project names nothing and the UI is a page in a browser. Pick the tool that gives the most accurate verification for the situation, not the fastest.
+Navigate to the affected state, inspect it, perform the action the change affects, and inspect the result. Verify the expected outcome and relevant error paths. A read-only visual change needs rendered comparison; it does not require an invented click or unrelated workflow.
 
-| Priority | Tool | Best For | Key Advantage |
-|----------|------|----------|---------------|
-| 1st | Claude Code Chrome (`mcp__claude-in-chrome__*`) | Quick E2E, visual check | Shares user's existing browser session, natural-language `find` |
-| 2nd | Chrome DevTools MCP (`mcp__plugin_chrome-devtools-mcp_chrome-devtools__*`) | DevTools-level debugging, perf audits | Direct CDP, Lighthouse, tracing — no extension needed |
-| 3rd | `playwright-cli` | Thorough E2E, complex flows | Most reliable targeting, persistent sessions, network mocking, tracing, multi-tab |
-| 4th | `agent-browser` | Lightweight checks | Concise output (200–400 tk/page), fast startup |
+Use fresh element references after navigation or dynamic changes. Prefer stable semantic locators where the driver supports them; use screenshot coordinates only when appropriate for that surface and refresh bounds after state changes. Wait for meaningful conditions with timeouts.
 
-### Override the Default
+If execution is blocked, follow `verification.md` to inspect the project's usable targets and report the actual limitation. Do not claim E2E passed or deploy to an unrelated target solely to obtain a green result.
 
-| Situation | Use |
-|-----------|-----|
-| Lighthouse / performance trace | Chrome DevTools MCP |
-| Network mocking, tracing, video | playwright-cli |
-| Multi-tab workflow | playwright-cli |
-| Persistent browser profile | playwright-cli (`--persistent`) |
-| Auth flow (Clerk, OAuth) | playwright-cli (most reliable) or agent-browser |
-| Already logged in, quick visual | Claude Code Chrome |
-| Simple click-and-verify | agent-browser |
+### Visual changes
 
-### Detection
+Apply this section only when layout, styling, content hierarchy, theming, or interaction affordances change. Logic-only changes do not authorize a redesign.
 
-1. **Claude Code Chrome:** `mcp__claude-in-chrome__*` in your tools list.
-2. **Chrome DevTools MCP:** `mcp__plugin_chrome-devtools-mcp_chrome-devtools__*` in your tools list.
-3. **playwright-cli / agent-browser:** `which playwright-cli` / `which agent-browser` (installed by Pilot Shell).
+- Read the existing tokens/components and compare the affected rendered state with the established product language.
+- Inspect representative narrow/wide viewports and each affected supported theme.
+- Exercise the states the change can affect: loading, empty, error, focus, disabled, or selected. Do not invent unsupported product states.
+- Verify accessibility requirements from `standards-frontend.md`; a screenshot alone cannot prove keyboard or assistive-technology behaviour.
 
-**Fallback chain:** Claude Code Chrome → Chrome DevTools MCP → playwright-cli → agent-browser.
+### Design-quality detector (advisory)
 
-### ⛔ E2E Hard Rules — read before claiming "verified"
-
-**1. Tier error → next tier in the chain. Period.**
-If tier N errors (e.g., Chrome DevTools MCP "no Chrome binary"), the ONLY allowed next step is tier N+1. Never substitute a non-browser tool. If tiers 1–4 all fail, STOP and tell the user — do not claim E2E.
-
-**Forbidden as E2E substitutes** (each only proves what's in parentheses, not user behavior):
-`web-fetch` / `fetch_url` / `curl` (SSR HTML ships) · reading source files (code exists) · API 200s (backend works) · typecheck / unit tests (code shape) · "no console errors on load" (page parsed).
-
-**2. E2E = interaction, not load.**
-For every user-facing path the change touches, you MUST: snapshot → **click the primary action** (button, link, form submit) → re-snapshot → confirm new state. No click + re-snapshot pair = not E2E.
-
-**3. Three failed interactions with the same driver → the driver is wrong, not the selector.**
-Distinct from rule 1, and the more expensive of the two. Rule 1 is a tool that will not START — loud, obvious, one step down the ladder. This is a tool that starts fine and half-works: it attaches, it screenshots, it answers every call, and every interaction fails with something that reads like a fixable typo (*element not found*, *matched the wrong node*, *the tap did nothing*). Nothing announces itself, and each retry is cheap, so the loop can run for an hour.
-
-So count them. After the third consecutive failure, stop and spend one call on the question you skipped: **does this project document a different driver?** Then take it. Do not try a fourth selector, a coordinate tap, or a longer timeout.
-
-Two symptoms that mean you are already in this loop:
-- You are converting selectors into coordinates because the selectors will not match.
-- A tool sent the app somewhere you did not ask for — the home screen, a native dialog, a different route — and you are working around it rather than reading why.
-
-**4. Self-check before saying "verified" / "works" / "done":**
-- [ ] Used the driver the project names, or a tier 1–4 tool when it names none (say which)?
-- [ ] Actually clicked the thing the change affects?
-- [ ] Re-snapshotted and saw the expected new state?
-
-Any "no" → not verified. Say so explicitly; do not claim done.
-
-### Visual Change Verification
-
-Use this additional pass only when the request changes user-visible layout, styling, content hierarchy, theming, or interaction affordances. A logic-only edit in a UI file does not authorize a redesign.
-
-1. Read the existing tokens/components and capture the affected state before changing it.
-2. Exercise the primary interaction, then inspect the resulting state at representative narrow and wide viewports.
-3. Check every supported theme and the relevant loading, empty, error, focus, disabled, and selected states. Do not invent states the product cannot enter.
-4. Re-snapshot after interaction and compare against the product's established visual language, not a generic aesthetic.
-5. Run the advisory detector below only after the actual interaction and visual checks pass.
-
-### Design-Quality Detector (best-effort, advisory)
-
-Impeccable owns deterministic design-pattern detection. When its installed edit/stop hook already reported on the changed files in this session, reuse those findings rather than running the detector a second time. Run the bounded fallback below only when no current hook evidence exists or when rechecking a specific fixed finding. The **findings** are advisory and non-blocking — suggestions, never a verification failure or a reason to withhold "done".
-
-**Fallback/recheck contract (`impeccable detect` is a linter):**
+Impeccable owns deterministic design-pattern detection. Reuse its current edit/stop hook findings for the changed files. Use the fallback only when no applicable hook evidence exists or when rechecking a fixed finding. Findings are suggestions, not a verification failure or a reason to withhold completion.
 
 ```bash
-which impeccable >/dev/null 2>&1 || echo "impeccable not installed — skip design check"
-impeccable detect --json <explicit-changed-ui-files-or-rendered-output> || true
+impeccable detect --json <explicit-changed-ui-files-or-rendered-output>
 ```
 
-- **Decide from the JSON, not the exit code.** `impeccable detect` exits `0` when clean and `2` when it finds something — both mean it ran successfully; parse stdout JSON for findings. Treat only a missing binary, a non-0/non-2 exit, or unparseable output as "could not run" → record a one-line skip note and move on.
-- **Bound the target.** Pass only the explicit changed UI files, or one narrowly-scoped built-output directory. Never point it at the repo root or cwd (directory mode walks every file and builds an import graph — it can hang). Run it under a timeout; on timeout or oversize, record a skip note rather than waiting.
-- **Scan rendered output, not a client-rendered SPA's static shell.** A Vite/React/SPA `index.html` is a near-empty shell — scanning it undercounts badly. For SSG/SSR builds (Docusaurus, Astro, Next static) scan the built HTML directly; for an SPA, scan the rendered DOM you already have from the E2E browser (save the live page's HTML, then `impeccable detect` that file), or record a skip note.
-- **Vendored noise:** findings on third-party UI primitives (e.g. a `components/ui/**` shadcn tree) are expected. A project that wants them suppressed can add a `.impeccable/config.json` `detector.ignoreFiles` entry; do not create that config automatically.
+- Check that the binary is available first. Exit `0` means clean and `2` means findings; inspect the JSON. A missing binary, other failure, invalid JSON, or timeout gets a brief skip note when material.
+- Bound the target to explicit changed UI files or a narrowly scoped rendered-output directory. Never scan the repository root by default; use a timeout.
+- An SPA's static `index.html` is usually an empty shell. Inspect its changed source or rendered DOM obtained through the supported browser interface; for SSG/SSR, the built HTML can be the relevant artifact. Do not invent a browser API or bypass the tool's access restrictions to extract it.
+- Treat vendored-component findings in context. Do not create ignore configuration automatically.
 
-### Common Workflow Shape (all tools)
+### Session isolation
 
-1. Get current state (tab/page/snapshot)
-2. Navigate to target URL
-3. Snapshot / read elements (gives you refs)
-4. Interact (click / fill / press)
-5. Re-snapshot to verify
+Keep parallel work in separately owned tabs/pages or profiles. Record the session/page identifiers in working state and close only resources this task created. A parent session id may be shared by subagents, so distinct workers need distinct tab/profile ownership.
 
-### Session Isolation — MANDATORY in /spec or any parallel workflow
+For CLI tools, inspect the installed session option (`agent-browser --session` or `playwright-cli -s`) and choose a task-specific identifier. Do not reuse or overwrite a user's browser profile merely to isolate a test.
 
-Without session isolation, parallel agents share one browser instance and clobber each other.
-
-```bash
-# agent-browser
-agent-browser --session "${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}" <command>
-
-# playwright-cli
-playwright-cli -s="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}" <command>
-```
-
-Chrome MCP and Chrome DevTools MCP target tabs/pages directly — no session ID needed.
-
-### Tool-Specific Notes
+### Tool-specific notes
 
 <!-- CC-ONLY -->
-- **Claude Code Chrome:** load tools via `ToolSearch(query="select:mcp__claude-in-chrome__<tool>")` first. Avoid triggering `alert/confirm/prompt` — they block the extension. Use `javascript_tool` + `console.log` for debugging.
-- **Chrome DevTools MCP:** load via `ToolSearch(query="chrome-devtools-mcp", max_results=30)`. Snapshots use `uid=` refs that go stale after navigation — re-snapshot. Unique: `lighthouse_audit`, `performance_start_trace`, `evaluate_script`, `emulate`, network/console listing.
+- Claude Code Chrome tools load through the exposed discovery mechanism. Blocking native `alert`/`confirm`/`prompt` dialogs may interrupt extension control; handle them through a supported dialog tool.
+- Chrome DevTools snapshots use element references that become stale after navigation. Rediscover the current state before acting.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-- **Claude Code Chrome:** Not available in Codex — skip to playwright-cli or agent-browser.
-- **Chrome DevTools MCP:** If configured as an MCP server in Codex, use `mcp__plugin_chrome-devtools-mcp_chrome-devtools__*` tools directly. Snapshots use `uid=` refs that go stale after navigation — re-snapshot. Unique: `lighthouse_audit`, `performance_start_trace`, `evaluate_script`, `emulate`, network/console listing.
+Use the browser/computer-use tools exposed by the current Codex session when suitable. Chrome DevTools MCP, playwright-cli, or agent-browser are alternatives when available; do not assume Claude Code's browser extension is available.
 CODEX-END -->
-- **agent-browser:** uses `@e1`/`@e2` refs from `snapshot -i`. Refs invalidate after navigation/forms/dynamic loads — re-snapshot. Full command reference: see `agent-browser --help` or the `agent-browser` skill.
-- **playwright-cli:** refs are bare numbers (`e1`, not `@e1`). Snapshots saved to files. Unique: `--persistent` profiles, `route` for mocking, `tracing-start/stop`, `video-start/stop`, cookie/localStorage management, `run-code` for raw Playwright. Full reference: `/playwright-cli` skill.
-
-### E2E Checklist
-
-- [ ] User can complete the main workflow
-- [ ] Forms validate and show errors correctly
-- [ ] Success states display after operations
-- [ ] Navigation works between pages
-- [ ] Error states render properly
+- `agent-browser` and `playwright-cli` use different reference and session syntax. Read the installed help or loaded skill, then use that tool's current references.

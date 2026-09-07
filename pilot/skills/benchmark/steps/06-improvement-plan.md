@@ -1,140 +1,27 @@
-# Step 6 — Improvement plan
+# Step 6 — Decide What the Evidence Supports
 
-Step 5 reported what happened. Step 6 turns the quadrant breakdown into **specific edits the user can act on** — and asks which path to take. Never skip this step.
+Use Step 5's artifacts and paired outcomes to identify useful next steps. A valid benchmark can conclude that no change is needed or that an old instruction should be removed.
 
-## Inputs from Step 5
+## Diagnose before editing
 
-You already have:
+- **Signal:** identify the behavior improved, the cases supporting it, and any added time or complexity. Preserve useful guidance; do not infer universal benefit.
+- **Baseline:** both models/configurations already succeeded. Keep valid controls. Consider simplifying or removing redundant guidance and testing the candidate on unchanged cases; do not harden assertions merely to force a positive delta.
+- **Unreachable:** inspect failures, fixtures, actual tool access, and grader evidence. Both failing can mean a hard task, bad setup, or invalid assertion; it does not automatically call for stronger instructions.
+- **Regression:** locate the misleading guidance or changed execution condition. Reproduce the important failure before expanding the change.
+- **Incomplete or noisy:** recover missing artifacts or add proportionate repetitions only when that could resolve the decision.
 
-- `delta.pass_rate` and the verdict label (Strong / Moderate / Weak / Indistinguishable / Regression)
-- Quadrant counts: `signal`, `baseline`, `unreachable`, `regression`
-- Divergent assertions per eval, with evidence
-- Grader critiques (if any)
+An eval correction requires a task-grounded reason independent of the desired winner. Preserve the old result and identify the new eval version; comparisons across changed assertions do not isolate the target's effect.
 
-Don't recompute these. Reuse them.
+## Propose or apply
 
-## Action priority — driven by the quadrant shape
+For each justified edit, name the target path or assertion id, the evidence, the proposed replacement/removal, and the behavior it should improve.
 
-The quadrant distribution tells you which lever to pull first:
+If the user authorized improvement and reruns, apply supported changes and continue without another routine approval question. If they requested measurement only, deliver findings and concrete recommendations. Ask only when the next action introduces unapproved scope, cost, or side effects.
 
-| Dominant quadrant | First action | Why |
-|---|---|---|
-| **Signal** (≥60% of assertions) | **Ship.** Optionally expand coverage with sibling assertions or new evals. | The rule is doing its job; further tweaks risk breaking what works. |
-| **Baseline** (≥40%) | **Fix the evals first.** Don't touch the rule until assertions discriminate. | A baseline-heavy run measures nothing — any rule edit's effect is unobservable. |
-| **Unreachable** (≥40%) | **Fix the rule first.** Sharpen its cues, promote them earlier, upgrade soft language. | The rule isn't landing. Eval edits won't help when the rule never fires. |
-| **Any Regression** | **Investigate the regression FIRST**, before any other edits. | A regressing assertion blocks shipping. Even one Regression must be addressed. |
-| **Mixed** (no quadrant dominates) | **Per-assertion proposals**, ranked by expected delta. | Pick the highest-leverage 3–5 edits across both target and evals. |
+Do not generate a proposal for every passing baseline assertion or require changes merely because a benchmark finished.
 
-## Translate non-Signal assertions into concrete edits
+## Re-run and finish
 
-For every assertion NOT in the Signal quadrant, generate one specific proposal. Mechanical and observable — no platitudes.
+Keep the eval set, model, tools, and fixtures constant when measuring a target revision. Save outputs in a fresh run directory. Re-run affected cases during iteration, then the relevant full comparison before making a broad claim.
 
-### Target (rule/skill) edits — for Unreachable or Regression
-
-Read the relevant section of the rule/skill file (`target.path`). Diagnose WHY it didn't land and pick one:
-
-| Symptom | Edit pattern | Example |
-|---|---|---|
-| Rule is buried late in the file | Move the cue earlier, ideally into a numbered list in the first 40 lines | Promote "use `@pytest.mark.unit`" from prose to a checklist item |
-| Rule uses soft language ("consider", "prefer") | Make it specific and rationale-backed — name the exact action and why it matters. Reserve `⛔`/`MUST` for genuine safety/correctness gates; on current Claude models blanket emphasis overtriggers, so specificity beats volume | `Consider adding @pytest.mark.unit` → `Decorate every unit test with @pytest.mark.unit so the unit/integration split stays runnable` |
-| Rule states the what but not the how | Add a code example showing the exact form | Add `@pytest.mark.unit\ndef test_...` block |
-| Rule has competing guidance | Deduplicate or order by priority | Collapse two overlapping mocking sections |
-| Rule teaches the wrong thing (Regression) | Pinpoint the misleading phrase and rewrite, or remove it | Rewrite "mock at the global module" → "mock at the import site" |
-
-### Eval edits — for Baseline assertions and grader critiques
-
-Pull from grader feedback AND your own analysis:
-
-| Symptom | Edit pattern | Example |
-|---|---|---|
-| Both configs pass a shape check | Replace with a content/behavior check | "has a test" → "≥3 tests match `test_<fn>_<scenario>_<outcome>`" |
-| Assertion passes on a trivial stub | Add a correctness assertion | Add "raises ValueError for inputs with fewer than 7 digits" |
-| Grader said "trivially satisfied" | Adopt the grader's tighter form verbatim | Paste grader suggestion into `expectations` |
-| Important behavior has no assertion | Add a new assertion covering it | Add mock-audit assertion |
-
-## Proposal format — uniform, scannable
-
-Every proposal cites a location, current text, replacement, and which quadrant it addresses. Keep each block ≤ 5 lines.
-
-```
-[TARGET]   path/to/rule.md  L42–L44
-  Quadrant: Unreachable (eval-1 #3 — hypothesis PBT)
-  Current:  "Property-based testing is encouraged for complex inputs."
-  Propose:  "Property-based test required for parsers and serializers — use `hypothesis.@given`."
-  Lever:    Soft language → specific, scoped requirement; names the exact tool.
-
-[EVALS]    eval-2 assertion #3
-  Quadrant: Baseline (grader: "would pass for partially-mocked test")
-  Current:  "pytest run completes in <1s wall time"
-  Propose:  "subprocess.run mock asserts `called_once_with(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])`"
-  Lever:    Loose timing check → exact call signature.
-```
-
-## Sanity-check the plan
-
-Before presenting:
-
-- **≤ 5 proposals total.** Rank by expected delta and drop the long tail. Focused next iteration > scattered one.
-- **Every proposal names a file path or assertion id.** No abstract suggestions.
-- **Mix reflects the quadrant distribution.** Baseline-heavy → mostly eval edits. Unreachable-heavy → mostly target edits.
-- **Regressions surface at the top of the plan**, not buried in a list.
-
-## Present the plan
-
-Render in this exact order so the user always finds the same shape:
-
-```
-### Improvement plan
-
-  Recommendation:  <single sentence — what to do first based on the dominant quadrant>
-
-  Proposals (ranked by expected delta):
-
-  1. [TARGET]  path/to/rule.md  L42–L44
-       Quadrant: Unreachable (eval-1 #3)
-       Current:  "..."
-       Propose:  "..."
-       Lever:    ...
-
-  2. [EVALS]   eval-2 assertion #3
-       ...
-
-  Pre-shipping blocker (if any):
-       <regression detail or "none">
-```
-
-Cap the body at ~25 lines so the user reads it in 60 seconds.
-
-## Required user question
-
-<!-- CC-ONLY -->
-After presenting, you MUST ask which path to take. Do not silently apply edits. Use `AskUserQuestion` when the answer is genuinely uncertain; a plain question is fine when the recommendation is clear.
-<!-- /CC-ONLY -->
-<!-- CODEX-START
-After presenting, you MUST ask which path to take. Do not silently apply edits. Present numbered options in plain text and wait for the user's response.
-CODEX-END -->
-
-Options:
-
-1. **Apply target edits and re-run** — modify the rule/skill, re-execute the existing evals to measure the lift cleanly.
-2. **Apply eval edits and re-run** — modify `evals.json` (run `--configs without` first to confirm the new assertions actually fail baseline), then run both configs.
-3. **Both** — only when at least one strong proposal exists in each bucket. Otherwise the lift becomes ambiguous (was it the rule change or the new assertion?).
-4. **Stop** — write the plan to `benchmarks/<target>/runs/<ts>/improvement-plan.md` for later.
-
-Phrasing:
-
-> "Which would you like to do next — (1) apply target edits, (2) iterate on evals, (3) both, or (4) save the plan and stop?"
-
-## Apply & re-run
-
-- **Target edits:** `Edit` the rule/skill file. Re-run with the **same** `evals.json` so the delta is attributable to the target change. New outputs go to a fresh `runs/<ts>/`.
-- **Eval edits:** `Edit` `benchmarks/<target>/evals.json`. For new/tightened assertions, run `--configs without --runs 1` first to confirm baseline still fails (the falsifiability gate from Step 3). Only then run the full pass.
-- **Both:** apply edits, then run both configs. Note in the follow-up which lever changed so iteration-over-iteration attribution stays clean.
-
-After re-running, return to Step 5 to present the new numbers. Compare against the prior `benchmark.json` in the headline so iteration lift is visible.
-
-## Exit
-
-- User picked 1/2/3 → edits applied, re-run launched, loop back to Step 5 when complete.
-- User picked 4 → write `improvement-plan.md` into the run directory, stop.
-- Quadrant is mostly Signal and user is happy → commit snapshot, update `benchmarks/README.md`, stop.
+Report the outcome with evidence and limitations. Save the comparison artifacts for review; commit, push, publish, or release only with corresponding authorization.

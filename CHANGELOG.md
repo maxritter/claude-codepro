@@ -2,6 +2,53 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [11.0.0] - 2026-09-07
+
+Pilot Shell 11 updates the engineering harness for current Claude Code and Codex, adds automatic memory across both agents, and retires Pilot Bot. This is a major release: review the changes below before upgrading.
+
+### Breaking changes and migration
+
+- **Pilot Bot is retired.** The `pilot bot` command, background bot runtime, channel tasks, scheduler integration, and five bot skills have been removed. Existing private bot data and `JOBS.yaml` files are preserved, but Pilot no longer runs those jobs. Move any jobs you still need to another scheduler before upgrading.
+- **Memory retrieval is on demand.** Pilot no longer injects a history digest at every session start or refreshes generated `CLAUDE.md` memory sections. Native agent context remains available; agents query Pilot when they need additional project history. Custom integrations that depended on automatic digest injection should use the memory MCP search and retrieval tools.
+- **Manual model switching is the default.** New or unset configurations keep model choice with the user. Existing explicit Automated and Off settings retain their meaning, including migration from the older boolean setting.
+
+### Automatic memory across Claude Code and Codex
+
+- Capture useful decisions, discoveries, and fixes in the background with either provider. Automatic selection uses available low-cost models and can fall back when authentication, quota, or temporary provider failures prevent capture.
+- Preserve pending evidence through retries, cancellation, worker restarts, and invalid responses. Observations and queue acknowledgements commit together, with bounded queues and explicit capture status.
+- Accept valid multi-observation responses containing separate XML fences and skip markers, fixing batches that previously remained deferred. Malformed or incomplete responses still leave their evidence pending.
+- Search local history and shared knowledge together without requiring a model call or a working vector service. Lexical matches, semantic matches, filters, and pagination share one result path.
+- Hide proven local/shared duplicates in lists and search while keeping both historical IDs directly readable.
+- Keep automatic shared findings in `.pilot/memories/<author>/<YYYY-MM-DD>.jsonl`. Recover unchanged generated Markdown copies into those daily archives before removing the copies; preserve edited knowledge and conflicting records.
+- Support explicitly maintained Markdown knowledge with source references, revision conflict protection, validation, and local indexing. Backups include personal knowledge, checkout mappings, and pending capture evidence alongside history.
+- Keep Team sharing as a single project switch. Shared files travel through the Git work users authorize; local memory remains usable when sharing or provider access is unavailable.
+- Filter routine memory-tool feedback out of automatic capture, and show local and shared findings with their sources in the Console.
+
+### Workflows, rules, and reviews
+
+- Review and update the rules, skills, and reviewer instructions for GPT-6 Astra, Claude Opus 5, and Claude Fable 5.1. Instructions follow the actual runtime's tools, permissions, and model capabilities.
+- Execute clear requests directly, preserve native Plan and Goal choices, and use structured questions and review results where the runtime supports them.
+- Connect explicit Pilot planning to Claude's native plan approval lifecycle. Capture the accepted draft after approval, preserve native permission boundaries, and handle the current Claude response format.
+- Carry lane identity and durable review handles through phase handoffs and resumed work. Revalidate changed plans and preserve independent review results across calls.
+- Use existing behavioral coverage and proportionate verification; remove arbitrary context limits, repetitive instructions, and unsupported tool assumptions.
+
+### Hooks and tool output
+
+- Keep diagnostic and routing advice private and nonblocking, with repeated reminders limited per session.
+- Prefer Claude's native file-reading tools for inspection and returned background task handles for output collection.
+- Preserve Claude's permission decision when RTK rewrites a command. Codex uses its own supported rewrite contract.
+- Bound checker subprocesses, run Go diagnostics at package scope, recognize existing integration coverage, and preserve intentional Unicode in source and content.
+- Show the reported reasoning effort beside the model in the statusline; omit unknown values.
+
+### Installation and upgrades
+
+- Preserve user-owned Codex rules and configuration while refreshing managed assets. Remove retired managed bot assets without deleting unrelated local skills.
+- Apply a checksum-verified display patch to supported native Claude Code installations for detailed tool calls, subagent prompts, and thinking summaries. Patch a copy first, retain the original, and leave unsupported binaries unchanged. Patched macOS binaries are ad-hoc signed; the documented restorer can restore an unchanged Pilot-patched binary.
+- Reset verbose display once after successful patching, while preserving later user changes and Claude's own updater.
+- Keep local `.pilot/` state and private working documents out of the public Pilot Shell repository.
+
+Run `pilot update` to upgrade, then start a fresh Claude Code or Codex session to load the refreshed hooks and instructions. Claude Code and Codex themselves continue to update through their own installers.
+
 ## [9.17.0] - 2026-08-06
 
 ### Features

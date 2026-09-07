@@ -1,7 +1,7 @@
 ---
 sidebar_position: 7
 title: Status Line
-description: Real-time session dashboard rendered below every Claude Code response — token usage, cost, model, branch, and active Pilot workflow progress at a glance.
+description: Real-time session dashboard rendered below every Claude Code response — token usage, cost, model, reasoning effort, branch, and active Pilot workflow progress at a glance.
 ---
 
 # Status Line
@@ -15,14 +15,14 @@ Compact session dashboard rendered below every Claude Code response. Idle sessio
 **Idle session:**
 
 ```
-Opus 5 [1M] | █████░▓ 60% | 5h: 42% ⇡ 2h | 7d: 18% ⇣ 4d | +120 -38 | main ~5
+Opus 5 [high] [1M] | █████░▓ 60% | 5h: 42% ⇡ 2h | 7d: 18% ⇣ 4d | +120 -38 | main ~5
 Pilot 8.4.0 (Solo) · CC 2.1.80 (Max) · Console: localhost:41777
 ```
 
 **Active Pilot workflow:**
 
 ```
-Opus 5 [1M] | █████░▓ 60% | 5h: 42% ⇡ 2h | 7d: 18% ⇣ 4d | +120 -38 | main ~5
+Opus 5 [high] [1M] | █████░▓ 60% | 5h: 42% ⇡ 2h | 7d: 18% ⇣ 4d | +120 -38 | main ~5
 Spec: my-feature feature [implement] ████░░░░ 3/6
 Pilot 8.4.0 (Solo) · CC 2.1.80 (Max) · Console: localhost:41777
 ```
@@ -31,13 +31,15 @@ Pilot 8.4.0 (Solo) · CC 2.1.80 (Max) · Console: localhost:41777
 
 | Widget | What it shows |
 |--------|---------------|
-| **Model** | Active model (`Opus 5 [1M]`, `Sonnet 5`) |
-| **Context** | Usage bar + percentage. Green < 80%, Yellow 80–95%, Red 95%+ |
+| **Model** | Active model with reasoning effort immediately after its name (`Opus 5 [high] [1M]`, `Fable 5.1 [xhigh]`) |
+| **Context** | Runtime context usage bar + percentage. Green < 75%, Yellow 75–90%, Red 90%+ |
 | **5h / 7d usage** | Rate-limit percentage with pacing arrow and reset countdown. Shown on Pro/Max subscriptions. ⇡ = over pace (red), ⇣ = under pace (green) |
 | **Lines** | `+added -removed` for the session. |
 | **Directory** | Working directory, shown only when the branch alone can't place you — see below. |
 | **Git** | Branch with staged/unstaged file counts, resolved from the same directory shown beside it. |
 | **Cost** | Session cost in USD. Shown on API/Enterprise only — suppressed on subscription plans. |
+
+The effort label uses Claude Code's live [`effort.level`](https://code.claude.com/docs/en/statusline#available-data) value, including mid-session `/effort` changes. When Claude Code omits that field, no effort label is shown.
 
 ### When the directory appears
 
@@ -53,7 +55,7 @@ The directory would be noise for the common case — one checkout, sitting at it
 This is what makes a worktree readable at a glance. `claude -w` and similar tools name the directory independently of the branch you later switch to, so the two drift apart:
 
 ```
-Opus 5 [1M] | █████░▓ 60% | +120 -38 | ~/…/angry-purple-tiger | feat/pr-prep
+Opus 5 [high] [1M] | █████░▓ 60% | +120 -38 | ~/…/angry-purple-tiger | feat/pr-prep
 ```
 
 Now you can see the branch you're preparing a PR for *and* the directory to `cd` into, without running `!pwd`.
@@ -61,7 +63,7 @@ Now you can see the branch you're preparing a PR for *and* the directory to `cd`
 The path is shortened from the left, keeping the trailing components (`~/…/angry-purple-tiger`), because the last part is what identifies the checkout. A Pilot-managed `/spec` worktree adds its own `wt` marker after the branch:
 
 ```
-Opus 5 [1M] | █████░▓ 60% | +120 -38 | ~/…/.worktrees/my-feature | spec/my-feature wt
+Opus 5 [high] [1M] | █████░▓ 60% | +120 -38 | ~/…/.worktrees/my-feature | spec/my-feature wt
 ```
 
 ## Active workflow line — when present
@@ -76,7 +78,7 @@ A [`/build`](/docs/workflows/build) Buildout renders the same way, counting the 
 
 During the **plan** phase (before tasks exist) the detail slot reads `models: auto` / `manual` / `off`, reflecting the Model Switching mode selected in your Console settings.
 
-In `auto` mode it turns red and reads `models: auto ⚠ not-opus` (just `⚠` on a narrow line) when planning is running on something other than Opus. `opusplan` only upgrades the plan leg to Opus while the conversation fits Opus's effective 200K window — past it, Claude Code silently keeps serving Sonnet ([claude-code#65512](https://github.com/anthropics/claude-code/issues/65512), [#74325](https://github.com/anthropics/claude-code/issues/74325)). `/compact` or `/clear` before planning restores Opus; switching Model Switching to **Manual** lets you pick the planning model yourself.
+In `auto` mode it turns red and reads `models: auto ⚠ not-opus` (just `⚠` on a narrow line) when runtime evidence shows planning on something other than Opus. The warning identifies the observed mismatch, not its cause. Check `/model` and `/usage`, or select **Manual** to manage the model yourself. Pilot does not assume a universal 200K planning limit or force compaction to restore Opus.
 
 ## Final line — Version Info
 
@@ -128,7 +130,7 @@ model=$(field '["model"]["display_name"]')
 dir=$(field '["workspace"]["current_dir"]')
 ```
 
-Fields Pilot itself reads, and therefore the ones you can rely on: `workspace.current_dir`, `model.display_name`, `model.id`, `session_id`, `version`, `cost.*` (`total_cost_usd`, `total_lines_added`, `total_lines_removed`), `context_window.*` (`used_percentage`, `context_window_size`, `total_input_tokens`), and `rate_limits.*` on Pro/Max plans.
+Fields Pilot itself reads, and therefore the ones you can rely on: `workspace.current_dir`, `model.display_name`, `model.id`, `effort.level` when reported, `session_id`, `version`, `cost.*` (`total_cost_usd`, `total_lines_added`, `total_lines_removed`), `context_window.*` (`used_percentage`, `context_window_size`, `total_input_tokens`), and `rate_limits.*` on Pro/Max plans.
 
 ### Does a wrapper survive `pilot update`?
 

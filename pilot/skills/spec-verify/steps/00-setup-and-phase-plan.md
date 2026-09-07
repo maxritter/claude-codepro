@@ -54,7 +54,7 @@ CODEX-END -->
 
 | Profile | Criteria | Phase B Scope |
 |---------|----------|---------------|
-| **Minimal** | No server, no UI, no built artifacts (libraries, CLI tools, hooks, scripts) | Build check only |
+| **Minimal** | No server or UI (libraries, CLI tools, hooks, scripts, prose/config) | Applicable build + changed entry-point execution or artifact validation + DoD audit; no browser/service setup |
 | **API** | Server/API but no frontend changes | Build + program execution + DoD audit. Skip E2E. |
 | **Full** | Frontend/UI changes or complex deployment | All Phase B steps |
 

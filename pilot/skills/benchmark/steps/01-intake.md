@@ -23,14 +23,13 @@ Read the existing `benchmarks/<target>/evals.json` and summarize it back to the 
 - Number of evals and their prompts (one-liner each)
 - Whether there are prior runs committed under `runs/`
 
-Confirm they want to re-run against the same config, then advance to Step 4.
+If the user requested a rerun of this target, proceed with that config. Ask only if its scope, cost, or side effects differ materially from the request.
 
 ## When target is ambiguous
 
-If the user says something like "benchmark all my rules" or "test everything", push back:
+For a request covering several targets, inventory all of them and preserve that scope. Run per-target comparisons in useful batches; do not redefine "all" as one target. Calibrate a representative eval first when it helps avoid wasting the later runs, then continue through the requested set.
 
-- Benchmarks run per-target. Running 15 rules sequentially is ~30 min of compute.
-- Start with ONE target — prove the eval set is falsifiable (baseline fails the assertions) — then copy the evals.json as a template for the next target.
+
 
 ## Exits
 
