@@ -1705,3 +1705,4 @@ Run `pilot update` to upgrade, then start a fresh Claude Code or Codex session t
 - Add multi-pass verification with spec-verifier agent
 - Add sx tool and update rules paths
 - Improve worker cleanup and installer reliability
+

@@ -86,7 +86,7 @@ Installs globally on macOS, Linux, and Windows (WSL2). After installation, run `
 If you encounter an issue or unfixed bug in the latest version, you can always go back to a previous version (see [releases](https://github.com/maxritter/pilot-shell/releases)):
 
 ```bash
-export VERSION=10.12.3
+export VERSION=11.0.0
 curl -fsSL https://raw.githubusercontent.com/maxritter/pilot-shell/main/install.sh | bash
 ```
 </details>
