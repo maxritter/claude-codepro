@@ -334,9 +334,8 @@ jobs:
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
-            python:3.12-slim-bullseye \
+            python:3.12-bullseye \
             bash -c "
-              apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o Acquire::ForceIPv4=true update && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o Acquire::ForceIPv4=true install -y binutils build-essential && \
               pip install . && \
               python -m launcher.build --release --version ${{ steps.version.outputs.VERSION }} && \
               ls -la launcher/dist/
