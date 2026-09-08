@@ -1,6 +1,6 @@
 {
   "name": "pilot-console",
-  "version": "11.0.0",
+  "version": "11.0.1",
   "description": "Memory system for Pilot Shell - persistent context and observations",
   "type": "module",
   "private": true,
