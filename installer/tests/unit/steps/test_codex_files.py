@@ -19,6 +19,7 @@ from installer.steps.codex_files import (
     _TomlStructureError,
     _adapt_invocation_syntax,
     _codex_supports_context_management,
+    _codex_supports_update_plan_config,
     _ensure_section_keys,
     _validate_toml_structure,
     build_codex_review_agent_toml,
@@ -55,6 +56,10 @@ def _disable_live_codex_version_probe(monkeypatch: pytest.MonkeyPatch) -> None:
         "installer.steps.codex_files._codex_supports_context_management",
         lambda: True,
     )
+    monkeypatch.setattr(
+        "installer.steps.codex_files._codex_supports_update_plan_config",
+        lambda: True,
+    )
 
 
 class TestCodexFilesStepCheck:
@@ -81,6 +86,25 @@ class TestCodexContextManagementCompatibility:
     def test_fails_closed_when_version_cannot_be_detected(self) -> None:
         with patch("installer.steps.codex_files.subprocess.run", side_effect=OSError("missing")):
             assert _codex_supports_context_management() is False
+
+
+class TestCodexUpdatePlanCompatibility:
+    @pytest.mark.parametrize(
+        ("version", "supported"),
+        [
+            ("codex-cli 0.151.0", False),
+            ("codex-cli 0.152.0", True),
+            ("codex-cli 1.0.0", True),
+        ],
+    )
+    def test_detects_opt_in_config_support(self, version: str, supported: bool) -> None:
+        result = subprocess.CompletedProcess(["codex", "--version"], 0, stdout=version, stderr="")
+        with patch("installer.steps.codex_files.subprocess.run", return_value=result):
+            assert _codex_supports_update_plan_config() is supported
+
+    def test_fails_closed_when_version_cannot_be_detected(self) -> None:
+        with patch("installer.steps.codex_files.subprocess.run", side_effect=OSError("missing")):
+            assert _codex_supports_update_plan_config() is False
 
 
 class TestCodexFilesStepSkipsWhenNoCodex:
@@ -362,6 +386,24 @@ class TestCodexHooksInstallation:
         all_commands = [hook["command"] for entry in data["hooks"]["PostToolUse"] for hook in entry.get("hooks", [])]
         assert any("my-custom-hook.sh" in cmd for cmd in all_commands)
         assert any("observation" in cmd for cmd in all_commands)
+
+    def test_upgrade_removes_pilot_hooks_from_mixed_entries_without_losing_user_hook(self, tmp_path: Path) -> None:
+        codex_dir = tmp_path / ".codex"
+        codex_dir.mkdir(parents=True)
+        pilot_hook = {"type": "command", "command": "$HOME/.pilot/hooks/session_end.py", "timeout": 3}
+        incoming = {"hooks": {"SessionEnd": [{"hooks": [pilot_hook]}]}}
+        (codex_dir / ".pilot-hooks-baseline.json").write_text(json.dumps(incoming["hooks"]))
+        (codex_dir / "hooks.json").write_text(json.dumps({"hooks": {"SessionEnd": [
+            {"hooks": [pilot_hook, {"type": "command", "command": "my-session-end.sh"}]},
+            {"hooks": [pilot_hook]},
+        ]}}))
+
+        CodexFilesStep()._merge_codex_hooks(codex_dir, incoming)
+
+        hooks = json.loads((codex_dir / "hooks.json").read_text())["hooks"]["SessionEnd"]
+        commands = [hook["command"] for entry in hooks for hook in entry["hooks"]]
+        assert commands.count("$HOME/.pilot/hooks/session_end.py") == 1
+        assert commands.count("my-session-end.sh") == 1
 
     def test_merge_preserves_invalid_existing_hooks_file(self, tmp_path: Path) -> None:
         codex_dir = tmp_path / ".codex"
@@ -2561,9 +2603,47 @@ class TestCodexModelDefaults:
             "hooks": True,
             "context_management": {"experimental_mode": True},
         }
+        assert parsed["tools"]["update_plan"]["enabled"] is True
         assert "sandbox_workspace_write" not in parsed
         assert "notice" not in parsed
         _validate_toml_structure(result)
+
+    def test_preserves_explicit_update_plan_opt_out(self, tmp_path: Path) -> None:
+        codex_dir = tmp_path / ".codex"
+        codex_dir.mkdir(parents=True)
+        config = codex_dir / "config.toml"
+        config.write_text("[tools.update_plan]\nenabled = false\n")
+
+        step = CodexFilesStep()
+        ctx = MagicMock(ui=None)
+        with (
+            patch("installer.steps.codex_files._get_codex_config_dir", return_value=codex_dir),
+            patch("installer.steps.codex_files.Path.home", return_value=tmp_path),
+        ):
+            step._install_codex_config(ctx)
+
+        parsed = tomllib.loads(config.read_text())
+        assert parsed["tools"]["update_plan"]["enabled"] is False
+
+    def test_legacy_codex_does_not_receive_update_plan_config(self, tmp_path: Path) -> None:
+        codex_dir = tmp_path / ".codex"
+        codex_dir.mkdir(parents=True)
+        config = codex_dir / "config.toml"
+        config.write_text("")
+
+        step = CodexFilesStep()
+        ctx = MagicMock(ui=None)
+        with (
+            patch("installer.steps.codex_files._get_codex_config_dir", return_value=codex_dir),
+            patch("installer.steps.codex_files.Path.home", return_value=tmp_path),
+            patch(
+                "installer.steps.codex_files._codex_supports_update_plan_config",
+                return_value=False,
+            ),
+        ):
+            step._install_codex_config(ctx)
+
+        assert "tools" not in tomllib.loads(config.read_text())
 
     @pytest.mark.parametrize(
         ("model", "effort", "plan_effort"),

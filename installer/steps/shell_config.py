@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 from installer.context import InstallContext
-from installer.platform_utils import get_shell_config_files
+from installer.platform_utils import get_login_shell_config_files, get_shell_config_files
 from installer.steps.base import BaseStep
 
 OLD_CCP_MARKER = "# Claude CodePro alias"
@@ -221,6 +221,7 @@ class ShellConfigStep(BaseStep):
         """Configure shell with pilot alias."""
         ui = ctx.ui
         config_files = get_shell_config_files()
+        login_files = set(get_login_shell_config_files())
         modified_files: list[str] = []
         needs_reload = False
 
@@ -229,7 +230,18 @@ class ShellConfigStep(BaseStep):
 
         for config_file in config_files:
             if not config_file.exists():
-                continue
+                # Login entry points are created on demand. Images routinely ship
+                # .bashrc/.zshrc but no .profile/.zprofile, and without one the
+                # PATH export never reaches `<shell> -c -l` -- the login,
+                # non-interactive shell agents use for tool calls.
+                if config_file not in login_files:
+                    continue
+                try:
+                    config_file.touch()
+                except OSError as e:
+                    if ui:
+                        ui.warning(f"Could not create {config_file.name}: {e}")
+                    continue
 
             if is_managed_elsewhere(config_file):
                 if ui:

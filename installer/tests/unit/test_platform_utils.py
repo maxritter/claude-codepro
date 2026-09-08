@@ -220,3 +220,87 @@ class TestEnsureSudoCredentials:
             side_effect=subprocess.TimeoutExpired(cmd="sudo -v", timeout=60),
         ):
             assert ensure_sudo_credentials() is False
+
+
+class TestLoginShellConfigFiles:
+    """Login-shell entry points carrying the Pilot PATH export.
+
+    Claude Code builds its Bash-tool shell snapshot with ``<shell> -c -l``, a
+    login *non-interactive* shell. That shell never reaches ``.bashrc`` (Debian
+    guards it with ``case $- in *i*) ;; *) return``) nor ``.zshrc`` (zsh sources
+    it only when interactive), so an rc-only PATH export leaves ``~/.pilot/bin``
+    -- and with it ``rtk`` -- missing from every agent tool call.
+    """
+
+    @staticmethod
+    def _fake_home(tmpdir: str, *existing: str) -> Path:
+        home = Path(tmpdir)
+        for name in existing:
+            (home / name).write_text("")
+        return home
+
+    def test_debian_layout_targets_profile(self):
+        """.bashrc with no .bash_profile: login bash falls through to .profile."""
+        import os
+        import tempfile
+
+        from installer.platform_utils import get_login_shell_config_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = self._fake_home(tmpdir, ".bashrc")
+            with patch.dict(os.environ, {"HOME": str(home)}):
+                assert get_login_shell_config_files() == [home / ".profile"]
+
+    def test_existing_bash_profile_is_the_login_entry_point(self):
+        """Login bash reads the first of .bash_profile/.bash_login/.profile."""
+        import os
+        import tempfile
+
+        from installer.platform_utils import get_login_shell_config_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = self._fake_home(tmpdir, ".bashrc", ".bash_profile")
+            with patch.dict(os.environ, {"HOME": str(home)}):
+                files = get_login_shell_config_files()
+            assert files == [home / ".bash_profile"]
+            assert home / ".profile" not in files
+
+    def test_zshrc_adds_zprofile(self):
+        """Login zsh never sources .zshrc, so .zprofile must carry PATH."""
+        import os
+        import tempfile
+
+        from installer.platform_utils import get_login_shell_config_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = self._fake_home(tmpdir, ".zshrc")
+            with patch.dict(os.environ, {"HOME": str(home)}):
+                assert get_login_shell_config_files() == [home / ".zprofile"]
+
+    def test_fish_needs_no_login_companion(self):
+        """config.fish is read by every fish shell, login or not."""
+        import os
+        import tempfile
+
+        from installer.platform_utils import get_login_shell_config_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = Path(tmpdir)
+            (home / ".config" / "fish").mkdir(parents=True)
+            (home / ".config" / "fish" / "config.fish").write_text("")
+            with patch.dict(os.environ, {"HOME": str(home)}):
+                assert get_login_shell_config_files() == []
+
+    def test_shell_config_files_includes_login_entry_points_without_duplicates(self):
+        """get_shell_config_files unions rc files and login files, deduped."""
+        import os
+        import tempfile
+
+        from installer.platform_utils import get_shell_config_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = self._fake_home(tmpdir, ".bashrc", ".bash_profile", ".zshrc")
+            with patch.dict(os.environ, {"HOME": str(home)}):
+                files = get_shell_config_files()
+            assert files.count(home / ".bash_profile") == 1
+            assert home / ".zprofile" in files

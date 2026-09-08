@@ -2686,6 +2686,24 @@ class TestShippedSettingsTemplate:
         assert "CLAUDE_CODE_DISABLE_AUTO_MEMORY" not in data["env"]
         assert "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING" not in data["env"]
 
+    def test_template_restores_task_tools_gated_off_on_newer_models(self):
+        """Claude Code 2.1.260 model-gates TaskCreate/Get/List/Update off on Opus
+        4.8, Sonnet 5, Fable 5, Mythos 5 and newer. Without these the agent has no
+        task-tracking tool at all -- TodoWrite is retired and does not come back.
+        """
+        data = json.loads(self.SETTINGS_PATH.read_text())
+        assert data["env"]["CLAUDE_CODE_ENABLE_TODO_TOOLS"] == "true"
+        assert data["env"]["CLAUDE_CODE_ENABLE_TASKS"] == "true"
+        assert data["env"]["CLAUDE_CODE_TODO_REMINDER_MODE"] == "baseline"
+
+    def test_task_tool_restore_preserves_explicit_opt_out(self):
+        from installer.steps.settings_merge import merge_settings
+
+        incoming = json.loads(self.SETTINGS_PATH.read_text())
+        current = {"env": {"CLAUDE_CODE_ENABLE_TODO_TOOLS": "false"}}
+        merged = merge_settings({"env": {}}, current, incoming)
+        assert merged["env"]["CLAUDE_CODE_ENABLE_TODO_TOOLS"] == "false"
+
     @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
     @pytest.mark.parametrize("has_baseline", [False, True])
     def test_effort_migration_preserves_user_choices(self, effort: str, has_baseline: bool):

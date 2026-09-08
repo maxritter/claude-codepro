@@ -4,6 +4,9 @@
     "CLAUDE_CODE_WORKFLOWS": "true",
     "CLAUDE_CODE_AUTO_CONNECT_IDE": "true",
     "CLAUDE_CODE_NO_FLICKER": "true",
+    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "true",
+    "CLAUDE_CODE_ENABLE_TASKS": "true",
+    "CLAUDE_CODE_TODO_REMINDER_MODE": "baseline",
     "ENABLE_TOOL_SEARCH": "true"
   },
   "permissions": {

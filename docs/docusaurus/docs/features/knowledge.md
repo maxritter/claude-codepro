@@ -36,6 +36,15 @@ Existing observations and their identifiers remain available. Automatic shared m
 
 Pilot's existing backups include local history, personal knowledge files, checkout mappings, and pending capture evidence. Shared project files remain part of the repository and its Git history. Restores preserve existing concepts when there is a conflict instead of silently overwriting them.
 
+## Automatic memory versus explicit knowledge
+
+Automatic memory and Open Knowledge Format (OKF) knowledge have different jobs:
+
+- Automatic memory distills session evidence into local history and optional daily JSONL sharing archives. It is the default and needs no manual maintenance.
+- OKF knowledge is an optional, explicitly maintained Markdown concept: a stable architecture decision, operating procedure, or other fact that should be edited, revised, cited, or deprecated over time. Agents use `save_knowledge` only for that deliberate purpose.
+
+Routine capture, queue processing, retention, Console status, and JSONL import/export do not generate or synchronize OKF files. OKF synchronization runs only when an agent or user explicitly searches, reads, saves, imports, exports, validates, or synchronizes curated knowledge.
+
 ## Under the hood
 
 Private history is stored locally in SQLite. Automatic shared memories use `.pilot/memories/<author>/<YYYY-MM-DD>.jsonl`, so each contributor adds to one readable file per day. Explicitly maintained knowledge uses portable Markdown based on the Open Knowledge Format under `.pilot/knowledge/`. Local indexes make both searchable without depending on a vector service; synchronization state stays outside the repository.

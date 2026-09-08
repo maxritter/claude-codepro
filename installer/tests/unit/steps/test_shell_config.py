@@ -451,3 +451,71 @@ class TestAliasRemoval:
         assert "function claude" not in result
         assert "function codex" not in result
         assert "set -gx USER_SETTING preserved" in result
+
+
+class TestLoginShellPathReachability:
+    """`<shell> -c -l` must see ~/.pilot/bin.
+
+    That is the exact invocation Claude Code uses to build the shell snapshot
+    backing its Bash tool. When the PATH export lives only in an interactive rc
+    file, the login non-interactive shell never runs it and `rtk` is off PATH
+    for every agent command -- the devcontainer failure this guards against.
+    """
+
+    @staticmethod
+    def _path_from_login_shell(shell: str, home: Path) -> str:
+        """PATH as a login, non-interactive shell sees it, from a clean env."""
+        result = subprocess.run(
+            [shell, "-c", "-l", 'echo "$PATH"'],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+        )
+        return result.stdout
+
+    def _run_step(self, home: Path) -> None:
+        from installer.context import InstallContext
+        from installer.ui import Console
+
+        with patch.dict(os.environ, {"HOME": str(home)}):
+            ShellConfigStep().run(InstallContext(project_dir=home, ui=Console(non_interactive=True)))
+
+    @pytest.mark.skipif(shutil.which("bash") is None, reason="bash not installed")
+    def test_debian_bash_layout_reaches_login_shell(self):
+        """.bashrc's non-interactive guard hides the export; .profile carries it."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = Path(tmpdir)
+            # What today's installer leaves behind on a Debian base image.
+            (home / ".bashrc").write_text(
+                f'case $- in\n    *i*) ;;\n      *) return;;\nesac\nexport PATH="{PILOT_BIN_DIR}:$PATH"\n'
+            )
+            (home / ".profile").write_text(
+                'if [ -n "$BASH_VERSION" ]; then\n    if [ -f "$HOME/.bashrc" ]; then . "$HOME/.bashrc"; fi\nfi\n'
+            )
+            pilot_bin = str(home / ".pilot" / "bin")
+
+            assert pilot_bin not in self._path_from_login_shell("bash", home), (
+                "precondition: an rc-only export must be invisible to `bash -c -l`"
+            )
+
+            self._run_step(home)
+
+            assert pilot_bin in self._path_from_login_shell("bash", home)
+
+    @pytest.mark.skipif(shutil.which("zsh") is None, reason="zsh not installed")
+    def test_zsh_layout_reaches_login_shell(self):
+        """Login zsh never sources .zshrc; .zprofile is created to carry PATH."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = Path(tmpdir)
+            (home / ".zshrc").write_text(f'export PATH="{PILOT_BIN_DIR}:$PATH"\n')
+            pilot_bin = str(home / ".pilot" / "bin")
+
+            assert pilot_bin not in self._path_from_login_shell("zsh", home), (
+                "precondition: an rc-only export must be invisible to `zsh -c -l`"
+            )
+
+            self._run_step(home)
+
+            assert (home / ".zprofile").exists(), ".zprofile must be created"
+            assert pilot_bin in self._path_from_login_shell("zsh", home)

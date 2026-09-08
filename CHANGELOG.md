@@ -2,6 +2,26 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [11.0.1] - 2026-09-08
+
+### Bug fixes
+
+- Stop automatic memory from spending millions of background tokens on routine tool traffic. Normalize Pilot's `rtk` command forms, filter read-only retrieval and orchestration events across Claude Code and Codex, coalesce live arrivals, use larger batches, bound captured payloads, and cap provider inference concurrency fairly across sessions.
+- Make capture accounting truthful. Persist every provider request—including skips and failures—with provider, model, input, cached-input, output, batch, duration, and outcome fields; attribute a batch's discovery tokens only once; expose queued, processing, failed, rejected, oldest-pending, and 24-hour usage diagnostics.
+- Prevent shared-memory retention from resurrecting archived records. Preserve imported identities independently of retained observations, apply retention before import, self-repair partially applied database migrations, and retain pre-v11 observations and generated-wrapper payloads exactly.
+- Eliminate Chroma storms. Index imported and newly captured observations in serialized document batches, keep memory bounded while batching, and delete only the vector documents an observation actually created instead of generating hundreds of speculative IDs per row.
+- Repair parallel-session correctness. Update provisional sessions when asynchronous initialization arrives, preserve established metadata, quarantine deterministic poison events after finite retries, increase the bounded burst allowance, and keep oversized evidence as useful head/tail excerpts instead of silently dropping it.
+- Remove duplicate Pilot commands from mixed Codex hook entries while preserving third-party hooks, preventing duplicate summaries and session finalization after upgrades.
+- Keep Open Knowledge Format support for explicit, editable knowledge through `get_knowledge` and `save_knowledge`, while removing OKF synchronization from routine capture/status/import work. One-time legacy-wrapper recovery remains automatic and idempotent.
+- Show each memory's local creation date and time in both the overview card and detail view, instead of collapsing a busy day to the date alone.
+- Restore native task tracking in current agents. Claude Code receives its supported task/todo environment flags, while Codex 0.152.0 and newer receive `tools.update_plan.enabled = true` only when the user has not explicitly opted out; older Codex versions remain untouched.
+- Put `~/.pilot/bin` on login/non-interactive shell paths as well as interactive shells, so Claude Code tool calls can find `rtk` and other Pilot binaries in devcontainers and IDE-launched sessions.
+
+### Verification
+
+- Added regression coverage for queue pressure, RTK/tool filtering, batching, concurrency, token telemetry, retries, session-init races, shared-memory retention, Chroma write/delete bounds, Codex hook merging, OKF separation, and migration repair.
+- Added an installed-artifact acceptance that runs real Claude Code and Codex sessions concurrently, migrates pre-v11 data, exercises OKF create/read/update through MCP, verifies relevant recall and bounded files, and restarts to prove zero duplicate import or Chroma work.
+
 ## [11.0.0] - 2026-09-07
 
 Pilot Shell 11 updates the engineering harness for current Claude Code and Codex, adds automatic memory across both agents, and retires Pilot Bot. This is a major release: review the changes below before upgrading.
@@ -1705,4 +1725,3 @@ Run `pilot update` to upgrade, then start a fresh Claude Code or Codex session t
 - Add multi-pass verification with spec-verifier agent
 - Add sx tool and update rules paths
 - Improve worker cleanup and installer reliability
-

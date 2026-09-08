@@ -228,8 +228,48 @@ def is_linux_arm64() -> bool:
     return platform.system() == "Linux" and platform.machine() in ("aarch64", "arm64")
 
 
+def get_login_shell_config_files() -> list[Path]:
+    """Login-shell entry points that must also carry the Pilot PATH export.
+
+    Claude Code builds its Bash-tool shell snapshot with ``<shell> -c -l`` -- a
+    *login, non-interactive* shell -- and neither interactive rc file is reached
+    by one: Debian's ``.bashrc`` returns at the top on
+    ``case $- in *i*) ;; *) return;; esac``, and zsh sources ``.zshrc`` only when
+    the shell is interactive. With the PATH export living solely in an rc file,
+    ``~/.pilot/bin`` (and therefore ``rtk``) is absent from every agent tool call
+    in any session that did not inherit an interactive PATH -- a devcontainer or
+    IDE-launched agent being the common case.
+
+    Returned paths need not exist yet; ``ShellConfigStep`` creates them.
+    """
+    home = Path.home()
+    files: list[Path] = []
+
+    bashrc = home / ".bashrc"
+    bash_profile = home / ".bash_profile"
+    if bash_profile.exists():
+        # Login bash reads the *first* of .bash_profile/.bash_login/.profile, so
+        # an existing .bash_profile is already the login entry point.
+        files.append(bash_profile)
+    elif bashrc.exists():
+        # The Debian layout: .bashrc with no .bash_profile, so login bash falls
+        # through to .profile.
+        files.append(home / ".profile")
+
+    if (home / ".zshrc").exists():
+        files.append(home / ".zprofile")
+
+    # fish needs no companion file: config.fish is read by every fish shell,
+    # login or not, interactive or not.
+    return files
+
+
 def get_shell_config_files() -> list[Path]:
-    """Get list of shell configuration files for the current user."""
+    """Get list of shell configuration files for the current user.
+
+    Interactive rc files plus the login entry points returned by
+    :func:`get_login_shell_config_files`.
+    """
     home = Path.home()
     configs = []
 
@@ -247,6 +287,10 @@ def get_shell_config_files() -> list[Path]:
     fish_config = home / ".config" / "fish" / "config.fish"
     if fish_config.exists():
         configs.append(fish_config)
+
+    for login_file in get_login_shell_config_files():
+        if login_file not in configs:
+            configs.append(login_file)
 
     if not configs:
         configs = [bashrc, zshrc, fish_config]

@@ -24,6 +24,7 @@ from installer.steps.base import BaseStep
 
 _CODEX_REVIEW_AGENT_MODEL = "codex-auto-review"
 _CODEX_MODEL_CATALOG_FILENAME = ".pilot-model-catalog.json"
+_CODEX_UPDATE_PLAN_CONFIG_MIN_VERSION = (0, 152, 0)
 _CODEX_CONTEXT_MANAGEMENT_MIN_VERSION = (0, 153, 0)
 _CODEX_CONTEXT_DEFAULTS = {
     # Opt into expanded context without replacing Codex's live model catalog.
@@ -387,11 +388,28 @@ class CodexFilesStep(BaseStep):
             baseline_signatures = {
                 _hook_entry_signature(entry) for entry in baseline_hooks.get(event, []) if isinstance(entry, dict)
             }
-            user_entries = [
-                entry
-                for entry in existing_entries
-                if not isinstance(entry, dict) or _hook_entry_signature(entry) not in baseline_signatures
-            ]
+            managed_commands = {
+                command
+                for entry in baseline_hooks.get(event, [])
+                if isinstance(entry, dict)
+                for command in _hook_entry_commands(entry)
+            }
+            managed_commands.update(
+                command
+                for entry in incoming_entries
+                if isinstance(entry, dict)
+                for command in _hook_entry_commands(entry)
+            )
+            user_entries: list[Any] = []
+            for entry in existing_entries:
+                if not isinstance(entry, dict):
+                    user_entries.append(entry)
+                    continue
+                if _hook_entry_signature(entry) in baseline_signatures:
+                    continue
+                preserved = _without_hook_commands(entry, managed_commands)
+                if preserved is not None:
+                    user_entries.append(preserved)
             incoming_signatures = {
                 _hook_entry_signature(entry) for entry in incoming_entries if isinstance(entry, dict)
             }
@@ -705,6 +723,16 @@ class CodexFilesStep(BaseStep):
         existing, features_changed = _ensure_section_keys(existing, "features", required_features)
         changed = changed or features_changed
 
+        if _codex_supports_update_plan_config():
+            # Codex 0.152.0 made its native task-progress checklist opt-in.
+            # Restore it while preserving an explicit user opt-out.
+            existing, update_plan_changed = _ensure_section_keys(
+                existing,
+                "tools.update_plan",
+                {"enabled": "true"},
+            )
+            changed = changed or update_plan_changed
+
         required_tui = {
             "status_line": '["project-name", "model-with-reasoning", "branch-changes", "context-used", "task-progress", "run-state", "five-hour-limit", "weekly-limit"]',
             "status_line_use_colors": "true",
@@ -927,24 +955,37 @@ def _ensure_section_keys(
     return content, changed
 
 
+def _installed_codex_version() -> tuple[int, int, int] | None:
+    """Return the first detectable CLI or desktop-bundled Codex version."""
+    candidates = _codex_binary_candidates() or [Path("codex")]
+    for binary in candidates:
+        try:
+            result = subprocess.run(
+                [str(binary), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if result.returncode != 0:
+            continue
+        match = re.search(r"\b(\d+)\.(\d+)\.(\d+)\b", f"{result.stdout}\n{result.stderr}")
+        if match is not None:
+            return tuple(int(part) for part in match.groups())
+    return None
+
+
+def _codex_supports_update_plan_config() -> bool:
+    """Whether Codex needs and accepts the opt-in task-progress setting."""
+    version = _installed_codex_version()
+    return version is not None and version >= _CODEX_UPDATE_PLAN_CONFIG_MIN_VERSION
+
+
 def _codex_supports_context_management() -> bool:
     """Whether the installed Codex accepts structured feature configuration."""
-    try:
-        result = subprocess.run(
-            ["codex", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    if result.returncode != 0:
-        return False
-    match = re.search(r"\b(\d+)\.(\d+)\.(\d+)\b", f"{result.stdout}\n{result.stderr}")
-    if match is None:
-        return False
-    version = tuple(int(part) for part in match.groups())
-    return version >= _CODEX_CONTEXT_MANAGEMENT_MIN_VERSION
+    version = _installed_codex_version()
+    return version is not None and version >= _CODEX_CONTEXT_MANAGEMENT_MIN_VERSION
 
 
 def _remove_context_management_feature(content: str) -> tuple[str, bool]:
@@ -1871,6 +1912,33 @@ def _hook_entry_signature(entry: dict[str, Any]) -> tuple[str, tuple[str, ...]]:
     return matcher, tuple(commands)
 
 
+def _hook_entry_commands(entry: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(
+        hook["command"]
+        for hook in entry.get("hooks", []) or []
+        if isinstance(hook, dict) and isinstance(hook.get("command"), str)
+    )
+
+
+def _without_hook_commands(entry: dict[str, Any], managed_commands: set[str]) -> dict[str, Any] | None:
+    """Remove only known Pilot commands from a mixed user/Pilot entry."""
+    hooks = entry.get("hooks")
+    if not isinstance(hooks, list):
+        return entry
+    kept = [
+        hook
+        for hook in hooks
+        if not (
+            isinstance(hook, dict)
+            and isinstance(hook.get("command"), str)
+            and hook["command"] in managed_commands
+        )
+    ]
+    if not kept:
+        return None
+    return {**entry, "hooks": kept}
+
+
 def _legacy_codex_hook_signature_baseline(current_hooks: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     """Identify only known pre-baseline Pilot hook locations."""
     baseline: dict[str, list[dict[str, Any]]] = {}
@@ -1881,16 +1949,18 @@ def _legacy_codex_hook_signature_baseline(current_hooks: dict[str, Any]) -> dict
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
-            commands = [hook.get("command", "") for hook in entry.get("hooks", []) or [] if isinstance(hook, dict)]
-            if any(
-                isinstance(command, str)
+            pilot_hooks = [
+                hook
+                for hook in entry.get("hooks", []) or []
+                if isinstance(hook, dict)
+                and isinstance(hook.get("command"), str)
                 and (
-                    "/.pilot/hooks/" in command
-                    or ("/.pilot/scripts/worker-service.cjs" in command and " hook codex " in command)
+                    "/.pilot/hooks/" in hook["command"]
+                    or ("/.pilot/scripts/worker-service.cjs" in hook["command"] and " hook codex " in hook["command"])
                 )
-                for command in commands
-            ):
-                managed.append(entry)
+            ]
+            if pilot_hooks:
+                managed.append({**entry, "hooks": pilot_hooks})
         if managed:
             baseline[event] = managed
     return baseline

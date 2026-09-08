@@ -9,6 +9,16 @@ Pilot Shell supports both agents. Claude Code has broader platform integration; 
 
 Direct requests, each agent's native Plan/Goal tools, and Pilot workflows are peer ways to work. Choose the contract you want; Pilot keeps its available context, quality, memory, and tools around all of them.
 
+## Codex task tracking
+
+Codex 0.152.0 made its native task-progress checklist (`update_plan`) opt-in. Pilot enables it in `~/.codex/config.toml` when the setting is absent, so Codex can create, update, and display multi-step task lists again. An explicit `enabled = false` remains user-owned and is preserved. Start a new Codex chat after installing or updating Pilot so the new chat receives the tool.
+
+## Codex subagents and independent sessions
+
+Current Codex releases enable subagents by default. Spawned agents can receive follow-up tasks and messages inside the same root-agent tree, and the supported clients expose their threads and results. Pilot therefore does not need to add an agent-enablement setting.
+
+This is narrower than Claude Code's peer-session messaging. Independent Codex chats are not a shared agent tree, and Codex does not currently document a setting that lets one arbitrary chat discover and message another. The default-off `multi_agent_v2` feature changes routing and communication inside a spawned-agent tree; it does not add cross-session peers, so Pilot leaves that upstream choice untouched.
+
 ## Works on Both
 
 All Pilot workflows run on both agents. Use `/` on Claude Code and `$` on Codex:
