@@ -1007,8 +1007,17 @@ class TestBrewUpgrade:
     @patch("installer.steps.prerequisites._is_nvm_installed")
     @patch("installer.steps.prerequisites.command_exists")
     @patch("installer.steps.prerequisites.is_homebrew_available")
+    @patch("installer.steps.prerequisites._node_at_least_24", return_value=True)
     def test_run_upgrades_outdated_packages(
-        self, mock_brew, mock_cmd_exists, mock_nvm, mock_tap, mock_install, mock_outdated, mock_upgrade
+        self,
+        _mock_node_compatible,
+        mock_brew,
+        mock_cmd_exists,
+        mock_nvm,
+        mock_tap,
+        mock_install,
+        mock_outdated,
+        mock_upgrade,
     ):
         """run() calls upgrade for installed packages that are outdated."""
         from installer.context import InstallContext
