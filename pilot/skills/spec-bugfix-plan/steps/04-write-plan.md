@@ -64,7 +64,7 @@ Type: Bugfix
 
 ## Tasks
 
-> Always 3 tasks below. The `- [ ]` checkboxes immediately under this heading are the progress tracker (`spec-implement` toggles them `[ ]` → `[x]`); the `### Task N:` blocks hold the bodies. No separate `## Progress Tracking` section needed.
+> Always include the three agent tasks below. The `- [ ]` checkboxes immediately under this heading are the progress tracker (`spec-implement` toggles them `[ ]` → `[x]`); the `### Task N:` blocks hold the bodies. Insert separately numbered user-owned checkpoints only when investigation proves they are necessary. No separate `## Progress Tracking` section needed.
 
 - [ ] Task 1: Write Reproducing Test (RED)
 - [ ] Task 2: Implement Fix at Root Cause
@@ -133,7 +133,7 @@ Type: Bugfix
 **Evidence freshness:** the suite must be green after this task's code changes. The verify phase can reuse that result while the tested code, configuration, and environment remain unchanged; rerun when later fixes invalidate it.
 ```
 
-**Always three tasks.** Never collapse Task 1 + Task 2 into "Fix (test + code)". The separation is what prevents "I'll just write the code and add a test after."
+**Always three agent-owned tasks.** Never collapse Task 1 + Task 2 into "Fix (test + code)". The separation is what prevents "I'll just write the code and add a test after." If investigation proves a human-only action is required, insert a separate task with `**Owner:** User` and a concrete `**User Action:**`, renumber contiguously, and retain all three agent tasks unchanged. Never mix manual and agent work in one task.
 
 **Do NOT include:** "Goal Verification" sections, "Risks and Mitigations" table, "Assumptions" section, per-task "Dependencies" field.
 

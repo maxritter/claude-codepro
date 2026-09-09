@@ -1165,10 +1165,8 @@ class TestApprovedPendingPlanHasNoUnilateralPause:
 
     The retired filename stays retired (a customized or stale skill copy may still
     touch it). The one grant that DOES apply to an approved PENDING plan is the
-    user-consented discussion pause, and it is qualified the other way: honored only
-    on a user-initiated turn, never inside a hook-driven continuation chain -- see
-    TestDiscussionPauseMarker. This class pins what remains forbidden: pausing the
-    implement phase without the user in the loop.
+    durable interaction state written by UserPromptSubmit. This class pins what
+    remains forbidden: pausing the implement phase without the user in the loop.
     """
 
     def _run(self, tmp_path, monkeypatch, *, sentinel_name: str | None):
@@ -1294,15 +1292,15 @@ class TestVerifyGateSentinel:
     (issue #175). Adding the gate prose without this sentinel only relocates the
     deadlock: the lane asks correctly, yields, and is blocked anyway.
 
-    Consumed on honor, like the other post-approval sentinel. Both re-ask paths
-    of the review gate ("Fix" and "Manual") touch it again, so the failure mode of
-    forgetting to re-touch is a block, never a silent stop.
+    Retained through the yield so UserPromptSubmit can distinguish the expected
+    gate answer from an unrelated mid-implementation interruption. That prompt
+    consumes it before the agent continues.
 
     The sentinel path is built literally rather than through the accessor: what is
     under test is the guard's BEHAVIOUR given the file, not the presence of a helper.
     """
 
-    def _run(
+    def _run(  # noqa: PLR0913
         self,
         tmp_path,
         monkeypatch,
@@ -1311,6 +1309,7 @@ class TestVerifyGateSentinel:
         status: str = "COMPLETE",
         plan_type: str = "Feature",
         write_sentinel: bool = True,
+        transcript_text: str | None = None,
     ):
         import spec_stop_guard as g
 
@@ -1327,7 +1326,26 @@ class TestVerifyGateSentinel:
         if write_sentinel:
             sentinel.write_text("")
 
-        stdin = io.StringIO(json.dumps({"stop_hook_active": False, "transcript_path": ""}))
+        transcript = tmp_path / "transcript.jsonl"
+        if transcript_text is not None:
+            transcript.write_text(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {"content": [{"type": "text", "text": transcript_text}]},
+                    }
+                )
+                + "\n"
+            )
+
+        stdin = io.StringIO(
+            json.dumps(
+                {
+                    "stop_hook_active": False,
+                    "transcript_path": str(transcript) if transcript_text is not None else "",
+                }
+            )
+        )
         with patch("sys.stdin", stdin), patch("sys.stdout", new_callable=io.StringIO) as out:
             code = g.main()
         return code, sentinel, out.getvalue()
@@ -1338,7 +1356,9 @@ class TestVerifyGateSentinel:
 
         assert code == 0
         assert not _is_blocked(stdout), "a verify-phase gate must be able to yield for the user's answer"
-        assert not sentinel.exists(), "one-shot: consumed on honor"
+        assert sentinel.exists(), "the expected-response marker must survive until UserPromptSubmit"
+        binding = json.loads(sentinel.read_text())
+        assert binding["expected_status"] == "COMPLETE"
 
     def test_does_not_release_the_implement_phase(self, tmp_path, monkeypatch):
         """Status gate: a PENDING plan is mid-implementation, where stopping is the bug."""
@@ -1352,226 +1372,100 @@ class TestVerifyGateSentinel:
 
         assert _is_blocked(stdout), "a Buildout must not be released by a gate sentinel it never writes"
 
-    def test_second_stop_is_blocked_again(self, tmp_path, monkeypatch):
-        """One-shot: the next stop re-engages the block unless the gate re-touches it."""
+    def test_gate_keeps_yielding_until_the_user_response_arrives(self, tmp_path, monkeypatch):
+        """The marker remains valid while the same gate is awaiting its answer."""
         self._run(tmp_path, monkeypatch)
 
         _code, _sentinel, stdout = self._run(tmp_path, monkeypatch, write_sentinel=False)
 
-        assert _is_blocked(stdout), "a consumed sentinel must not keep granting stops"
-
-
-class TestDiscussionPauseMarker:
-    """The sticky discussion-pause marker lets the USER hold a run open for discussion.
-
-    A mid-implementation interruption -- the user questioning a decision, or a
-    discovery that needs discussing -- used to be indistinguishable from a premature
-    exit, so every discussion turn ended in an "IMMEDIATELY continue working" block.
-    The marker (`spec-discussion-paused`) pauses the guard for the active plan:
-
-    - honored ONLY on a user-initiated turn (``stop_hook_active`` false); inside a
-      hook-driven continuation chain it grants nothing, so an agent cannot touch it
-      mid-chain to escape work (the unilateral pause the retired manual-switch
-      sentinel opened)
-    - sticky, not consumed: discussion spans turns; the skill re-touches it each
-      discussion turn and clears it on resume
-    - bound to the plan PATH only -- no content fingerprint (amending the plan
-      mid-discussion is the point) and no status pin (discussion is legal at
-      PENDING and COMPLETE)
-    - honoring it clears the block counters, like a user-question turn
-    """
-
-    SESSION = "discussion-pause-test"
-
-    def _run(
-        self,
-        tmp_path,
-        monkeypatch,
-        *,
-        status: str = "PENDING",
-        stop_hook_active: bool = False,
-        write_marker: bool = True,
-        age: float = 0.0,
-    ):
-        import spec_stop_guard as g
-
-        monkeypatch.setenv("PILOT_SESSION_ID", self.SESSION)
-        monkeypatch.setattr(g, "_sessions_base", lambda: tmp_path / "sessions")
-        plan = tmp_path / "plan.md"
-        if not plan.exists():
-            plan.write_text(f"# X\nStatus: {status}\nApproved: Yes\nType: Feature\n")
-        monkeypatch.setattr(g, "find_active_plan", lambda *_args: (plan, status))
-        monkeypatch.setattr(g, "is_waiting_for_user_input", lambda _p: False)
-
-        session_dir = tmp_path / "sessions" / self.SESSION
-        session_dir.mkdir(parents=True, exist_ok=True)
-        marker = session_dir / "spec-discussion-paused"
-        if write_marker:
-            marker.write_text("")
-            if age:
-                stamp = time.time() - age
-                os.utime(marker, (stamp, stamp))
-
-        stdin = io.StringIO(json.dumps({"stop_hook_active": stop_hook_active, "transcript_path": ""}))
-        with patch("sys.stdin", stdin), patch("sys.stdout", new_callable=io.StringIO) as out:
-            code = g.main()
-        return code, marker, out.getvalue(), plan
-
-    def _age_guard_state(self, tmp_path) -> None:
-        """Push the guard state's ts outside COOLDOWN_SECONDS, so a consecutive-run
-        test can only be released by the marker, never by the double-stop hatch."""
-        state_file = tmp_path / "sessions" / self.SESSION / "spec-stop-guard"
-        if state_file.exists():
-            data = json.loads(state_file.read_text())
-            data["ts"] = time.time() - 120
-            state_file.write_text(json.dumps(data))
-
-    def test_allows_user_initiated_stop_during_implementation(self, tmp_path, monkeypatch):
-        """The fix itself: a paused Approved+PENDING plan lets a user-turn stop through."""
-        code, marker, stdout, _plan = self._run(tmp_path, monkeypatch)
-
-        assert code == 0
-        assert not _is_blocked(stdout), "a user-initiated stop while paused must be allowed"
-        assert marker.exists(), "sticky: the marker survives being honored"
-        binding = json.loads(marker.read_text())
-        assert binding["plan_path"].endswith("plan.md")
-
-    def test_never_releases_a_hook_continuation_chain(self, tmp_path, monkeypatch):
-        """Anti-shirk: mid-chain the attempt is the agent's own, and the marker grants nothing."""
-        _code, marker, stdout, _plan = self._run(tmp_path, monkeypatch, stop_hook_active=True)
-
-        assert _is_blocked(stdout), "the marker must not release a hook-driven continuation"
-        assert marker.exists(), "a valid pause is not discarded just because a chain hit it"
-
-    def test_sticky_across_consecutive_user_stops(self, tmp_path, monkeypatch):
-        """Discussion spans turns: the second user-turn stop is allowed too."""
-        self._run(tmp_path, monkeypatch)
-        self._age_guard_state(tmp_path)
-        _code, _marker, stdout, _plan = self._run(tmp_path, monkeypatch, write_marker=False)
-
-        assert not _is_blocked(stdout), "the pause must hold across discussion turns, not one-shot"
-
-    def test_honored_at_complete_status(self, tmp_path, monkeypatch):
-        """Discussion is legal in the verify phase as well."""
-        _code, _marker, stdout, _plan = self._run(tmp_path, monkeypatch, status="COMPLETE")
-
         assert not _is_blocked(stdout)
 
-    def test_plan_edits_while_paused_do_not_invalidate_the_pause(self, tmp_path, monkeypatch):
-        """Amending the plan mid-discussion is the point -- no content fingerprint check."""
-        _code, _marker, _stdout, plan = self._run(tmp_path, monkeypatch)
-        plan.write_text(plan.read_text() + "\n## Deviations\n- Task 2: amended after discussion\n")
-        self._age_guard_state(tmp_path)
-
-        _code, _marker, stdout, _plan = self._run(tmp_path, monkeypatch, write_marker=False)
-
-        assert not _is_blocked(stdout), "an amended plan must stay paused"
-
-    def test_stale_marker_discarded(self, tmp_path, monkeypatch):
-        """An abandoned session's marker (crash, PID reuse) must not silently disable the guard."""
-        import spec_stop_guard as g
-
-        _code, marker, stdout, _plan = self._run(tmp_path, monkeypatch, age=g.SENTINEL_MAX_AGE_SECONDS + 60)
-
-        assert _is_blocked(stdout), "a stale marker must not grant a stop"
-        assert not marker.exists(), "a stale marker must be unlinked"
-
-    def test_marker_bound_to_a_different_plan_discarded(self, tmp_path, monkeypatch):
-        """A marker left by another plan in the same session dir must not release this one."""
-        session_dir = tmp_path / "sessions" / self.SESSION
-        session_dir.mkdir(parents=True, exist_ok=True)
-        marker = session_dir / "spec-discussion-paused"
-        marker.write_text(json.dumps({"plan_path": "/somewhere/else/plan.md", "created_at": time.time()}))
-
-        _code, marker, stdout, _plan = self._run(tmp_path, monkeypatch, write_marker=False)
-
-        assert _is_blocked(stdout), "a marker bound to a different plan must not grant a stop"
-        assert not marker.exists(), "a mismatched binding must be discarded"
-
-    def test_removed_marker_rearms_the_guard(self, tmp_path, monkeypatch):
-        """Resume: once the marker is cleared, the next stop blocks again."""
-        _code, marker, _stdout, _plan = self._run(tmp_path, monkeypatch)
-        marker.unlink()
-
-        _code, _marker, stdout, _plan = self._run(tmp_path, monkeypatch, write_marker=False)
-
-        assert _is_blocked(stdout), "clearing the marker must re-engage the guard"
-
-    def test_honoring_the_pause_clears_the_block_counters(self, tmp_path, monkeypatch):
-        """A resume after discussion starts a clean chain, like after a user-question turn."""
-        session_dir = tmp_path / "sessions" / self.SESSION
-        session_dir.mkdir(parents=True, exist_ok=True)
-        state_file = session_dir / "spec-stop-guard"
-        state_file.write_text(
-            json.dumps({"ts": time.time() - 120, "count": 7, "chain": 2, "plan": str(tmp_path / "plan.md")})
+    def test_narrow_review_question_auto_arms_missing_sentinel(self, tmp_path, monkeypatch):
+        _code, sentinel, stdout = self._run(
+            tmp_path,
+            monkeypatch,
+            write_sentinel=False,
+            transcript_text=(
+                "## Verification Summary\n\nAll checks passed.\n\n"
+                "Do you approve this result so I can mark the plan VERIFIED?"
+            ),
         )
 
-        _code, _marker, stdout, _plan = self._run(tmp_path, monkeypatch)
-
         assert not _is_blocked(stdout)
-        assert not state_file.exists() or json.loads(state_file.read_text()).get("count", 0) == 0
+        assert sentinel.exists()
+        assert json.loads(sentinel.read_text())["expected_status"] == "COMPLETE"
 
-    def test_block_reason_names_the_discussion_pause_escape(self, tmp_path, monkeypatch):
-        """The nag itself must teach the escape, so the moment of pain documents the fix."""
-        _code, _marker, stdout, _plan = self._run(tmp_path, monkeypatch, write_marker=False)
-
-        assert _is_blocked(stdout)
-        reason = json.loads(stdout)["reason"]
-        assert "spec-discussion-paused" in reason
-
-    def test_never_releases_a_build_loop(self, tmp_path, monkeypatch):
-        """/build runs autonomously after scoping; a stray discussion marker must not free it."""
-        plan = tmp_path / "plan.md"
-        plan.write_text("# X Buildout\nStatus: PENDING\nApproved: Yes\nType: Build\n")
-
-        _code, marker, stdout, _plan = self._run(tmp_path, monkeypatch)
-
-        assert _is_blocked(stdout), "a Buildout must not be released by the discussion pause"
-        assert marker.exists(), "an inapplicable marker is left alone, not consumed"
-
-    def test_build_block_reason_omits_the_discussion_pause_escape(self, tmp_path, monkeypatch):
-        """The EXCEPTION sentence must not teach a /build agent an escape it does not have."""
-        plan = tmp_path / "plan.md"
-        plan.write_text("# X Buildout\nStatus: PENDING\nApproved: Yes\nType: Build\n")
-
-        _code, _marker, stdout, _plan = self._run(tmp_path, monkeypatch, write_marker=False)
+    def test_ordinary_complete_status_summary_does_not_bypass_guard(self, tmp_path, monkeypatch):
+        _code, sentinel, stdout = self._run(
+            tmp_path,
+            monkeypatch,
+            write_sentinel=False,
+            transcript_text="Implementation summary: everything looks good.",
+        )
 
         assert _is_blocked(stdout)
-        assert "spec-discussion-paused" not in json.loads(stdout)["reason"]
+        assert not sentinel.exists()
 
-    def test_absent_stop_hook_active_is_honored_but_consumed(self, tmp_path, monkeypatch):
-        """Codex sends no stop_hook_active, so every attempt counts as user-initiated there.
 
-        To keep the marker from becoming a standing free pass on that platform, a
-        payload WITHOUT the field consumes the marker on honor: each stop needs a
-        fresh touch (which the skill prose mandates per discussion turn anyway).
-        """
+class TestLegacyDiscussionPauseMarker:
+    """Legacy marker files no longer bypass the Stop guard directly."""
+
+    def test_marker_alone_does_not_grant_a_stop(self, tmp_path, monkeypatch):
         import spec_stop_guard as g
 
-        monkeypatch.setenv("PILOT_SESSION_ID", self.SESSION)
+        session_id = "legacy-discussion-pause-test"
+        monkeypatch.setenv("PILOT_SESSION_ID", session_id)
         monkeypatch.setattr(g, "_sessions_base", lambda: tmp_path / "sessions")
         plan = tmp_path / "plan.md"
         plan.write_text("# X\nStatus: PENDING\nApproved: Yes\nType: Feature\n")
         monkeypatch.setattr(g, "find_active_plan", lambda *_args: (plan, "PENDING"))
         monkeypatch.setattr(g, "is_waiting_for_user_input", lambda _p: False)
-        session_dir = tmp_path / "sessions" / self.SESSION
-        session_dir.mkdir(parents=True, exist_ok=True)
-        marker = session_dir / "spec-discussion-paused"
-        marker.write_text("")
+        session = tmp_path / "sessions" / session_id
+        session.mkdir(parents=True)
+        (session / "spec-discussion-paused").write_text("")
 
-        def stop_without_field():
-            stdin = io.StringIO(json.dumps({"transcript_path": ""}))
-            with patch("sys.stdin", stdin), patch("sys.stdout", new_callable=io.StringIO) as out:
-                g.main()
-            return out.getvalue()
+        stdin = io.StringIO(json.dumps({"stop_hook_active": False, "transcript_path": ""}))
+        with patch("sys.stdin", stdin), patch("sys.stdout", new_callable=io.StringIO) as out:
+            g.main()
 
-        first = stop_without_field()
-        assert not _is_blocked(first), "a fresh marker must honor the field-less (Codex) stop"
-        assert not marker.exists(), "field-less honor must consume the marker"
+        assert _is_blocked(out.getvalue())
 
-        self._age_guard_state(tmp_path)
-        second = stop_without_field()
-        assert _is_blocked(second), "without a re-touch the next field-less stop must block again"
+
+class TestDurableInteractionState:
+    """A registered pause is authoritative even inside a Stop continuation."""
+
+    def _run(self, tmp_path: Path, monkeypatch, *, stop_hook_active: bool) -> str:
+        import spec_stop_guard as g
+
+        session_id = "durable-interaction-test"
+        monkeypatch.setenv("PILOT_SESSION_ID", session_id)
+        monkeypatch.setattr(g, "_sessions_base", lambda: tmp_path / "sessions")
+        plan = tmp_path / "plan.md"
+        plan.write_text("# X\nStatus: PENDING\nApproved: Yes\nType: Feature\n")
+        session = tmp_path / "sessions" / session_id
+        session.mkdir(parents=True)
+        (session / "active_plan.json").write_text(
+            json.dumps(
+                {
+                    "plan_path": str(plan),
+                    "status": "PENDING",
+                    "interaction": {"state": "paused", "kind": "discussion"},
+                }
+            )
+        )
+        monkeypatch.setattr(g, "find_active_plan", lambda *_args: (plan, "PENDING"))
+        monkeypatch.setattr(g, "is_waiting_for_user_input", lambda _p: False)
+
+        stdin = io.StringIO(json.dumps({"stop_hook_active": stop_hook_active, "transcript_path": ""}))
+        with patch("sys.stdin", stdin), patch("sys.stdout", new_callable=io.StringIO) as out:
+            g.main()
+        return out.getvalue()
+
+    def test_pause_allows_stop_inside_continuation(self, tmp_path: Path, monkeypatch) -> None:
+        assert not _is_blocked(self._run(tmp_path, monkeypatch, stop_hook_active=True))
+
+    def test_pause_allows_fresh_stop_too(self, tmp_path: Path, monkeypatch) -> None:
+        assert not _is_blocked(self._run(tmp_path, monkeypatch, stop_hook_active=False))
 
 
 class TestPayloadSessionIdIsolation:
@@ -1654,7 +1548,7 @@ class TestPayloadSessionIdIsolation:
         )
 
     def test_env_session_id_wins_over_payload(self, tmp_path: Path) -> None:
-        """The payload is a FALLBACK, never an override.
+        """The legacy wrapper id remains authoritative when no native id exists.
 
         PILOT_SESSION_ID is a shell ``$$-$RANDOM`` id (installer/steps/shell_config.py)
         and is the id ``pilot register-plan`` wrote active_plan.json under
@@ -1679,6 +1573,26 @@ class TestPayloadSessionIdIsolation:
             "the env-resolved session id is what the plan writer used; the payload must "
             "not override it or the guard goes blind on wrapper-launched sessions"
         )
+
+    def test_payload_wins_over_mismatched_native_parent_id(self, tmp_path: Path) -> None:
+        """A nested Codex hook inherits its parent's thread id while its payload
+        identifies the child turn whose agent command registered the plan."""
+        project, plans_dir = self._make_project(tmp_path)
+        plan = plans_dir / "2026-09-09-child-thread.md"
+        plan.write_text("# Child\n\nStatus: PENDING\nApproved: Yes\nType: Feature\n")
+        self._register("child-thread", plan, "PENDING")
+
+        code, stdout, _ = self._run(
+            {"stop_hook_active": False, "session_id": "child-thread"},
+            plans_dir,
+            {
+                "CLAUDE_PROJECT_ROOT": str(project),
+                "CODEX_THREAD_ID": "parent-thread",
+            },
+        )
+
+        assert code == 0
+        assert _is_blocked(stdout)
 
     def test_wrapper_registered_plan_is_missed_when_env_chain_lost(self, tmp_path: Path) -> None:
         """KNOWN GAP, characterized deliberately -- this asserts current behaviour, not

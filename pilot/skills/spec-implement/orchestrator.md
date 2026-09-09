@@ -27,20 +27,13 @@ Parse the plan path or description separately from optional `--lane <id>` before
 - **Quality over speed** — never rush due to context pressure. Context warnings are informational. Finish current task with full quality — auto-compaction handles the rest.
 - **Plan file is source of truth** — re-read after auto-compaction, don't rely on conversation memory
 <!-- CC-ONLY -->
-- **NEVER stop during implementation on your own** — the stop guard blocks premature exits. If blocked with no user question to answer: your very next action must be a tool call (TaskList, Read plan, or code change); never produce text-only responses when work remains. A user message that just says "Continue" or asks for status: re-read the plan and resume from the current task.
+- **NEVER stop during implementation on your own** — the stop guard blocks premature exits. If blocked with no user question to answer and no durable interaction pause: your very next action must be a tool call (TaskList, Read plan, or code change); never produce text-only responses when work remains. User messages follow the interaction-state rule below.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-- **NEVER stop during implementation on your own** — the stop guard blocks premature exits. If blocked with no user question to answer: your very next action must be a tool call (refresh the plan, read the plan, or make the next code/test change); never produce text-only responses when work remains. A user message that just says "Continue" or asks for status: re-read the plan and resume from the current task.
+- **NEVER stop during implementation on your own** — the stop guard blocks premature exits. If blocked with no user question to answer and no durable interaction pause: your very next action must be a tool call (refresh the plan, read the plan, or make the next code/test change); never produce text-only responses when work remains. User messages follow the interaction-state rule below.
 CODEX-END -->
-- **User interruptions are answered, not steamrolled.** When the user's message questions a decision, raises a discovery, or asks something the plan does not answer: stop implementing and answer it, then engage the discussion pause so the stop guard lets the conversation breathe, and end the turn with "⏸ Paused — say resume (or `/spec resume`) to continue the plan."
-
-  ```bash
-  SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
-[ -z "$LANE_ID" ] || SESS_DIR="$SESS_DIR/lanes/$LANE_ID"
-  mkdir -p "$SESS_DIR" && touch "$SESS_DIR/spec-discussion-paused"
-  ```
-
-  Re-touch the marker on every further discussion turn. When the user signals resume ("resume", "continue with the plan", `/spec resume`): `rm -f "$SESS_DIR/spec-discussion-paused"`, apply any agreed plan amendments (Step 2 discovery protocol), and continue from the current task. ⛔ The pause is never yours to take for free: engage it only in response to the user's own message, or alongside a material-discovery question you have just put to them — never to hand work back or dodge the next task.
+- **User interruptions are answered, not steamrolled.** UserPromptSubmit records a discussion pause before this phase sees a real interruption. Answer it without restarting implementation and end with "⏸ Paused — say `resume` (or use `/spec resume`) to continue the plan." The pause persists across discussion, file edits, compaction, and Stop continuations. Only exact `resume`, `/spec resume`, or `$spec resume` clears it; words such as "continue" do not.
+- **Decision and manual waits are explicit state.** Before asking about a material discovery, run `~/.pilot/bin/pilot plan-state pause --kind decision --message "<bounded question>" $LANE_FLAG`. Before handing over a user-owned task, use `--kind manual --task N --message "<exact action>"`. A manual wait accepts exact `done`; `resume` cannot clear it. Never create a discussion pause on your own to hand work back or dodge the next task.
 
 ---
 

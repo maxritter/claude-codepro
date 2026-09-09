@@ -353,6 +353,22 @@ class TestResolveSessionId:
             assert resolve_payload_session_id("/tmp/victim") == "env-session"
             assert resolve_payload_session_id(123) == "env-session"
 
+    def test_hook_resolver_uses_payload_over_stale_native_parent_id(self):
+        from _lib.util import resolve_hook_session_id
+
+        with patch.dict("os.environ", {"CODEX_THREAD_ID": "parent-thread"}, clear=True):
+            assert resolve_hook_session_id("active-hook-thread") == "active-hook-thread"
+
+        with patch.dict("os.environ", {"CLAUDE_CODE_SESSION_ID": "active-hook-thread"}, clear=True):
+            assert resolve_hook_session_id("active-hook-thread") == "active-hook-thread"
+
+    def test_hook_resolver_preserves_legacy_wrapper_identity(self):
+        from _lib.util import resolve_hook_session_id
+
+        with patch.dict("os.environ", {"PILOT_SESSION_ID": "wrapper-session"}, clear=True):
+            assert resolve_hook_session_id("native-payload") == "wrapper-session"
+            assert resolve_hook_session_id("../unsafe") == "wrapper-session"
+
 
 class TestGetSessionCachePath:
     """Tests for get_session_cache_path()."""

@@ -18,7 +18,7 @@ Pilot Shell installs the following open-source tools during setup. Each tool is 
 | [Git](https://github.com/git/git) | Version control | GPL-2.0 |
 | [GitHub CLI](https://github.com/cli/cli) | GitHub operations from the terminal | MIT |
 | [Python 3.12](https://github.com/python/cpython) | Programming language runtime | PSF-2.0 |
-| [Node.js 22](https://github.com/nodejs/node) | JavaScript runtime | MIT |
+| [Node.js 24](https://github.com/nodejs/node) | JavaScript runtime | MIT |
 | [NVM](https://github.com/nvm-sh/nvm) | Node.js version manager | MIT |
 | [pnpm](https://github.com/pnpm/pnpm) | Fast Node.js package manager | MIT |
 | [Bun](https://github.com/oven-sh/bun) | JavaScript runtime and toolkit | MIT |
@@ -37,7 +37,7 @@ Pilot Shell installs the following open-source tools during setup. Each tool is 
 | [Ruff](https://github.com/astral-sh/ruff) | Python linter and formatter | MIT |
 | [basedpyright](https://github.com/DetachHead/basedpyright) | Python type checker | MIT |
 | [Prettier](https://github.com/prettier/prettier) | Code formatter (JS/TS/CSS/HTML) | MIT |
-| [Impeccable](https://github.com/pbakaus/impeccable) | Frontend design skill, supporting agents, provider hooks, and deterministic detector | Apache-2.0 |
+| [Impeccable](https://github.com/pbakaus/impeccable) | Frontend design skill, supporting agents, opt-in provider hooks, and deterministic detector | Apache-2.0 |
 | [TypeScript](https://github.com/microsoft/TypeScript) | TypeScript compiler | Apache-2.0 |
 | [golangci-lint](https://github.com/golangci/golangci-lint) | Go linter aggregator | GPL-3.0 |
 | [vtsls](https://github.com/yioneko/vtsls) | TypeScript language server | MIT |

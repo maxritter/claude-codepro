@@ -44,6 +44,7 @@ class TestInstallImpeccable:
             "--yes",
             "--providers=claude,codex",
             "--scope=global",
+            "--no-hooks",
         ]
         assert run.call_args.kwargs["cwd"] == tmp_path
         assert run.call_args.kwargs["shell"] is False

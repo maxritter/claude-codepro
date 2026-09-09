@@ -50,24 +50,24 @@ Before locking the contract, work backward once: does the bug have a sibling tha
 
 For each gap found, either extend `Expected (fix):` to cover it OR document why it's out of scope in `## Investigation`. The reproducing test (Task 1) only catches what the contract names — gaps here become regression-prone follow-up bugs.
 
-### Task structure — three tasks, no exceptions
+### Task structure — three agent tasks, plus proven manual checkpoints
 
 ⛔ Do NOT merge tasks. Separate checkboxes = separate proof.
 
-**Task 1 — Write Reproducing Test (RED)**
+**Agent task — Write Reproducing Test (RED)**
 Encode `Currently → Expected` via an existing public entry point. Run → must FAIL with the documented symptom. Worktree mode: commit alone before any fix code. Naming: `test_<function>_<bug>_<expected>`.
 
 **Reuse > create.** If a test class already exists for this entry point, modify it (add one new test method that encodes the bug). Do NOT create a sister test class — that violates the parsimony rule (see the testing rules § Test Parsimony).
 
 **`Trivial:` does not apply here.** The feature TDD loop's `Trivial:` escape (spec-implement's TDD loop) is feature-only. Bugfixes always require a reproducing RED test regardless of diff size — that is the bugfix lane's anti-regression guarantee, and removing it would destroy the lane's value.
 
-**Task 2 — Implement Fix at Root Cause**
-Minimal change at `Root Cause: file:line`. Fix at source, not symptom. Re-run reproducing test → must PASS. Run targeted test module(s), not full suite — full suite runs at Task 3. Diff must touch the root-cause file.
+**Agent task — Implement Fix at Root Cause**
+Minimal change at `Root Cause: file:line`. Fix at source, not symptom. Re-run reproducing test → must PASS. Run targeted test module(s), not full suite — the full suite runs in the Quality Gate agent task. Diff must touch the root-cause file.
 
-**Task 3 — Quality Gate**
+**Agent task — Quality Gate**
 Lint, type check, build (if applicable). Re-run full suite at the END (lint/type auto-fixes can break tests). UI-facing bugs: the Verification Scenario runs in verify phase, not here.
 
-**Scope scaling:** simple bugs get short tasks, complex bugs get longer tasks — but always three tasks.
+**Scope scaling:** simple bugs get short tasks, complex bugs get longer tasks — but always retain these three agent tasks. When a step truly cannot be automated, insert a separately numbered `**Owner:** User` task at the dependency point; it never replaces or combines with an agent task.
 
 **Defense-in-depth:** when the bug propagated through multiple layers, plan validation at each layer (entry point, business logic, environment guards). Document as `Defense-in-depth:` in the Fix Approach section.
 

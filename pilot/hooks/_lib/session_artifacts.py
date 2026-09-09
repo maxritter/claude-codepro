@@ -8,11 +8,8 @@ PAUSE_SENTINELS = (
     "verify-gate-pending",
 )
 
-# User-consented discussion pause. NOT one of the one-shot gate sentinels
-# above: the stop guard honors it only on user-initiated turns and never for a
-# Type: Build plan -- repeatedly on Claude Code (sticky across discussion
-# turns), consumed per honor on Codex (no stop_hook_active in its payload).
-# The skill clears it on resume.
+# Retired discussion-pause marker retained only so SessionStart migration and
+# stale-session cleanup can remove files written by older Pilot releases.
 DISCUSSION_PAUSE = "spec-discussion-paused"
 NATIVE_SPEC_PLANNING = "native-spec-planning.json"
 

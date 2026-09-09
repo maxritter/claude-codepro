@@ -295,6 +295,35 @@ def resolve_payload_session_id(value: object) -> str:
     return resolve_session_id()
 
 
+def resolve_hook_session_id(value: object) -> str:
+    """Resolve native hook identity without trusting a stale parent-agent id.
+
+    Native Claude/Codex ids normally match the payload. When they differ, the
+    payload names the event being handled while the environment belongs to a
+    parent process that launched this client, so the safe payload component
+    wins. A legacy ``PILOT_SESSION_ID`` still wins when no native id exists,
+    because older wrapper-launched agents wrote their plan under that id.
+    """
+    payload = ""
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate and _is_safe_session_component(candidate):
+            payload = candidate
+
+    for variable in ("CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID"):
+        native = os.environ.get(variable, "").strip()
+        if not native:
+            continue
+        if payload and native != payload:
+            return payload
+        return native
+
+    legacy = os.environ.get("PILOT_SESSION_ID", "").strip()
+    if legacy:
+        return legacy
+    return payload or "default"
+
+
 def _sessions_base() -> Path:
     """Get base sessions directory."""
     return Path.home() / ".pilot" / "sessions"

@@ -198,8 +198,8 @@ def _is_spec_invocation(prompt: str) -> bool:
 def _pause_control(prompt: str) -> str | None:
     """Return "pause"/"resume" when the prompt is exactly that dispatcher control.
 
-    `/spec pause` and `/spec resume` drive the discussion-pause marker (dispatcher
-    Step 1.0); they start no planning leg, so neither belongs behind the Opus
+    `/spec pause` and `/spec resume` drive durable plan interaction state
+    (dispatcher Step 1.0); they start no planning leg, so neither belongs behind the Opus
     gate. Only the exact single-token form counts: `/spec pause the video
     playback feature` is a task description and stays subject to every gate.
     """
@@ -248,7 +248,7 @@ def run_spec_mode_guard() -> int:
     if not _is_spec_invocation(prompt):
         return 0
 
-    # `/spec pause` only touches the session's discussion-pause marker --
+    # `/spec pause` only changes the registered plan's interaction state --
     # workflow-neutral, so it bypasses every gate, including the plan-mode block
     # (blocking it would strand a paused run behind the nags the pause stops).
     # `/spec resume` re-enters the workflow: it keeps the plan-mode block below

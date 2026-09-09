@@ -49,6 +49,12 @@ SCAN_FILES: list[str] = [
     "pilot/.mcp.json",
 ]
 
+WORKFLOW_RUNTIME_FILES: list[str] = [
+    ".github/workflows/release.yml",
+    ".github/workflows/release-dev.yml",
+    ".github/workflows/deploy-website.yml",
+]
+
 # Patterns that flag any python/shell file:
 PY_SH_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("@latest tag", re.compile(r"@latest\b")),
@@ -70,6 +76,8 @@ _EXACT_SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][\w.+-]+)?$")
 # readable, so the literals live in the script - same class as the PyPI set):
 UV_BOOTSTRAP_URL_RE = re.compile(r'^\s*local UV_INSTALL_URL="([^"]+)"')
 UV_BOOTSTRAP_SHA_RE = re.compile(r'^\s*local UV_INSTALL_SHA256="([0-9a-f]{64})"')
+NODE_WORKFLOW_PIN_RE = re.compile(r'^\s*node-version:\s*["\']?([^"\'\s#]+)')
+BUN_WORKFLOW_PIN_RE = re.compile(r'^\s*bun-version:\s*["\']?([^"\'\s#]+)')
 
 NOQA_PATTERN = re.compile(r"#\s*noqa:\s*drift-check\b\s*(?:#\s*(.*))?")
 
@@ -388,6 +396,63 @@ def cross_reference_uv_bootstrap(path: Path, manifest_path: Path | None = None) 
     return findings
 
 
+def cross_reference_workflow_runtimes(paths: list[Path], manifest_path: Path | None = None) -> list[Finding]:
+    """Require CI's Node/Bun setup pins to match Pilot's runtime manifest."""
+    from installer.manifest import load
+
+    manifest = load(path=manifest_path)
+    node_entry = next(
+        (entry for entry in manifest.entries if entry.brew_formula and entry.brew_formula.startswith("node@")),
+        None,
+    )
+    bun_entry = next((entry for entry in manifest.entries if entry.id == "bun-brew"), None)
+    if node_entry is None or bun_entry is None:
+        return [
+            Finding(
+                file=manifest_path or REPO_ROOT_DEFAULT / "installer/upstreams.yaml",
+                line=0,
+                message="manifest must define node@<major> and bun-brew runtime entries",
+            )
+        ]
+
+    expected_node = node_entry.version
+    expected_bun = bun_entry.version
+    findings: list[Finding] = []
+    node_pins = 0
+    bun_pins = 0
+    for path in paths:
+        lines, read_finding = _iter_lines(path)
+        if read_finding is not None:
+            findings.append(read_finding)
+            continue
+        for ctx in lines:
+            if match := NODE_WORKFLOW_PIN_RE.match(ctx.text):
+                node_pins += 1
+                if match.group(1) != expected_node:
+                    findings.append(
+                        Finding(
+                            file=path,
+                            line=ctx.line_no,
+                            message=(f"Node workflow pin {match.group(1)!r} != manifest version {expected_node!r}"),
+                        )
+                    )
+            if match := BUN_WORKFLOW_PIN_RE.match(ctx.text):
+                bun_pins += 1
+                if match.group(1) != expected_bun:
+                    findings.append(
+                        Finding(
+                            file=path,
+                            line=ctx.line_no,
+                            message=f"Bun workflow pin {match.group(1)!r} != manifest version {expected_bun!r}",
+                        )
+                    )
+    if node_pins == 0:
+        findings.append(Finding(file=paths[0], line=0, message="no Node workflow pins found"))
+    if bun_pins == 0:
+        findings.append(Finding(file=paths[0], line=0, message="no Bun workflow pins found"))
+    return findings
+
+
 def scan_file(path: Path) -> list[Finding]:
     """Run the appropriate pattern set for `path`. Returns all findings."""
     if not path.exists():
@@ -423,6 +488,7 @@ def main(repo_root: Path = REPO_ROOT_DEFAULT, json_mode: bool = False) -> int:
             findings.extend(cross_reference_mcp(path))
         if path.name == "install.sh" and path.exists():
             findings.extend(cross_reference_uv_bootstrap(path))
+    findings.extend(cross_reference_workflow_runtimes([repo_root / rel for rel in WORKFLOW_RUNTIME_FILES]))
 
     if json_mode:
         print(
@@ -458,6 +524,7 @@ __all__ = [
     "scan_file",
     "cross_reference_mcp",
     "cross_reference_uv_bootstrap",
+    "cross_reference_workflow_runtimes",
     "validate_manifest",
     "main",
 ]

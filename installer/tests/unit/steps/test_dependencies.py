@@ -226,13 +226,23 @@ class TestDependenciesStep:
         mock_plugin_deps.return_value = True
 
         step = DependenciesStep()
+        install_labels: list[str] = []
+
+        def run_and_capture_label(_ui, label, install_fn, *args):
+            install_labels.append(label)
+            return install_fn(*args) if args else install_fn()
+
         with tempfile.TemporaryDirectory() as tmpdir:
             ctx = InstallContext(
                 project_dir=Path(tmpdir),
                 ui=Console(non_interactive=True),
             )
 
-            step.run(ctx)
+            with patch(
+                "installer.steps.dependencies._install_with_spinner",
+                side_effect=run_and_capture_label,
+            ):
+                step.run(ctx)
 
             mock_nodejs.assert_called_once()
             mock_uv.assert_called_once()
@@ -249,6 +259,8 @@ class TestDependenciesStep:
             _mock_agent_browser.assert_called_once()
             _mock_impeccable.assert_called_once()
             _mock_open_claude_design.assert_called_once()
+            assert "Impeccable (skills, agents, detector; hooks opt-in)" in install_labels
+            assert "Impeccable (skills, agents, hooks, detector)" not in install_labels
 
 
 class TestAgentInstallRemoved:
@@ -1035,7 +1047,10 @@ class TestInitializeCodegraph:
         codegraph_dir = tmp_path / ".codegraph"
         codegraph_dir.mkdir()
 
-        with patch("installer.steps.dependencies._run_bash_with_retry", return_value=True) as mock_bash:
+        with (
+            patch("installer.steps.dependencies._codegraph_reindex_recommended", return_value=False),
+            patch("installer.steps.dependencies._run_bash_with_retry", return_value=True) as mock_bash,
+        ):
             result = initialize_codegraph(tmp_path)
 
         assert result is True
@@ -1043,6 +1058,55 @@ class TestInitializeCodegraph:
         assert not any("codegraph init" in c for c in calls)
         assert not any("codegraph index" in c for c in calls)
         assert any("codegraph sync" in c for c in calls)
+
+    @patch("installer.steps.dependencies._has_git_commits", return_value=True)
+    @patch("installer.steps.dependencies.command_exists", return_value=True)
+    @patch("installer.steps.dependencies._is_codegraph_indexed", return_value=True)
+    @patch("installer.steps.dependencies._codegraph_reindex_recommended", return_value=True)
+    def test_rebuilds_existing_index_when_codegraph_recommends_it(
+        self,
+        _mock_reindex,
+        _mock_indexed,
+        _mock_cmd,
+        _mock_commits,
+        tmp_path: Path,
+    ):
+        from installer.steps.dependencies import initialize_codegraph
+
+        (tmp_path / ".git").mkdir()
+        (tmp_path / ".codegraph").mkdir()
+
+        with patch("installer.steps.dependencies._run_bash_with_retry", return_value=True) as mock_bash:
+            assert initialize_codegraph(tmp_path) is True
+
+        index_calls = [call for call in mock_bash.call_args_list if "codegraph index" in call.args[0]]
+        assert len(index_calls) == 1
+        assert index_calls[0].kwargs["stream"] is True
+
+    @patch("installer.steps.dependencies.subprocess.run")
+    def test_reindex_recommendation_comes_from_status_json(self, mock_run, tmp_path: Path):
+        from installer.steps.dependencies import _codegraph_reindex_recommended
+
+        mock_run.return_value = subprocess.CompletedProcess(
+            ["codegraph", "status", "--json"],
+            0,
+            stdout='{"index":{"reindexRecommended":true}}',
+            stderr="",
+        )
+
+        assert _codegraph_reindex_recommended(tmp_path) is True
+        assert mock_run.call_args.args[0] == ["codegraph", "status", "--json"]
+        assert mock_run.call_args.kwargs["env"]["CODEGRAPH_TELEMETRY"] == "0"
+
+    @patch("installer.steps.dependencies.subprocess.run")
+    def test_invalid_status_json_does_not_force_reindex(self, mock_run, tmp_path: Path):
+        from installer.steps.dependencies import _codegraph_reindex_recommended
+
+        mock_run.return_value = subprocess.CompletedProcess(
+            ["codegraph", "status", "--json"], 0, stdout="not-json", stderr=""
+        )
+
+        assert _codegraph_reindex_recommended(tmp_path) is False
 
     @patch("installer.steps.dependencies.command_exists", return_value=False)
     def test_returns_false_when_codegraph_not_installed(self, _mock_cmd, tmp_path: Path):
@@ -1371,16 +1435,12 @@ class TestInstallPluginDependencies:
 
 
 class TestNvmInstallBugCondition:
-    """Bug-condition tests: verify NVM installation uses 300s timeout and explicit NVM_DIR.
-
-    These tests FAIL on current code because timeout is 120s and NVM_DIR is not set.
-    They pass after the fix is implemented.
-    """
+    """Bug-condition tests: verify NVM installation uses 300s timeout and explicit NVM_DIR."""
 
     @patch("installer.steps.dependencies._run_bash_with_retry")
     @patch("installer.steps.dependencies.command_exists")
     def test_nvm_install_uses_300s_timeout(self, mock_cmd_exists, mock_run):
-        """nvm install 22 must use 300s timeout (not the default 120s)."""
+        """nvm install 24 must use 300s timeout (not the default 120s)."""
         from installer.steps.dependencies import install_nodejs
 
         mock_cmd_exists.return_value = False
@@ -1404,7 +1464,7 @@ class TestNvmInstallBugCondition:
     @patch("installer.steps.dependencies._run_bash_with_retry")
     @patch("installer.steps.dependencies.command_exists")
     def test_nvm_install_sets_nvm_dir_in_command(self, mock_cmd_exists, mock_run):
-        """nvm install 22 command must explicitly export NVM_DIR before sourcing nvm.sh."""
+        """nvm install 24 command must explicitly export NVM_DIR before sourcing nvm.sh."""
         from installer.steps.dependencies import install_nodejs
 
         mock_cmd_exists.return_value = False
@@ -1428,14 +1488,13 @@ class TestNvmInstallBugCondition:
 class TestNvmInstallPreservation:
     """Preservation tests: NVM behavior that must NOT change after the timeout/NVM_DIR fix."""
 
-    @patch("installer.steps.dependencies.command_exists")
-    def test_preservation_install_nodejs_returns_true_when_node_installed(self, mock_cmd_exists):
-        """PRESERVATION: install_nodejs() returns True immediately when node is already in PATH."""
+    @patch("installer.steps.dependencies._node_major_version", return_value=24)
+    def test_preservation_install_nodejs_returns_true_when_node24_installed(self, _mock_node_version):
+        """PRESERVATION: install_nodejs() returns immediately for a compatible Node."""
         import os
 
         from installer.steps.dependencies import install_nodejs
 
-        mock_cmd_exists.return_value = True
         original_path = os.environ.get("PATH", "")
         result = install_nodejs()
         assert result is True
@@ -1456,18 +1515,35 @@ class TestNvmInstallPreservation:
 
         assert result is False
 
+    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
+    @patch("installer.steps.dependencies._node_major_version", return_value=22)
+    @patch("installer.steps.dependencies.command_exists", return_value=True)
+    def test_node22_is_upgraded_through_pinned_nvm(self, _mock_exists, _mock_node_version, mock_run, tmp_path: Path):
+        """A present but incompatible Node must not bypass Pilot's Node 24 baseline."""
+        nvm_dir = tmp_path / ".nvm"
+        nvm_dir.mkdir()
+        (nvm_dir / "nvm.sh").touch()
+
+        from installer.steps.dependencies import install_nodejs
+
+        with patch.object(Path, "home", return_value=tmp_path):
+            assert install_nodejs() is True
+
+        install_call = next(call for call in mock_run.call_args_list if "nvm install" in call.args[0])
+        assert "nvm install 24" in install_call.args[0]
+        assert "nvm use 24" in install_call.args[0]
+
 
 class TestInstallNodejsPathUpdate:
     """Test that install_nodejs updates PATH after NVM installation."""
 
-    @patch("installer.steps.dependencies.command_exists")
-    def test_install_nodejs_returns_true_when_already_installed(self, mock_cmd_exists):
-        """install_nodejs returns True without modifying PATH when node is already installed."""
+    @patch("installer.steps.dependencies._node_major_version", return_value=24)
+    def test_install_nodejs_returns_true_when_already_installed(self, _mock_node_version):
+        """install_nodejs leaves PATH alone when compatible Node is installed."""
         import os
 
         from installer.steps.dependencies import install_nodejs
 
-        mock_cmd_exists.return_value = True
         original_path = os.environ.get("PATH", "")
 
         result = install_nodejs()
@@ -1494,7 +1570,7 @@ class TestInstallNodejsPathUpdate:
                 nvm_dir = home_dir / ".nvm"
                 nvm_dir.mkdir()
                 (nvm_dir / "nvm.sh").touch()
-                nvm_node_bin = nvm_dir / "versions" / "node" / "v22.0.0" / "bin"
+                nvm_node_bin = nvm_dir / "versions" / "node" / "v24.20.0" / "bin"
                 nvm_node_bin.mkdir(parents=True)
 
                 with patch.object(Path, "home", return_value=home_dir):

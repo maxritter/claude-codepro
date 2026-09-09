@@ -13,17 +13,12 @@ ELSE:
 
 ### 1.0 Discussion pause control (`/spec pause`, `/spec resume`)
 
-The stop guard honors a session-scoped `spec-discussion-paused` marker on user-initiated turns, so the user can hold a running /spec open for free-form discussion — questioning a decision, digesting a mid-implementation discovery — without "IMMEDIATELY continue" blocks on every reply.
+The UserPromptSubmit hook records a plan-bound interaction pause before the agent answers a real interruption. The stop guard honors that state for the whole discussion — even when the runtime still reports a Stop continuation — without "IMMEDIATELY continue" blocks on every reply.
 
-For lane runs, read `agent-gate-protocol.md`: the lane marker records its own pending state, while the session-only stop reader remains the coordinator's responsibility. Relay the decision to the coordinator and yield through the native agent lifecycle; never touch the coordinator's marker.
+For lane runs, read `agent-gate-protocol.md`: the lane records its own pending state while the session-only stop reader remains the coordinator's responsibility. Relay the decision to the coordinator and yield through the native agent lifecycle; never change the coordinator's state.
 
-```bash
-SESS_DIR="$HOME/.pilot/sessions/${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-default}}}"
-[ -z "$LANE_ID" ] || SESS_DIR="$SESS_DIR/lanes/$LANE_ID"
-```
-
-- **`pause`:** If `$SESS_DIR/active_plan.json` is missing, report that no /spec run is active in this session and stop. Read the registered plan's `Type:` header — if `Build`, report that the discussion pause is /spec-only (the stop guard refuses it for a Buildout; /build finishes through its own hand-back doors, and the double-stop escape still force-exits) and stop. Otherwise recreate the marker fresh so a stale binding from an earlier plan cannot linger — `mkdir -p "$SESS_DIR" && rm -f "$SESS_DIR/spec-discussion-paused" && touch "$SESS_DIR/spec-discussion-paused"` — confirm "⏸ Paused — the plan holds while we discuss. Say resume (or `/spec resume`) to continue.", and end the turn. While paused, answer the user normally and re-touch the marker each discussion turn.
-- **`resume`:** `rm -f "$SESS_DIR/spec-discussion-paused"`, then read the plan from `active_plan.json` and dispatch by status (Section 2). ⛔ Do NOT edit the plan here — the dispatcher's tool boundary stands; amendments agreed during the discussion are applied by the dispatched phase skill (spec-implement's discovery protocol) before it continues the task list. No active plan → report that and stop.
+- **`pause`:** Run `~/.pilot/bin/pilot plan-state pause --kind discussion $LANE_FLAG`. A missing active plan or Buildout returns an error; report it and stop. Otherwise confirm "⏸ Paused — the plan holds while we discuss. Say `resume` (or use `/spec resume`) to continue." and end the turn. Any other discussion wording, including "continue", leaves the plan paused.
+- **`resume`:** Run `~/.pilot/bin/pilot plan-state resume $LANE_FLAG`, then read the registered plan and dispatch by status (Section 2). ⛔ Do NOT edit the plan here — the dispatcher's tool boundary stands; the dispatched phase applies any agreed amendments before continuing. No active plan → report that and stop.
 
 ### 1.1 Detect Type (new plans only)
 

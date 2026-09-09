@@ -120,6 +120,43 @@ test('safe in-repository shared instruction files are accepted in either directi
   }
 })
 
+test('externally generated instruction pairs stay byte-identical in every mode', () => {
+  const repo = makeRepo()
+  const generated = target => `<!--\n🤖 AI-RULEZ :: GENERATED FILE — DO NOT EDIT\nSource: .ai-rulez/config.toml | Target: ${target}\n-->\n\n# ${target}\n`
+  const agents = generated('AGENTS.md')
+  const claude = generated('CLAUDE.md')
+  try {
+    writeFileSync(path.join(repo, 'AGENTS.md'), agents)
+    writeFileSync(path.join(repo, 'CLAUDE.md'), claude)
+
+    for (const mode of ['--check', '--write', '--install']) {
+      const result = run(repo, mode)
+      assert.equal(result.status, 0, `${mode}: ${result.stderr}`)
+      assert.equal(readFileSync(path.join(repo, 'AGENTS.md'), 'utf8'), agents)
+      assert.equal(readFileSync(path.join(repo, 'CLAUDE.md'), 'utf8'), claude)
+    }
+  } finally {
+    cleanup(repo)
+  }
+})
+
+test('mismatched generated provenance remains a preserved conflict', () => {
+  const repo = makeRepo({
+    claude: '<!-- GENERATED FILE — DO NOT EDIT\nSource: other/config.toml | Target: CLAUDE.md\n-->\n',
+  })
+  try {
+    writeFileSync(
+      path.join(repo, 'AGENTS.md'),
+      '<!-- GENERATED FILE — DO NOT EDIT\nSource: .ai-rulez/config.toml | Target: AGENTS.md\n-->\n',
+    )
+    const result = run(repo, '--write')
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /refusing to overwrite nontrivial CLAUDE\.md/)
+  } finally {
+    cleanup(repo)
+  }
+})
+
 test('instruction symlinks outside the exact repository counterpart are rejected', () => {
   for (const linkedFile of ['AGENTS.md', 'CLAUDE.md']) {
     const repo = makeRepo()
@@ -848,6 +885,30 @@ test('stale AGENTS.md rule reference fails when no corresponding file exists', (
     const result = run(repo, '--check')
     assert.equal(result.status, 1)
     assert.match(result.stderr, /AGENTS\.md references missing rule file: \.claude\/rules\/deleted-rule\.md/)
+  } finally {
+    cleanup(repo)
+  }
+})
+
+test('global and parent-relative Claude rule paths are not project rule references', () => {
+  const repo = makeRepo()
+  try {
+    appendAgents(
+      repo,
+      [
+        '',
+        '- `~/.claude/rules/development-practices.md` — global rule',
+        '- `$HOME/.claude/rules/security.md` — global rule',
+        '- `/opt/team/.claude/rules/shared.md` — absolute rule',
+        '- `../.claude/rules/parent.md` — parent rule',
+        '',
+      ].join('\n'),
+    )
+
+    for (const mode of ['--check', '--write']) {
+      const result = run(repo, mode)
+      assert.equal(result.status, 0, `${mode}: ${result.stderr}`)
+    }
   } finally {
     cleanup(repo)
   }

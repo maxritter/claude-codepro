@@ -23,6 +23,7 @@ from codegraph_init import (
     _kill_group,
     _op_timeout,
     _recover_corrupt_db,
+    _reindex_recommended,
     _run,
     _run_group,
     main,
@@ -101,6 +102,30 @@ class TestCorruptDb:
 
     def test_recover_noop_when_missing(self, tmp_path: Path) -> None:
         assert _recover_corrupt_db(tmp_path) is False
+
+
+class TestReindexRecommendation:
+    @patch("codegraph_init._run_group")
+    def test_reads_nested_status_flag(self, mock_group: MagicMock, tmp_path: Path) -> None:
+        mock_group.return_value = subprocess.CompletedProcess(
+            ["codegraph", "status", "--json"],
+            0,
+            b'{"index":{"reindexRecommended":true}}',
+            b"",
+        )
+
+        assert _reindex_recommended(tmp_path, 10) is True
+        mock_group.assert_called_once_with(["codegraph", "status", "--json"], tmp_path, 10)
+
+    @patch("codegraph_init._run_group")
+    def test_invalid_or_failed_status_is_not_recommended(self, mock_group: MagicMock, tmp_path: Path) -> None:
+        mock_group.return_value = subprocess.CompletedProcess(
+            ["codegraph", "status", "--json"], 0, b"not-json", b""
+        )
+        assert _reindex_recommended(tmp_path, 10) is False
+
+        mock_group.return_value = None
+        assert _reindex_recommended(tmp_path, 10) is False
 
 
 class TestRun:
@@ -302,6 +327,60 @@ class TestMain:
 
         sync_call = call(["codegraph", "sync", "-q"], tmp_path, SYNC_TIMEOUT_SECONDS)
         assert sync_call in mock_group.call_args_list
+
+    @patch("codegraph_init._op_timeout", side_effect=lambda _deadline, cap: cap)
+    @patch("codegraph_init._run_group")
+    @patch("codegraph_init._has_git_commits", return_value=True)
+    @patch("codegraph_init.shutil.which", return_value="/usr/bin/codegraph")
+    @patch("codegraph_init._get_project_dir")
+    def test_rebuilds_existing_index_once_when_status_recommends_it(
+        self,
+        mock_dir: MagicMock,
+        _mock_which: MagicMock,
+        _mock_commits: MagicMock,
+        mock_group: MagicMock,
+        _mock_op_timeout: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        (tmp_path / ".git").mkdir()
+        cg = tmp_path / ".codegraph"
+        cg.mkdir()
+        (cg / "codegraph.db").write_bytes(b"\x00" * 2_000_000)
+        mock_dir.return_value = tmp_path
+
+        def group_side_effect(cmd, cwd, timeout):
+            if cmd == ["codegraph", "status", "--json"]:
+                return subprocess.CompletedProcess(cmd, 0, b'{"index":{"reindexRecommended":true}}', b"")
+            return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+        mock_group.side_effect = group_side_effect
+        with patch("codegraph_init.Path.home", return_value=tmp_path):
+            main()
+
+        assert mock_group.call_args_list.count(call(["codegraph", "index"], tmp_path, INDEX_TIMEOUT_SECONDS)) == 1
+        assert not any(args.args[0] == ["codegraph", "sync", "-q"] for args in mock_group.call_args_list)
+
+    @patch("codegraph_init._run_group")
+    @patch("codegraph_init._has_git_commits", return_value=True)
+    @patch("codegraph_init.shutil.which", return_value="/usr/bin/codegraph")
+    @patch("codegraph_init._get_project_dir")
+    def test_codex_never_initializes_a_new_repository(
+        self,
+        mock_dir: MagicMock,
+        _mock_which: MagicMock,
+        _mock_commits: MagicMock,
+        mock_group: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        (tmp_path / ".git").mkdir()
+        mock_dir.return_value = tmp_path
+        monkeypatch.setenv("CLAUDE_PROJECT_PLATFORM", "codex")
+
+        with patch("codegraph_init.Path.home", return_value=tmp_path):
+            main()
+
+        mock_group.assert_not_called()
 
     @patch("codegraph_init.subprocess.run")
     @patch("codegraph_init.shutil.which", return_value="/usr/bin/codegraph")

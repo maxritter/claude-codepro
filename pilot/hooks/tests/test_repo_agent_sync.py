@@ -684,6 +684,34 @@ class TestStop:
 
 @pytest.mark.skipif(shutil.which("node") is None or shutil.which("git") is None, reason="requires node and git")
 class TestBundledCheckerIntegration:
+    def test_external_generator_pair_is_preserved_and_edit_feedback_names_source(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "--quiet", str(repo)], check=True)
+        local_checker = _enroll(repo)
+        bundled = repo_agent_sync._bundled_checker()
+        assert bundled is not None
+        local_checker.write_bytes(bundled.read_bytes())
+        def generated(target: str) -> str:
+            return (
+                "<!--\n🤖 AI-RULEZ :: GENERATED FILE — DO NOT EDIT\n"
+                f"Source: .ai-rulez/config.toml | Target: {target}\n-->\n"
+            )
+        agents = generated("AGENTS.md")
+        claude = generated("CLAUDE.md")
+        (repo / "AGENTS.md").write_text(agents)
+        (repo / "CLAUDE.md").write_text(claude)
+        _make_skill(repo)
+
+        assert handle(_session_payload(repo)) == {"continue": True}
+        assert (repo / "AGENTS.md").read_text() == agents
+        assert (repo / "CLAUDE.md").read_text() == claude
+
+        pre = handle(_pre_payload(repo, "Edit", {"file_path": "CLAUDE.md"}))
+        assert pre["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert ".ai-rulez/config.toml" in pre["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "generated from AGENTS.md" not in pre["hookSpecificOutput"]["permissionDecisionReason"]
+
     def test_stop_accepts_safe_shared_instruction_and_skill_aliases(self, tmp_path: Path) -> None:
         """Exercise the real bundled checker through Overlord's alias layout."""
         repo = tmp_path / "repo"

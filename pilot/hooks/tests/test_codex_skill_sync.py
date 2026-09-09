@@ -713,7 +713,7 @@ class TestCheckLicense:
             patch("codex_skill_sync._check_license", return_value=True),
             patch("codex_skill_sync._sync_codex_skills", return_value=(2, 0)),
             patch("codex_skill_sync._sync_codex_review_agents", return_value=(1, 0)),
-            patch("codex_skill_sync._sync_codex_env_vars", return_value=7),
+            patch("codex_skill_sync._sync_codex_env_vars", return_value=8),
         ):
             main()
 
@@ -798,7 +798,7 @@ class TestSyncCodexEnvVars:
         with patch("codex_skill_sync.Path.home", return_value=tmp_path):
             count = _sync_codex_env_vars()
 
-        assert count == 7
+        assert count == 8
         content = codex_config.read_text()
         assert "[shell_environment_policy.set]" in content
         assert 'PILOT_PLAN_APPROVAL_ENABLED = "false"' in content
@@ -806,6 +806,36 @@ class TestSyncCodexEnvVars:
         # Automated model switching is Claude-Code-only -- Codex never gets the var.
         assert "PILOT_MODEL_SWITCH_ENABLED" not in content
         assert 'PILOT_PLAN_QUESTIONS_ENABLED = "true"' in content
+        assert 'IMPECCABLE_CACHE_ROOT = "~/.pilot/cache/impeccable"' in content
+
+    def test_preserves_user_configured_impeccable_cache_root(self, tmp_path: Path) -> None:
+        codex_config = tmp_path / ".codex" / "config.toml"
+        codex_config.parent.mkdir(parents=True)
+        codex_config.write_text(
+            "[shell_environment_policy.set]\n"
+            'IMPECCABLE_CACHE_ROOT = "/Volumes/cache/impeccable"\n'
+        )
+
+        with patch("codex_skill_sync.Path.home", return_value=tmp_path):
+            _sync_codex_env_vars()
+
+        parsed = tomllib.loads(codex_config.read_text())
+        assert parsed["shell_environment_policy"]["set"]["IMPECCABLE_CACHE_ROOT"] == "/Volumes/cache/impeccable"
+
+    def test_ignores_same_named_key_outside_shell_environment_table(self, tmp_path: Path) -> None:
+        codex_config = tmp_path / ".codex" / "config.toml"
+        codex_config.parent.mkdir(parents=True)
+        codex_config.write_text(
+            "[other.table]\n"
+            'IMPECCABLE_CACHE_ROOT = "/not-an-environment-value"\n'
+        )
+
+        with patch("codex_skill_sync.Path.home", return_value=tmp_path):
+            _sync_codex_env_vars()
+
+        parsed = tomllib.loads(codex_config.read_text())
+        assert parsed["other"]["table"]["IMPECCABLE_CACHE_ROOT"] == "/not-an-environment-value"
+        assert parsed["shell_environment_policy"]["set"]["IMPECCABLE_CACHE_ROOT"] == "~/.pilot/cache/impeccable"
 
     def test_writes_env_vars_to_codex_home_config(self, tmp_path: Path) -> None:
         codex_home = tmp_path / "custom-codex"
@@ -819,7 +849,7 @@ class TestSyncCodexEnvVars:
         ):
             count = _sync_codex_env_vars()
 
-        assert count == 7
+        assert count == 8
         assert 'PILOT_CHANGES_REVIEW_ENABLED = "true"' in codex_config.read_text()
         assert not (tmp_path / ".codex" / "config.toml").exists()
 
@@ -865,7 +895,7 @@ class TestSyncCodexEnvVars:
         with patch("codex_skill_sync.Path.home", return_value=tmp_path):
             count = _sync_codex_env_vars()
 
-        assert count == 7
+        assert count == 8
         content = codex_config.read_text()
         assert content.count("[shell_environment_policy.set]") == 1
         parsed = tomllib.loads(content)

@@ -25,6 +25,10 @@ One responsibility per file. Files that change together live together. In existi
 
 **Objective:** [REQUIRED — 2-3 sentences describing what this task does and why. Reads as the "what this task does" line shown below the title in the Console / pilot-shell.com spec viewer. State the change in plain prose, not bullet form. If a specific E2E scenario verifies it, reference it inline: "verified by TS-002".]
 
+**Owner:** [OPTIONAL — write `User` only when the action cannot be automated; omit for ordinary agent work.]
+
+**User Action:** [REQUIRED only with `Owner: User` — one exact, non-secret action the user performs locally.]
+
 **Files:**
 
 - Create: `exact/path/to/file.py`
@@ -46,6 +50,7 @@ One responsibility per file. Files that change together live together. In existi
 **Rules:**
 
 - **DoD must be verifiable.** ✅ "GET /api/users?role=admin returns only admin users" ❌ "Feature works correctly".
+- **Manual work is first-class but never mixed.** A user-owned task carries both `**Owner:** User` and `**User Action:**`; split any surrounding agent preparation or verification into adjacent agent-owned tasks. Omit both labels for normal agent tasks. Buildouts cannot contain user-owned tasks.
 - **`Files:` must list reviewable implementation artifacts.** Do not use the plan file under `docs/plans/...` as the only file for a task; in Pilot Shell that directory is gitignored workflow state and `spec-verify` reviewers scope to reviewable repository diffs. For smoke tests or "no production behavior change" specs, create or modify a harmless non-production, non-ignored repository artifact (for example a root-level smoke evidence file) when the workflow needs a diff target.
 - **Tests-pass and no-diagnostics are implicit** — every task must end with those. Do NOT add them as DoD bullets; only list task-specific behaviors.
 - **The last DoD bullet IS the verify command.** No separate `Verify:` block.

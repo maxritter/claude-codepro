@@ -51,6 +51,8 @@ Every task under `## Implementation Tasks` MUST use this exact shape:
 - [ ] Verify: `command`
 ```
 
+For a user-owned task only, insert `**Owner:** User` and `**User Action:** <one exact local action>` after Objective. Omit both fields for agent-owned tasks.
+
 Do not write plain labels like `Files:`, `Key Decisions:`, `Definition of Done:`, or a separate `Verification:` block. Those do not render as the task-card fields.
 CODEX-END -->
 

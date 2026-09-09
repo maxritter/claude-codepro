@@ -4,11 +4,9 @@ A synchronous permitted question needs no disk sentinel. For an asynchronous per
 
 The user reviews the concrete verified change before the plan becomes `VERIFIED`. Reuse explicit approval already given for this same result; do not ask again because a phase changed or the context compacted. Changed code or unresolved new feedback may require a fresh review.
 
-### Present the reviewable result
+### Arm exactly one gate before presenting
 
-Summarize the changes, checks actually passed, runtime evidence, and material gaps. Point to the Console's Changes tab and mention that inline annotations are saved automatically.
-
-Offer the decisions naturally: approve this result, address feedback, or wait while the user tests it.
+Do not emit the review summary or approval question yet. First choose the current runtime's permitted question transport. A prose fallback must have its sentinel on disk before any user-visible question; asking first and relying on Stop feedback to remember the sentinel recreates the runaway loop this gate exists to prevent.
 
 <!-- CC-ONLY -->
 Use `AskUserQuestion` when available and permitted for this approval. It intrinsically waits for the answer; do not add a second confirmation.
@@ -17,7 +15,7 @@ Use `AskUserQuestion` when available and permitted for this approval. It intrins
 Use the runtime's structured user-input tool when exposed and permitted for approval in the current mode. Follow its actual schema. If it supports asynchronous questions, continue independent work while the answer is pending; do not finalize the plan before the required answer arrives.
 CODEX-END -->
 
-When no permitted structured tool can ask this approval, follow `$HOME/.pilot/agents/agent-gate-protocol.md` with `GATE_NAME=Code review gate` and `SENTINEL_PATH=verify-gate-pending`. Ask one concise prose question and yield:
+When no permitted structured tool can ask this approval, follow `$HOME/.pilot/agents/agent-gate-protocol.md` with `GATE_NAME=Code review gate` and `SENTINEL_PATH=verify-gate-pending`. Run this before presenting or asking anything:
 
 ```bash
 SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-}}}"
@@ -27,7 +25,13 @@ SESS_DIR="$HOME/.pilot/sessions/$SESSION_ID"
 mkdir -p "$SESS_DIR" && touch "$SESS_DIR/verify-gate-pending"
 ```
 
-The guard honors this sentinel for the applicable `Status: COMPLETE` state. Remove it on resume; re-touch it only when another genuine approval question needs a yield.
+The guard honors this sentinel for the applicable `Status: COMPLETE` state. UserPromptSubmit consumes it when the user's next message arrives so that expected answer is not mistaken for a new interruption. Re-touch it only when another genuine approval question needs a yield.
+
+### Present the reviewable result
+
+After the structured question is ready or the prose sentinel write succeeded, summarize the changes, checks actually passed, runtime evidence, and material gaps. Point to the Console's Changes tab and mention that inline annotations are saved automatically.
+
+Offer the decisions naturally: approve this result, address feedback, or wait while the user tests it. For the prose path, this is the final response: make no later tool call and yield immediately.
 
 ### Interpret the response
 

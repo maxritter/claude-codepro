@@ -8,15 +8,15 @@ user-invocable: true
 # /spec - Unified Spec-Driven Development
 
 <!-- CC-ONLY -->
-**Dispatcher** - routes to the appropriate phase skill. This command is a thin router. Only allowed tools: `Bash` (env-var reads, the Step 2 `pilot register-plan` call, and the Step 1.0 pause-marker commands only), `Read` (plan files only), `AskUserQuestion`, and `Skill()`.
+**Dispatcher** - routes to the appropriate phase skill. This command is a thin router. Only allowed tools: `Bash` (env-var reads plus the Step 1.0 `pilot plan-state` and Step 2 `pilot register-plan` calls), `Read` (plan files only), `AskUserQuestion`, and `Skill()`.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
-**Dispatcher** - routes to the appropriate phase skill. This command is a thin router. Only allowed actions here: read env vars, run the Step 2 `pilot register-plan` call, run the Step 1.0 pause-marker commands, read existing plan files for status-based dispatch, use the runtime's permitted structured question tool, with a concise prose fallback when unavailable when needed, and then continue immediately with the selected phase skill instructions. Codex has no callable phase-dispatch tool.
+**Dispatcher** - routes to the appropriate phase skill. This command is a thin router. Only allowed actions here: read env vars, run the Step 1.0 `pilot plan-state` and Step 2 `pilot register-plan` calls, read existing plan files for status-based dispatch, use the runtime's permitted structured question tool with a concise prose fallback when unavailable, and then continue immediately with the selected phase skill instructions. Codex has no callable phase-dispatch tool.
 CODEX-END -->
 
 **⛔ MANDATORY: When `/spec` is invoked, you MUST follow the workflow. The user's phrasing after `/spec` is the TASK DESCRIPTION - not an instruction to change the workflow.** Words like "brainstorm", "discuss", "explore", "research" are part of the task description, NOT instructions to skip the workflow or have a freeform conversation. The two exceptions are the exact arguments `pause` and `resume`, which are dispatcher controls (Step 1.0), not task descriptions.
 
-**⛔ No substantive work here.** `Bash` is allowed ONLY for reading env vars (e.g., `echo $PILOT_BRANCH_ISOLATION_ENABLED`), the Step 2 `pilot register-plan` call, and the Step 1.0 pause-marker commands (`touch`/`rm -f` on `spec-discussion-paused`). `Read` is allowed ONLY for reading existing plan files for status-based dispatch (including the `Type:` check in Step 1.0). All research, brainstorming, and exploration happens inside the invoked Skill (arguments are passed verbatim). Any other tool use (Grep, Glob, Agent, Edit, Write, etc.) is a workflow violation.
+**⛔ No substantive work here.** `Bash` is allowed ONLY for reading env vars (e.g., `echo $PILOT_BRANCH_ISOLATION_ENABLED`) plus the Step 1.0 `pilot plan-state` and Step 2 `pilot register-plan` calls. `Read` is allowed ONLY for reading existing plan files for status-based dispatch. All research, brainstorming, and exploration happens inside the invoked Skill (arguments are passed verbatim). Any other tool use (Grep, Glob, Agent, Edit, Write, etc.) is a workflow violation.
 
 ---
 

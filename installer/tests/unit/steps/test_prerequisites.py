@@ -36,7 +36,8 @@ class TestPrerequisitesStep:
                 with patch("installer.steps.prerequisites.command_exists", return_value=False):
                     assert step.check(ctx) is False
 
-    def test_prerequisites_step_skips_when_all_packages_installed(self):
+    @patch("installer.steps.prerequisites._node_at_least_24", return_value=True)
+    def test_prerequisites_step_skips_when_all_packages_installed(self, _mock_node):
         """PrerequisitesStep.check returns True when all packages already installed."""
         from installer.context import InstallContext
         from installer.steps.prerequisites import PrerequisitesStep
@@ -99,8 +100,10 @@ class TestPrerequisitesStepRun:
     @patch("installer.steps.prerequisites._is_nvm_installed")
     @patch("installer.steps.prerequisites.command_exists")
     @patch("installer.steps.prerequisites.is_homebrew_available")
+    @patch("installer.steps.prerequisites._node_at_least_24", return_value=True)
     def test_prerequisites_run_skips_installed_packages(
         self,
+        _mock_node,
         mock_homebrew_available,
         mock_cmd_exists,
         mock_nvm_installed,
@@ -147,7 +150,7 @@ class TestPrerequisitesHelpers:
         assert "git" in HOMEBREW_PACKAGES
         assert "gh" in HOMEBREW_PACKAGES
         assert "python@3.12" in HOMEBREW_PACKAGES
-        assert "node@22" in HOMEBREW_PACKAGES
+        assert "node@24" in HOMEBREW_PACKAGES
         assert "bun" in HOMEBREW_PACKAGES
         assert "uv" in HOMEBREW_PACKAGES
         assert "go" in HOMEBREW_PACKAGES
@@ -246,6 +249,16 @@ class TestPrerequisitesHelpers:
         assert "brew" in call_args
         assert "install" in call_args
         assert "git" in call_args
+
+    @patch("installer.steps.prerequisites._verify_homebrew_tap", return_value=True)
+    @patch("subprocess.run")
+    def test_install_bun_uses_the_manifest_tap_qualified_formula(self, mock_run, _mock_verify):
+        from installer.steps.prerequisites import _install_homebrew_package
+
+        mock_run.return_value = MagicMock(returncode=0)
+
+        assert _install_homebrew_package("bun") is True
+        assert mock_run.call_args.args[0] == ["brew", "install", "oven-sh/bun/bun"]
 
     @patch("installer.steps.prerequisites._verify_homebrew_tap", return_value=False)
     @patch("subprocess.run")
@@ -587,7 +600,7 @@ class TestManifestDrivenHomebrew:
         expected = {e.brew_formula for e in load().entries if e.source_type == "brew" and not e.auto_upgrade}
         assert _brew_no_upgrade_formulas() == expected
         # Plan locks these specific formulas to manifest-pinned versions:
-        assert {"python@3.12", "node@22", "nvm", "git", "gh"} <= expected
+        assert {"python@3.12", "node@24", "nvm", "git", "gh"} <= expected
 
     @patch("subprocess.run")
     def test_verify_homebrew_tap_accepts_homebrew_core(self, mock_run):
@@ -621,6 +634,7 @@ class TestManifestDrivenHomebrew:
             stdout=b'{"formulae":[{"tap":"oven-sh/bun"}]}',
         )
         assert _verify_homebrew_tap("bun") is True
+        assert mock_run.call_args.args[0] == ["brew", "info", "--json=v2", "oven-sh/bun/bun"]
 
     @patch("subprocess.run")
     def test_verify_homebrew_tap_unknown_formula_returns_false(self, mock_run):
@@ -682,11 +696,7 @@ class TestIsHomebrewAvailable:
 
 
 class TestLinuxFallbackBugCondition:
-    """Bug-condition tests: verify Linux native fallbacks are called when Homebrew is unavailable.
-
-    These tests FAIL on current code because _install_nodejs_via_pkg and _install_bun_standalone
-    do not exist yet. They pass after the fix is implemented.
-    """
+    """Linux fallback tests for the Node 24 and Bun runtime baseline."""
 
     @patch("installer.steps.prerequisites._install_bun_standalone")
     @patch("installer.steps.prerequisites._install_nodejs_via_pkg")
@@ -697,7 +707,7 @@ class TestLinuxFallbackBugCondition:
     @patch("installer.steps.prerequisites.command_exists")
     @patch("installer.steps.prerequisites.is_linux")
     @patch("installer.steps.prerequisites.is_homebrew_available")
-    def test_linux_fallback_installs_nodejs_via_pkg_when_brew_unavailable(
+    def test_linux_fallback_defers_node24_to_the_pinned_nvm_installer(
         self,
         mock_brew_avail,
         mock_linux,
@@ -709,7 +719,7 @@ class TestLinuxFallbackBugCondition:
         mock_nodejs_pkg,
         _mock_bun_standalone,
     ):
-        """On Linux without Homebrew, Node.js is installed via system package manager."""
+        """Distro Node 20/22 is not accepted as the Node 24 browser runtime."""
         from installer.context import InstallContext
         from installer.steps.prerequisites import PrerequisitesStep
         from installer.ui import Console
@@ -719,8 +729,6 @@ class TestLinuxFallbackBugCondition:
         mock_cmd_exists.return_value = False
         mock_install_brew.return_value = False
         mock_apt.return_value = True
-        mock_nodejs_pkg.return_value = True
-
         step = PrerequisitesStep()
         with tempfile.TemporaryDirectory() as tmpdir:
             ctx = InstallContext(
@@ -730,7 +738,7 @@ class TestLinuxFallbackBugCondition:
             )
             step.run(ctx)
 
-        mock_nodejs_pkg.assert_called_once()
+        mock_nodejs_pkg.assert_not_called()
 
     # `ensure_bun_on_path` is patched False in the bun cases below so they describe the
     # installer rather than whether the machine running the suite already has bun.
@@ -946,6 +954,15 @@ class TestBrewUpgrade:
 
         assert result is False
 
+    def test_upgrade_bun_uses_the_manifest_tap_qualified_formula(self):
+        from installer.steps.prerequisites import _upgrade_homebrew_package
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            assert _upgrade_homebrew_package("bun") is True
+
+        assert mock_run.call_args.args[0] == ["brew", "upgrade", "oven-sh/bun/bun"]
+
     def test_get_outdated_homebrew_packages_returns_matching(self):
         """_get_outdated_homebrew_packages returns packages that appear in brew outdated output."""
         from installer.steps.prerequisites import _get_outdated_homebrew_packages
@@ -955,6 +972,13 @@ class TestBrewUpgrade:
             result = _get_outdated_homebrew_packages(["rtk", "gh", "bun"])
 
         assert result == {"rtk", "bun"}
+
+    def test_get_outdated_homebrew_packages_matches_tap_qualified_output(self):
+        from installer.steps.prerequisites import _get_outdated_homebrew_packages
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout=b"oven-sh/bun/bun\n")
+            assert _get_outdated_homebrew_packages(["bun"]) == {"bun"}
 
     def test_get_outdated_homebrew_packages_empty_when_all_up_to_date(self):
         """_get_outdated_homebrew_packages returns empty set when nothing is outdated."""
@@ -1040,5 +1064,5 @@ class TestBrewUpgrade:
         from installer.steps.prerequisites import HOMEBREW_NO_UPGRADE_PACKAGES
 
         assert "python@3.12" in HOMEBREW_NO_UPGRADE_PACKAGES
-        assert "node@22" in HOMEBREW_NO_UPGRADE_PACKAGES
+        assert "node@24" in HOMEBREW_NO_UPGRADE_PACKAGES
         assert "rtk" not in HOMEBREW_NO_UPGRADE_PACKAGES

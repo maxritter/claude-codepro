@@ -165,6 +165,22 @@ per-field layout does not.
 `## Acceptance Criteria` with `- [ ] Criterion N: …` lines, which are a separate
 list from its tasks.
 
+### User-owned tasks
+
+Feature and Bugfix plans may place a non-automatable step in the normal task order:
+
+```markdown
+**Owner:** User
+**User Action:** Sign in to the device locally; do not paste credentials into chat.
+```
+
+Both labels are omitted for ordinary agent work. `Owner` defaults to `Agent`, and
+`User Action` is invalid without `Owner: User`. A user-owned task contains only
+the manual action; surrounding agent preparation and verification belong in
+adjacent tasks. `/spec` pauses durably at the task and proceeds only after exact
+`done` plus any observable verification. Autonomous Buildouts cannot contain
+user-owned tasks.
+
 ## Registering a plan
 
 Writing the file is not enough for Pilot's hooks to treat it as *yours*:

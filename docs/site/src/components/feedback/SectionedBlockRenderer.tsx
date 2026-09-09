@@ -29,10 +29,12 @@ import {
   Terminal,
   Text as TextIcon,
   Trophy,
+  UserRoundCheck,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { BlockRenderer } from "./BlockRenderer";
 import { extractObjectiveBlocks, orderSections, stripLabelPrefix } from "./sectioned-block-helpers";
 import {
@@ -135,6 +137,7 @@ const FIELD_ICONS: Record<string, LucideIcon> = {
   "Key Decisions": NotebookPen,
   "Key Decisions / Notes": NotebookPen,
   Notes: NotebookPen,
+  "User Action": UserRoundCheck,
 };
 
 // Plan-header metadata paragraph: `Created: …\nAuthor: …\nStatus: …\n…`.
@@ -338,6 +341,7 @@ interface TaskCardProps {
   title: string;
   completed: boolean | null;
   objective: React.ReactNode | null;
+  owner: "Agent" | "User";
   expanded: boolean;
   children: React.ReactNode;
 }
@@ -352,7 +356,7 @@ interface TaskCardProps {
  * Instead, the header is a clickable region with role="button" + keyboard
  * handler, and a dedicated chevron button as the accessible toggle target.
  */
-function TaskCard({ number, title, completed, objective, expanded, children }: TaskCardProps) {
+function TaskCard({ number, title, completed, objective, owner, expanded, children }: TaskCardProps) {
   const [open, setOpen] = useState(expanded);
   const isOpen = expanded || open;
   const toggle = () => setOpen(!isOpen);
@@ -382,6 +386,7 @@ function TaskCard({ number, title, completed, objective, expanded, children }: T
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2">
               <span className="text-xs font-mono text-muted-foreground/70">Task {number}</span>
+              {owner === "User" && <Badge variant="secondary">User</Badge>}
             </div>
             <div className="text-sm font-semibold mt-0.5 leading-snug">{title}</div>
             {objective && <div className="mt-1.5 text-sm text-muted-foreground">{objective}</div>}
@@ -501,6 +506,11 @@ export function SectionedBlockRenderer({
                     }
                     const taskHeadingId = task.headingBlock.id;
                     const { objective, rest } = extractObjectiveBlocks(task.blocks);
+                    const fields = groupByLabel(rest);
+                    const ownerField = fields.find((field) => field.label === "Owner");
+                    const owner = ownerField?.blocks.some(
+                      (block) => block.type === "paragraph" && block.content.trim() === "User",
+                    ) ? "User" : "Agent";
                     const completed = completion.get(task.number) ?? null;
                     return (
                       <TaskCard
@@ -511,9 +521,10 @@ export function SectionedBlockRenderer({
                         objective={
                           objective && objective.length > 0 ? renderLeaf(objective) : null
                         }
+                        owner={owner}
                         expanded={taskForceOpen}
                       >
-                        {groupByLabel(rest).map((field) => {
+                        {fields.filter((field) => field.label !== "Owner").map((field) => {
                           const fieldForceOpen = containsBlockOrHeading(
                             field.blocks,
                             null,

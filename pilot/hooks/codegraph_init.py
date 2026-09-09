@@ -10,6 +10,7 @@ Non-fatal: failures are silent — the session proceeds without CodeGraph.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import signal
@@ -21,6 +22,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 SYNC_TIMEOUT_SECONDS = 60
+STATUS_TIMEOUT_SECONDS = 10
 INDEX_TIMEOUT_SECONDS = 90
 INIT_TIMEOUT_SECONDS = 60
 LOCK_STALE_SECONDS = 15 * 60
@@ -120,6 +122,19 @@ def _run_group(cmd: list[str], cwd: Path, timeout: int) -> subprocess.CompletedP
 def _run(cmd: list[str], cwd: Path, timeout: int = 120) -> bool:
     result = _run_group(cmd, cwd, timeout)
     return result is not None and result.returncode == 0
+
+
+def _reindex_recommended(project_dir: Path, timeout: int) -> bool:
+    """Read CodeGraph's explicit index-migration signal without mutating state."""
+    result = _run_group(["codegraph", "status", "--json"], project_dir, timeout)
+    if result is None or result.returncode != 0:
+        return False
+    try:
+        status = json.loads((result.stdout or b"").decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+        return False
+    index = status.get("index") if isinstance(status, dict) else None
+    return isinstance(index, dict) and index.get("reindexRecommended") is True
 
 
 def _op_timeout(deadline: float, cap: int) -> int:
@@ -226,12 +241,18 @@ def main() -> None:
         codegraph_dir = project_dir / ".codegraph"
 
         if not codegraph_dir.exists():
+            if os.environ.get("CLAUDE_PROJECT_PLATFORM") == "codex":
+                return
             if not _run(["codegraph", "init"], project_dir, _op_timeout(deadline, INIT_TIMEOUT_SECONDS)):
                 return
             if not codegraph_dir.exists():
                 return
 
         if not _is_indexed(project_dir):
+            _run(["codegraph", "index"], project_dir, _op_timeout(deadline, INDEX_TIMEOUT_SECONDS))
+            return
+
+        if _reindex_recommended(project_dir, _op_timeout(deadline, STATUS_TIMEOUT_SECONDS)):
             _run(["codegraph", "index"], project_dir, _op_timeout(deadline, INDEX_TIMEOUT_SECONDS))
             return
 

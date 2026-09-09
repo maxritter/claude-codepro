@@ -12,6 +12,8 @@ If you find yourself queuing 3+ RED tests before any GREEN, stop and complete th
 
 **For EVERY task (generic flow — features use this as-is; bugfixes use it via the Bugfix Lane overrides below):**
 
+0. **Owner gate:** Absence of `**Owner:**` means `Agent`. If the task says `**Owner:** User`, do not edit code or run the agent task flow. Read its `**User Action:**` and Definition of Done, then run `~/.pilot/bin/pilot plan-state pause --kind manual --task N --message "<exact action, no secret values>" $LANE_FLAG`. Tell the user what to do locally and to reply with exact `done`; then end the turn. On `done`, verify every observable criterion. If verification passes — or the criterion is explicitly human-attested — tick the task and continue. If it fails, re-enter the same manual pause with the concrete correction. Exact `resume` does not clear a manual wait or authorize silently checking it off; only exact `done` advances to verification.
+
 1. **Read plan's implementation steps** — list files to create/modify/delete
 2. **Call chain analysis:** Reuse verified plan evidence. Use structural tracing when a changed runtime contract has non-local effects not yet understood; a local function or prose/config edit does not need another graph call merely because this is a new task.
 <!-- CC-ONLY -->
@@ -25,7 +27,7 @@ If you find yourself queuing 3+ RED tests before any GREEN, stop and complete th
    - **`Trivial:` escape.** If the task's `Trivial:` field is populated, skip RED. Apply the change, then run the existing covering test or verification command referenced in the justification (it must pass after the change — that is the GREEN signal), then continue to step 5. If the referenced check does NOT pass, the change is not trivial — remove the `Trivial:` field, return to RED. The changes review and `spec-verify` Step 2.1 audit the claim against the actual diff post-implementation; padding `Trivial:` to skip TDD is a `must_fix` finding.
    - **Discovery protocol:** The plan is a working document, not frozen — implementation legitimately learns things planning could not. When something contradicts how you expected it to work, check the plan's `## Assumptions` section, identify which task numbers are affected, and classify:
      - **Tactical** — the task's goal and approach hold; a detail differs (wrong helper name, an extra file to touch, a different signature). Adapt, record it under `## Deviations` (create the section if absent), continue. No user round-trip.
-     - **Material** — invalidates a task or assumption, changes scope or approach, adds/removes tasks, or contradicts a decision the user made. Do NOT quietly plough on, and do NOT silently re-plan. Raise it: state the discovery and the options, then ask — `AskUserQuestion` where available; otherwise ask in prose per `agent-gate-protocol.md` with `SENTINEL_PATH` `$SESS_DIR/spec-discussion-paused` (recipe in the constraints above). If discussion follows, the pause holds turn to turn. On resume, apply the agreed amendments — task list, `## Assumptions`, `Files:` blocks — and record a `## Deviations` entry marked `user-agreed`. The discussion is the approval; there is no formal re-approval gate.
+     - **Material** — invalidates a task or assumption, changes scope or approach, adds/removes tasks, or contradicts a decision the user made. Do NOT quietly plough on, and do NOT silently re-plan. Record `decision` state through `pilot plan-state`, state the discovery and options, then ask. The pause holds until exact resume. Write each agreed amendment into the task list, `## Assumptions`, `Files:` blocks, and a `## Deviations` entry marked `user-agreed` while remaining paused; this keeps the decision durable across compaction. The discussion is the approval; there is no formal re-approval gate.
      - **Blocking** — cannot proceed either way: same ask, same pause.
 
      `## Deviations` entry shape: `- Task N (tactical|user-agreed): <discovery> → <what changed>`. ⛔ **A deviation that changes which files are touched must name the exact repository paths** — in the entry AND by updating the affected task's `Files:` block in the same edit. Verification scopes review staging and lineage to the plan's `Files:` blocks plus the paths in this section; a pathless entry like "used a different helper" leaves the extra file outside the review diff entirely, so it reads as out-of-scope drift.
@@ -53,26 +55,26 @@ Follow the testing rules already loaded for this task. Reuse behavioral tests wh
 
 **If the plan header contains `Type: Bugfix`, the rules below OVERRIDE the generic flow above. No exceptions — not for "obvious" bugs, typos, or one-line fixes.**
 
-**Global rules (apply to all three tasks):**
+**Global rules (apply to the three mandatory agent tasks):**
 
-1. The plan has THREE tasks: `Write Reproducing Test (RED)` → `Implement Fix at Root Cause` → `Quality Gate`. Do not merge them. Do not skip Task 1 because "I already see the fix."
+1. The plan has THREE agent-owned roles: `Write Reproducing Test (RED)` → `Implement Fix at Root Cause` → `Quality Gate`. Do not merge or skip them. Separately numbered user-owned tasks may appear between them and use the Owner gate above.
 2. The "Skip TDD for docs, config, IaC, formatting-only" escape hatch (step 4 above) does **NOT** apply to bugfixes. Even config-driven bugs need a reproducing test at the end-to-end boundary.
 3. Re-use the plan's `## Investigation` section instead of re-running codegraph. If the plan already documents callers/callees/impact for the root-cause function, read it from the plan — skip generic step 2. Re-run `codegraph_explore(query="<fn> callers and callees")` only when the plan's breadcrumbs are missing or stale for a specific function you're about to modify.
 
 **Per-task flows — run the flow matching the current task, not the generic loop above:**
 
-#### Task 1 — Write Reproducing Test (RED)
+#### Write Reproducing Test (RED) agent task
 
 Minimal flow. No production code here, so most generic steps (call-chain analysis, performance audit, self-review) are inapplicable.
 
-1. Read Task 1's `Entry point:` and the `## Behavior Contract` from the plan.
+1. Read this task's `Entry point:` and the `## Behavior Contract` from the plan.
 2. Write a test that encodes `Currently → Expected` via the entry point, named `test_<function>_<bug>_<expected>`.
 3. Run it → **must FAIL** with an error matching the Behavior Contract's `Currently (bug)`.
-4. If it passes on first run: the test is wrong or the bug is already fixed. STOP, re-investigate, do not proceed to Task 2.
+4. If it passes on first run: the test is wrong or the bug is already fixed. STOP, re-investigate, and do not proceed to the fix task.
 5. Worktree mode: commit as its own commit (`test(spec): add reproducing test for <bug>`). This keeps the test file separable from the fix — it does not skip any verification step.
 6. Update plan checkbox (`[ ]` → `[x]`), mark task completed.
 
-#### Task 2 — Implement Fix at Root Cause (GREEN)
+#### Implement Fix at Root Cause (GREEN) agent task
 
 This is the only task that modifies production code.
 
@@ -83,7 +85,7 @@ This is the only task that modifies production code.
 5. Diagnostics zero errors. Confirm the diff touches the root-cause file from the plan.
 6. Worktree mode: commit (`fix(spec): <bug>`). Update plan, mark task completed.
 
-#### Task 3 — Quality Gate
+#### Quality Gate agent task
 
 Runner-only task. Code may change only via lint/type/formatter auto-fixes; if it does, the suite must still be green at task close.
 
@@ -91,6 +93,6 @@ Runner-only task. Code may change only via lint/type/formatter auto-fixes; if it
 2. Fix any findings inline.
 3. **Re-run the full test suite.** Lint/type/formatter changes can break tests — a green checkbox on this task means the suite is green AFTER those fixes, not before.
 4. If the suite failed from an auto-fix: revert the offending change or write a targeted correction, re-run lint/types/suite until all green.
-5. Worktree mode: amend onto Task 2's commit or add a small `chore(spec): lint/types` commit. Update plan, mark task completed.
+5. Worktree mode: amend onto the fix task's commit or add a small `chore(spec): lint/types` commit. Update plan, mark task completed.
 
 **Then hand off to `spec-bugfix-verify` (via Step 3).** It audits the Behavior Contract and the original user-level symptom, reuses current valid RED/suite evidence, and reruns only checks whose inputs changed or evidence is missing. Any reconstruction of pre-fix behavior happens in an isolated snapshot.

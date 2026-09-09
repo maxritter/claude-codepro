@@ -12,13 +12,10 @@ Only allows stopping when:
    stop. NONE of them applies to an approved PENDING plan: the implement phase has
    no agent-unilateral pause (see the note where the retired manual-switch
    sentinel was).
-5. A fresh discussion-pause marker (`spec-discussion-paused`) is bound to the
-   active plan AND the stop attempt is user-initiated (`stop_hook_active` false).
-   This is the USER's pause - engaged when they interrupt to question a decision
-   or discuss a discovery - sticky across discussion turns on Claude Code,
-   consumed per honor when the payload has no `stop_hook_active` at all (Codex),
-   cleared on resume. Never honored for a `Type: Build` plan, and inside a
-   hook-driven continuation chain it grants nothing.
+5. A plan-bound durable interaction state is paused. UserPromptSubmit owns the
+   human/synthetic distinction, and the pause remains authoritative even when
+   `stop_hook_active` still describes an enclosing continuation chain. Buildouts
+   never honor interaction pauses.
 6. User stops again within 60s cooldown (escape hatch) - withheld while
    `stop_hook_active` marks the attempt as the agent's own continuation
 7. Runaway cap: after MAX_BLOCKS blocks for the same plan with no user-question
@@ -47,7 +44,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _lib.session_artifacts import DISCUSSION_PAUSE, PAUSE_SENTINELS
+from _lib.session_artifacts import PAUSE_SENTINELS
 from _lib.util import (
     _read_plan_approved_and_type,
     _sessions_base,
@@ -55,6 +52,7 @@ from _lib.util import (
     get_session_plan_path,
     is_waiting_for_user_input,
     plan_in_current_project,
+    resolve_hook_session_id,
     resolve_session_id,
     stop_block,
 )
@@ -127,15 +125,9 @@ def get_approval_sentinel_path(session_id: str | None = None) -> Path:
 # qualified away from that state (spec-approval-pending: Approved: No;
 # build-handback-pending: Type: Build; verify-gate-pending: Status: COMPLETE).
 #
-# The one grant that DOES apply there is the discussion pause below, and it is
-# qualified the other way: honored only when `stop_hook_active` is false, i.e. on
-# a turn a real user message started, never for a Type: Build plan, and consumed
-# per honor when the payload reports no continuation state at all (Codex). The
-# failure the retirement fixed was the AGENT pausing on its own; a USER
-# interrupting mid-implementation to question a decision is the opposite case,
-# and holding the session hostage there produced runaway "IMMEDIATELY continue"
-# blocks on every discussion turn. Pinned by
-# TestApprovedPendingPlanHasNoUnilateralPause and TestDiscussionPauseMarker.
+# The one grant that DOES apply there is the plan-bound interaction state read
+# near the start of ``main``. UserPromptSubmit writes it only for a real user
+# interruption; an agent-discovered decision must use ``pilot plan-state``.
 
 
 def get_build_handback_sentinel_path(session_id: str | None = None) -> Path:
@@ -171,9 +163,9 @@ def get_verify_gate_sentinel_path(session_id: str | None = None) -> Path:
     pause at either gate and resolved the contradiction by answering it: merging
     unreviewed, or writing ``VERIFIED`` nobody approved.
 
-    Honored ONE time (consumed on honor) for an APPROVED, non-``Build`` plan, and
-    only while ``Status: COMPLETE`` -- the caller applies that test, since it holds
-    the status and ``_sentinel_grants_stop`` sees only ``(approved, plan_type)``.
+    Retained through the yield for an APPROVED, non-``Build`` plan so
+    UserPromptSubmit can recognize and consume the expected response instead of
+    auto-pausing it as a new interruption. It applies only while ``Status: COMPLETE``.
     ``/build`` is excluded because it has no gate after its pre-work scoping round;
     a sentinel it never writes must never release its loop. Stale sentinels are
     discarded, so a crashed run cannot silently disable the guard.
@@ -181,80 +173,6 @@ def get_verify_gate_sentinel_path(session_id: str | None = None) -> Path:
     guard_dir = _sessions_base() / (session_id or resolve_session_id())
     guard_dir.mkdir(parents=True, exist_ok=True)
     return guard_dir / VERIFY_GATE_SENTINEL
-
-
-def get_discussion_pause_path(session_id: str | None = None) -> Path:
-    """Session-scoped path to the sticky discussion-pause marker.
-
-    Written by the /spec skills when the user interrupts a run to question a
-    decision or discuss a discovery (and by the dispatcher for an explicit
-    `/spec pause`); removed on resume. Unlike the one-shot gate sentinels it is
-    honored repeatedly -- a discussion spans turns -- but only on user-initiated
-    stop attempts, never inside a hook-driven continuation chain.
-    """
-    guard_dir = _sessions_base() / (session_id or resolve_session_id())
-    guard_dir.mkdir(parents=True, exist_ok=True)
-    return guard_dir / DISCUSSION_PAUSE
-
-
-def _discussion_pause_grants_stop(marker: Path, plan_path: Path, *, consume: bool) -> bool:
-    """True when a fresh discussion-pause marker permits this stop attempt.
-
-    Binds to the plan PATH only: no content fingerprint, because amending the
-    plan mid-discussion is the point of the pause, and no expected status,
-    because discussion is legal at PENDING and COMPLETE alike. Freshness still
-    applies -- the skill re-touches the marker on every discussion turn, so one
-    older than SENTINEL_MAX_AGE_SECONDS belongs to an abandoned session and is
-    discarded rather than honored.
-
-    Never applies to a ``Type: Build`` plan: /build runs autonomously after its
-    scoping round and finishes only through its own hand-back doors, so a stray
-    marker must not release its loop (mirrors the verify-gate exclusion).
-
-    The caller supplies the user-initiated-turn check (`stop_hook_active`
-    false) and sets ``consume`` when the payload carried NO continuation state
-    at all (Codex): there every attempt would count as user-initiated, so the
-    marker is burned on honor -- one stop per touch, re-touched each discussion
-    turn per the skill prose -- instead of standing as a permanent free pass.
-    """
-    if not marker.exists():
-        return False
-    try:
-        age = time.time() - marker.stat().st_mtime
-    except OSError:
-        age = 0.0
-    if age > SENTINEL_MAX_AGE_SECONDS:
-        marker.unlink(missing_ok=True)
-        return False
-
-    _approved, plan_type = _read_plan_approved_and_type(str(plan_path))
-    if plan_type == "Build":
-        return False
-
-    try:
-        raw = marker.read_text().strip()
-    except OSError:
-        return False
-    plan_key = os.path.realpath(plan_path)
-    if raw:
-        try:
-            binding = json.loads(raw)
-        except json.JSONDecodeError:
-            marker.unlink(missing_ok=True)
-            return False
-        if not isinstance(binding, dict) or binding.get("plan_path") != plan_key:
-            marker.unlink(missing_ok=True)
-            return False
-    elif not consume:
-        # Upgrade a bare touch to a binding, so a marker left in a reused
-        # session directory can never release a different plan.
-        try:
-            marker.write_text(json.dumps({"plan_path": plan_key, "created_at": time.time()}))
-        except OSError:
-            return False
-    if consume:
-        marker.unlink(missing_ok=True)
-    return True
 
 
 def _sentinel_grants_stop(
@@ -380,6 +298,41 @@ def find_active_plan(session_id: str | None = None) -> tuple[Path | None, str | 
         return None, None
 
 
+def _last_assistant_requests_verification_approval(transcript_path: str) -> bool:
+    """Recognize the narrow prose fallback for the COMPLETE-state review gate."""
+    if not transcript_path:
+        return False
+    try:
+        transcript = Path(transcript_path)
+        if not transcript.is_file():
+            return False
+        last_assistant: dict | None = None
+        with transcript.open(encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(event, dict) and event.get("type") == "assistant":
+                    last_assistant = event
+    except OSError:
+        return False
+    message = last_assistant.get("message") if isinstance(last_assistant, dict) else None
+    blocks = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(blocks, list):
+        return False
+    text = "\n".join(
+        block.get("text", "")
+        for block in blocks
+        if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str)
+    )
+    has_review_heading = bool(re.search(r"(?im)^## (?:Code Review Gate|Verification Summary)\b", text))
+    asks_approval = bool(
+        re.search(r"(?i)\b(?:do you approve|please (?:review and )?approve|reply (?:with )?(?:approve|lgtm))\b", text)
+    )
+    return has_review_heading and asks_approval
+
+
 def _load_state(state_file: Path) -> dict:
     """Load stop-guard state. Returns {} on any error or missing file.
 
@@ -410,6 +363,28 @@ def _save_state(state_file: Path, state: dict) -> None:
         state_file.write_text(json.dumps(state))
     except OSError:
         pass
+
+
+def _registered_interaction_paused(session_id: str, plan_path: Path) -> bool:
+    """Whether the active registration carries a valid durable pause."""
+    registration = _sessions_base() / session_id / "active_plan.json"
+    try:
+        data = json.loads(registration.read_text())
+    except (OSError, json.JSONDecodeError, TypeError):
+        return False
+    if not isinstance(data, dict) or os.path.realpath(str(data.get("plan_path", ""))) != os.path.realpath(plan_path):
+        return False
+    interaction = data.get("interaction")
+    if not isinstance(interaction, dict) or interaction.get("state") != "paused":
+        return False
+    _approved, plan_type = _read_plan_approved_and_type(str(plan_path))
+    return plan_type != "Build"
+
+
+def _save_expected_continuation(state_file: Path, state: dict, reason: str) -> None:
+    """Bind the next synthetic UserPromptSubmit event to this Stop reason."""
+    state["expected_prompt_sha256"] = hashlib.sha256(reason.encode("utf-8")).hexdigest()
+    _save_state(state_file, state)
 
 
 def _next_action_for(status: str, plan_type: str = "Feature") -> str:
@@ -443,11 +418,14 @@ def _next_action_for(status: str, plan_type: str = "Feature") -> str:
         )
     if status == "COMPLETE":
         return (
-            "Implementation is done and verification has NOT run yet. "
-            "IMMEDIATELY continue with the verify phase: read the plan's `Type:` header, then "
+            "Implementation is done but the plan has not reached VERIFIED. "
+            "Continue with the verify phase: read the plan's `Type:` header, then "
             "use the `spec-verify` skill for a feature plan or the `spec-bugfix-verify` skill "
-            "for a bugfix plan, passing the plan path. Do NOT re-implement, do NOT mark the plan "
-            "VERIFIED yourself, and do NOT summarise the work instead of dispatching."
+            "for a bugfix plan, passing the plan path. If its checks are already complete and a "
+            "human review decision is pending without a permitted structured question tool, "
+            "write `verify-gate-pending` BEFORE presenting the prose question, then yield. Do "
+            "not repeatedly print an unarmed question. Do NOT re-implement or mark the plan "
+            "VERIFIED without the required user approval."
         )
     return (
         "Continue working on the next pending task in the plan. "
@@ -470,10 +448,10 @@ def _block_reason(plan_path: Path, status: str) -> str:
         else (
             " EXCEPTION - the user is discussing: if the user's LATEST message questioned a "
             "decision, raised a discovery, or asked something the plan does not answer, do "
-            "not plough on. Answer them, then pause the run for discussion: touch the "
-            "`spec-discussion-paused` marker in this session's directory under "
-            "~/.pilot/sessions/ and end the turn. Clear the marker when the user says to "
-            "resume."
+            "not plough on. Answer them and honor the plan-bound interaction pause created "
+            "by UserPromptSubmit. For an agent-discovered material decision, record it with "
+            "`pilot plan-state pause --kind decision --message <question>` before asking. "
+            "Only exact `resume`, `/spec resume`, or `$spec resume` restarts implementation."
         )
     )
     next_action = _next_action_for(status, plan_type)
@@ -514,15 +492,23 @@ def main() -> int:
     # withhold the user-only cooldown hatch and to scope MAX_CHAIN_BLOCKS below.
     in_hook_continuation = bool(input_data.get("stop_hook_active", False))
 
-    # Env chain first (it is what `pilot register-plan` wrote this session's state
-    # under), then the payload's own session id. Without the payload fallback a hook
-    # subprocess spawned WITHOUT the env vars reads the shared "default" bucket and
-    # inherits a stale plan from an unrelated session — which plan_in_current_project
-    # cannot reject when that plan happens to live in the same repo.
-    session_id = resolve_session_id(str(input_data.get("session_id") or ""))
+    # Native hook payload identity wins over a mismatched native id inherited
+    # from a parent Codex/Claude process. A legacy PILOT_SESSION_ID still wins
+    # when it is the only environment identity, matching older wrapper writers.
+    session_id = resolve_hook_session_id(input_data.get("session_id"))
 
     plan_path, status = find_active_plan(session_id)
     if plan_path is None or status is None:
+        return 0
+    transcript_path = str(input_data.get("transcript_path") or "")
+
+    # A durable interaction pause is authoritative for the whole discussion,
+    # including a stop attempt whose payload still says stop_hook_active=true.
+    # That flag describes the enclosing continuation chain; it does not prove
+    # that no user interrupted it. UserPromptSubmit owns the human/synthetic
+    # distinction and writes this plan-bound state before the model replies.
+    if _registered_interaction_paused(session_id, plan_path):
+        get_stop_guard_path(session_id).unlink(missing_ok=True)
         return 0
 
     # Approval-wait pause for agents that cannot emit AskUserQuestion (Codex):
@@ -556,36 +542,40 @@ def main() -> int:
 
     # Verify-phase gate pause: the worktree merge and the code-review sign-off both
     # put a decision to the user while the plan is approved and COMPLETE, and an
-    # agent with no AskUserQuestion has to yield to let it be answered. Honored ONE
-    # time and only at COMPLETE, so the implement-phase block (PENDING) is
-    # untouched; never for a Buildout, which has no gate to yield at. Each re-ask -
-    # the review gate's "Fix" and "Manual" paths both come back here - touches the
-    # sentinel again, so forgetting to re-touch blocks rather than stopping silently.
+    # agent with no AskUserQuestion has to yield to let it be answered. Retained
+    # until UserPromptSubmit consumes the expected response, and only at COMPLETE,
+    # so the implement-phase block (PENDING) is untouched; never for a Buildout.
     if status == "COMPLETE" and _sentinel_grants_stop(
         get_verify_gate_sentinel_path(session_id),
         plan_path,
         lambda approved, plan_type: approved and plan_type != "Build",
-        consume=True,
+        consume=False,
         expected_status=status,
     ):
         return 0
 
-    # User-consented discussion pause: the user interrupted the run to question a
-    # decision or discuss a discovery, and the skill (or `/spec pause`) engaged the
-    # pause. Honored ONLY on a user-initiated turn -- inside a hook-driven
-    # continuation the attempt is the agent's own, and releasing it there would be
-    # the unilateral implement-phase pause this guard exists to prevent. Sticky on
-    # Claude Code (the discussion spans turns; resume clears the marker); consumed
-    # per honor when the payload carries no continuation state at all (Codex), so
-    # a single touch buys a single stop there. Never applies to /build. Honoring
-    # it wipes the counters like a user-question turn, so resuming starts clean.
-    if not in_hook_continuation and _discussion_pause_grants_stop(
-        get_discussion_pause_path(session_id),
-        plan_path,
-        consume="stop_hook_active" not in input_data,
-    ):
-        get_stop_guard_path(session_id).unlink(missing_ok=True)
-        return 0
+    # Defensive real-client fallback: a model can correctly render the narrow
+    # review-gate prose yet forget the preceding sentinel command. Arming it
+    # here is no broader than the command the same model is already authorized
+    # to run, and prevents one or more runaway continuation nags before the
+    # user is allowed to answer. Status/type plus the explicit review heading
+    # and approval wording keep ordinary summaries from bypassing the guard.
+    if status == "COMPLETE" and _last_assistant_requests_verification_approval(transcript_path):
+        sentinel = get_verify_gate_sentinel_path(session_id)
+        try:
+            sentinel.touch()
+        except OSError:
+            pass
+        else:
+            if _sentinel_grants_stop(
+                sentinel,
+                plan_path,
+                lambda approved, plan_type: approved and plan_type != "Build",
+                consume=False,
+                expected_status=status,
+            ):
+                get_stop_guard_path(session_id).unlink(missing_ok=True)
+                return 0
 
     state_file = get_stop_guard_path(session_id)
     state = _load_state(state_file)
@@ -594,7 +584,6 @@ def main() -> int:
     if state.get("plan") != plan_key:
         state = {"ts": 0.0, "count": 0, "chain": 0, "plan": plan_key}
 
-    transcript_path = input_data.get("transcript_path", "")
     if transcript_path and is_waiting_for_user_input(transcript_path):
         state["count"] = 0
         state["chain"] = 0
@@ -649,10 +638,13 @@ def main() -> int:
             f"Do NOT make further tool calls before asking. The next stop attempt after this "
             f"one will be allowed through to end the runaway."
         )
+        _save_expected_continuation(state_file, state, reason)
         print(stop_block(reason))
         return 0
 
-    print(stop_block(_block_reason(plan_path, status)))
+    reason = _block_reason(plan_path, status)
+    _save_expected_continuation(state_file, state, reason)
+    print(stop_block(reason))
     return 0
 
 

@@ -2,6 +2,27 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/spec_interaction.py\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/impeccable_cache_migration.py\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "CLAUDE_PROJECT_PLATFORM=codex uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/codegraph_init.py\"",
+            "async": true,
+            "timeout": 120
+          }
+        ]
+      },
+      {
         "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
@@ -75,6 +96,11 @@
       },
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/spec_interaction.py\"",
+            "timeout": 5
+          },
           {
             "type": "command",
             "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" --exec bun \"$HOME/.pilot/scripts/worker-service.cjs\" hook codex session-init",

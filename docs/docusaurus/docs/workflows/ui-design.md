@@ -11,7 +11,7 @@ Pilot installs two complementary external design packages:
 | Package | Owns |
 |---|---|
 | [Open Claude Design](https://github.com/maxritter/open-claude-design) | Claude Design access and synchronization, product context, visual direction, design-system extraction, and structured UI review |
-| [Impeccable](https://github.com/pbakaus/impeccable) | Named refinement workflows, supporting agents, edit/stop hooks, and deterministic design checks |
+| [Impeccable](https://github.com/pbakaus/impeccable) | Named refinement workflows, supporting agents, opt-in edit/stop hooks, and deterministic design checks |
 
 There are no design commands to memorize. Describe the work normally; the relevant skill and rule load automatically.
 
@@ -32,6 +32,10 @@ For remote authoring, it loads the affected project context, Anthropic's latest 
 Both agents receive the same portable design skills. Stable visual constraints load for user-visible work; logic-only changes do not become redesign tasks.
 
 When Impeccable's hook already reported on the changed files, the UI review reuses those findings. The detector runs manually only as a fallback or targeted recheck, so the two packages do not duplicate work.
+
+Pilot installs Impeccable's CLI, skills, supporting agents, and detector without activating provider hooks. Hooks are an explicit per-project choice through `/impeccable hooks on` (or `$impeccable hooks on` in Codex); the corresponding `hooks off` command disables them again. Upgrades preserve existing project hook configuration because Pilot cannot distinguish an older automatic registration from a later user opt-in safely.
+
+When hooks are enabled, Pilot keeps their disposable state outside repositories at `~/.pilot/cache/impeccable` unless you already configured `IMPECCABLE_CACHE_ROOT`. After an upgrade, a valid older `.impeccable/hook.cache.json` is preserved and pretty-formatted once so repository-wide formatter checks no longer fail on that stale cache.
 
 ## Claude Design transport
 

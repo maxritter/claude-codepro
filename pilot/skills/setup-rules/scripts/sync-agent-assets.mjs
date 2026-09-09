@@ -146,6 +146,36 @@ async function usesSharedInstructions(repo) {
   return usesExactSharedPathPair([path.join(repo, 'AGENTS.md'), path.join(repo, 'CLAUDE.md')], 'file')
 }
 
+function generatedInstructionSource(contents, expectedTarget) {
+  const header = contents.split(/\r?\n/).slice(0, 16).join('\n')
+  if (!/GENERATED FILE[^\n]*DO NOT EDIT/i.test(header)) return null
+  const source = header.match(/\bSource:\s*([^|\r\n]+)/i)?.[1]?.trim()
+  const target = header.match(/\bTarget:\s*([^|\r\n]+)/i)?.[1]?.trim()
+  if (!source || target !== expectedTarget) return null
+  return source
+}
+
+async function usesExternalGeneratedInstructions(repo) {
+  const agents = path.join(repo, 'AGENTS.md')
+  const claude = path.join(repo, 'CLAUDE.md')
+  const [agentsInfo, claudeInfo] = await Promise.all([inspect(agents), inspect(claude)])
+  if (
+    !agentsInfo?.isFile() ||
+    agentsInfo.isSymbolicLink() ||
+    !claudeInfo?.isFile() ||
+    claudeInfo.isSymbolicLink()
+  ) {
+    return false
+  }
+  const [agentsContents, claudeContents] = await Promise.all([
+    readFile(agents, 'utf8'),
+    readFile(claude, 'utf8'),
+  ])
+  const agentsSource = generatedInstructionSource(agentsContents, 'AGENTS.md')
+  const claudeSource = generatedInstructionSource(claudeContents, 'CLAUDE.md')
+  return agentsSource !== null && agentsSource === claudeSource
+}
+
 async function assertSafeRepoLayout(repo, { includeInstallerDestination = false } = {}) {
   const [sharedSkillRoot, sharedInstructions] = await Promise.all([
     usesSharedSkillRoot(repo),
@@ -229,6 +259,10 @@ function extractRuleReferences(agentsContents) {
   for (const pattern of patterns) {
     for (const match of agentsContents.matchAll(pattern)) {
       const reference = match[1] ?? match[0]
+      if (match[1] === undefined && (match.index ?? 0) > 0) {
+        const preceding = agentsContents[(match.index ?? 0) - 1]
+        if (/[A-Za-z0-9_~$./-]/.test(preceding)) continue
+      }
       if (!/[?*\[\]{}]/.test(reference)) references.add(reference)
     }
   }
@@ -994,6 +1028,8 @@ async function compareSkill(repo, name, sourceRoot, targetRoot, trackedAssets) {
 
 async function audit(repo) {
   const { sharedSkillRoot, sharedInstructions } = await assertSafeRepoLayout(repo)
+  const externalGeneratedInstructions =
+    !sharedInstructions && (await usesExternalGeneratedInstructions(repo))
   const agents = path.join(repo, 'AGENTS.md')
   const agentsInfo = await inspect(agents)
   if (agentsInfo !== null && !sharedInstructions && (!agentsInfo.isFile() || agentsInfo.isSymbolicLink())) {
@@ -1014,7 +1050,7 @@ async function audit(repo) {
   ]
   const claude = path.join(repo, 'CLAUDE.md')
   const claudeInfo = await inspect(claude)
-  if (!sharedInstructions) {
+  if (!sharedInstructions && !externalGeneratedInstructions) {
     if (agentsInfo === null && claudeInfo !== null) {
       issues.push('AGENTS.md: missing; migrate the existing CLAUDE.md instructions')
     } else if (agentsInfo !== null && claudeInfo === null) {
@@ -1456,6 +1492,8 @@ async function removeTrackedMirrorOnlyAssets(repo, canonicalNames, targetRoot, t
 
 async function write(repo, { forceMigration = false } = {}) {
   const { sharedSkillRoot, sharedInstructions } = await assertSafeRepoLayout(repo)
+  const externalGeneratedInstructions =
+    !sharedInstructions && (await usesExternalGeneratedInstructions(repo))
   // Validate both managed and local skill inputs before the first write so an
   // invalid skill cannot leave a partially migrated root contract behind.
   if (!sharedSkillRoot) {
@@ -1463,7 +1501,9 @@ async function write(repo, { forceMigration = false } = {}) {
     await validatePairedMirrorSkills(repo)
     await planIgnoredSkillSync(repo)
   }
-  if (!sharedInstructions) await synchronizeRootInstructions(repo)
+  if (!sharedInstructions && !externalGeneratedInstructions) {
+    await synchronizeRootInstructions(repo)
+  }
   const agents = path.join(repo, 'AGENTS.md')
   const agentsInfo = await inspect(agents)
   if (agentsInfo !== null && !sharedInstructions && (!agentsInfo.isFile() || agentsInfo.isSymbolicLink())) {

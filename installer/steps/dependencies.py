@@ -254,19 +254,37 @@ def _get_nvm_source_cmd() -> str:
     return ""
 
 
+def _node_major_version() -> int | None:
+    if not command_exists("node"):
+        return None
+    try:
+        result = subprocess.run(
+            ["node", "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.search(r"\bv(\d+)\.", result.stdout)
+    return int(match.group(1)) if result.returncode == 0 and match else None
+
+
 def install_nodejs() -> bool:
-    """Install Node.js via NVM if not present."""
-    if command_exists("node"):
+    """Ensure Pilot-owned Node tooling runs on Node 24 or newer."""
+    if (_node_major_version() or 0) >= 24:
         _record_outcome(_OUTCOME_UNCHANGED)
         return True
 
+    was_present = command_exists("node")
     nvm_dir = Path.home() / ".nvm"
     if not nvm_dir.exists():
         if not _curl_pipe_from_manifest("nvm-curl", CurlPipeRunOptions(timeout=180)):
             return False
 
     nvm_src = _get_nvm_source_cmd()
-    nvm_cmd = f'export NVM_DIR="$HOME/.nvm" && {nvm_src}nvm install 22 && nvm use 22'
+    nvm_cmd = f'export NVM_DIR="$HOME/.nvm" && {nvm_src}nvm install 24 && nvm use 24'
     if not _run_bash_with_retry(nvm_cmd, timeout=300):
         return False
 
@@ -278,7 +296,7 @@ def install_nodejs() -> bool:
             if node_bin not in os.environ.get("PATH", ""):
                 os.environ["PATH"] = f"{node_bin}:{os.environ.get('PATH', '')}"
 
-    _record_outcome(_OUTCOME_INSTALLED)
+    _record_outcome(_OUTCOME_UPDATED if was_present else _OUTCOME_INSTALLED)
     return True
 
 
@@ -509,7 +527,7 @@ def install_rtk() -> bool:
     # RTK_VERSION is the only lever install.sh offers: without it the script
     # resolves GitHub's /releases/latest, so the manifest version would be a
     # record of what happened to be current rather than the pin it claims to be.
-    # The script wants the git tag form (for example v0.47.0); the manifest
+    # The script wants the git tag form (for example v0.48.0); the manifest
     # stores the bare release, same as rtk-brew.
     rtk_version = manifest_get("rtk-installer").version
     if not _curl_pipe_from_manifest(
@@ -751,6 +769,30 @@ def _is_codegraph_indexed(project_dir: Path) -> bool:
         return False
 
 
+def _codegraph_reindex_recommended(project_dir: Path) -> bool:
+    """Return CodeGraph's explicit migration signal for an existing index."""
+    try:
+        result = subprocess.run(
+            ["codegraph", "status", "--json"],
+            cwd=project_dir,
+            env={**os.environ, "CODEGRAPH_TELEMETRY": "0"},
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if result.returncode != 0:
+        return False
+    try:
+        status = json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    index = status.get("index") if isinstance(status, dict) else None
+    return isinstance(index, dict) and index.get("reindexRecommended") is True
+
+
 def initialize_codegraph(project_dir: Path) -> bool:
     """Initialize CodeGraph in a project, then index and sync it.
 
@@ -773,7 +815,8 @@ def initialize_codegraph(project_dir: Path) -> bool:
         if not _run_bash_with_retry("CODEGRAPH_TELEMETRY=0 codegraph init", cwd=project_dir, timeout=60):
             return False
 
-    if not _is_codegraph_indexed(project_dir):
+    is_indexed = _is_codegraph_indexed(project_dir)
+    if not is_indexed or _codegraph_reindex_recommended(project_dir):
         if not _run_bash_with_retry(
             "CODEGRAPH_TELEMETRY=0 codegraph index",
             cwd=project_dir,
@@ -802,7 +845,9 @@ def codegraph_needs_work(project_dir: Path) -> bool:
     codegraph_dir = project_dir / ".codegraph"
     if not codegraph_dir.exists():
         return True
-    return not _is_codegraph_indexed(project_dir)
+    if not _is_codegraph_indexed(project_dir):
+        return True
+    return _codegraph_reindex_recommended(project_dir)
 
 
 def install_typescript_lsp() -> bool:
@@ -1120,7 +1165,7 @@ def install_open_claude_design(ctx: InstallContext) -> bool:
 
 
 def install_impeccable(project_dir: Path) -> bool:
-    """Install the pinned Impeccable CLI, skills, agents, and provider hooks."""
+    """Install the pinned Impeccable CLI, skills, agents, and detector without provider hooks."""
     was_present = command_exists("impeccable")
     if not _run_bash_with_retry(
         _npm_install_cmd(manifest_get("impeccable")),
@@ -1156,6 +1201,7 @@ def install_impeccable(project_dir: Path) -> bool:
                     "--yes",
                     f"--providers={','.join(providers)}",
                     "--scope=global",
+                    "--no-hooks",
                 ],
                 cwd=project_dir,
                 env=environment,
@@ -2248,7 +2294,7 @@ class DependenciesStep(BaseStep):
 
             if _install_with_spinner(
                 ui,
-                "Impeccable (skills, agents, hooks, detector)",
+                "Impeccable (skills, agents, detector; hooks opt-in)",
                 install_impeccable,
                 ctx.project_dir,
             ):

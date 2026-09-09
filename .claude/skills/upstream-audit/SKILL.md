@@ -76,6 +76,13 @@ rm -f /tmp/upstream-audit-script.sh
 ```
 Compare sha256 to manifest. If different → sha256 drifted, update `sha256` and `version` label (e.g., `live-YYYY-MM-DD` or `vendor-managed-YYYY-MM-DD`). If same → no drift, just update `last_audited`.
 
+For every proposed update, also inspect its published runtime requirements and
+release notes. A package being installable is insufficient when its executable
+requires a newer Node, Python, Go, libc, or OS baseline than Pilot provisions.
+Trace that requirement to Pilot's prerequisite/bootstrap entry and include any
+required runtime migration in the same audit. Treat major-version changes and
+new migration/status flags as capability changes that need an explicit test.
+
 **Update ALL entries' `last_audited` to today's date** — even entries where the version didn't change. The audit date records when we last verified the version is current, not when it was last bumped.
 
 ### Step 3: Check Security Advisories
@@ -103,6 +110,23 @@ Report any findings. If the CURRENT version has known vulnerabilities, flag as u
 ### Step 4: Install-Test Each Update
 
 **This step is mandatory. Do not skip it.**
+
+An install test proves package resolution only. After it passes, exercise the
+installed artifact through Pilot's real integration path:
+
+- CLI tools: run `--version` plus the primary command Pilot depends on.
+- MCP servers: perform an MCP initialize handshake and list or invoke the tool
+  surface Pilot uses; a process that merely stays alive is not enough.
+- Browser tools: launch a real page and perform one representative action such
+  as a screenshot.
+- Language servers/compilers: complete a handshake or compile/typecheck a small
+  project using Pilot's actual runtime and configuration.
+- Migration-aware tools: inspect their status/capability output and exercise
+  the migration path against an existing artifact, not only a fresh install.
+
+Use isolated temporary prefixes/profiles. Read versions back from the exact
+binary or generated artifact Pilot will launch, so a globally shadowing older
+binary cannot create a false pass.
 
 For each version bump, verify the new version actually installs and works:
 
@@ -174,6 +198,17 @@ grep -rn "rich==\|certifi==\|cryptography==\|PyYAML==\|context7-mcp@\|open-webse
   --include="*.sh" --include="*.py" --include="*.json" --include="*.yaml" --include="*.yml"
 ```
 
+The table above is a minimum allowlist, not the complete duplicate-pin search.
+Search the repository for every old version, package spec, formula name, and
+immutable commit that changed. Classify each hit as a runtime consumer, test
+fixture, documentation example, historical record, or unrelated value; update
+all live consumers. Also verify generated/client-specific copies from their
+installed artifacts after regeneration.
+
+For major updates, document any config, cache, index, lockfile, or persisted
+state migration. Test both an existing installation and a fresh installation,
+and preserve user-owned configuration while migrating Pilot-owned state.
+
 **Do not change:**
 - `scripts_policy`, `scripts_justification`
 - `soft_pin`, `soft_pin_reason`
@@ -196,6 +231,10 @@ uv run pytest installer/tests/unit/ -q
 ```
 
 All tests must pass. If a test fails due to a version change, investigate and fix.
+
+Then run the focused capability smokes identified in Step 4 and the repository
+gates for every runtime consumer changed by the audit. Do not mark an entry
+verified from a package-manager exit code alone.
 
 ### Step 8: Report
 

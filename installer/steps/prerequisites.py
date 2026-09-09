@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -55,6 +56,17 @@ HOMEBREW_PACKAGES = _brew_formulas()
 HOMEBREW_NO_UPGRADE_PACKAGES = _brew_no_upgrade_formulas()
 
 
+def _brew_formula_ref(formula: str) -> str:
+    """Return a tap-qualified reference when the manifest requires a non-core tap."""
+    for entry in _brew_entries():
+        if entry.brew_formula != formula:
+            continue
+        if entry.brew_tap and entry.brew_tap != "homebrew/core" and "/" not in formula:
+            return f"{entry.brew_tap}/{formula}"
+        return formula
+    return formula
+
+
 def _verify_homebrew_tap(formula: str) -> bool:
     """Confirm the formula resolves from the manifest-declared tap.
 
@@ -71,7 +83,7 @@ def _verify_homebrew_tap(formula: str) -> bool:
         return False
     try:
         result = subprocess.run(
-            ["brew", "info", "--json=v2", formula],
+            ["brew", "info", "--json=v2", _brew_formula_ref(formula)],
             capture_output=True,
             check=False,
             timeout=30,
@@ -216,7 +228,7 @@ def _install_homebrew_package(package: str) -> bool:
     for attempt in range(MAX_RETRIES):
         try:
             result = subprocess.run(
-                ["brew", "install", package],
+                ["brew", "install", _brew_formula_ref(package)],
                 capture_output=True,
                 check=False,
                 timeout=120,
@@ -236,7 +248,7 @@ def _upgrade_homebrew_package(package: str) -> bool:
     for attempt in range(MAX_RETRIES):
         try:
             result = subprocess.run(
-                ["brew", "upgrade", package],
+                ["brew", "upgrade", _brew_formula_ref(package)],
                 capture_output=True,
                 check=False,
                 timeout=120,
@@ -262,7 +274,17 @@ def _get_outdated_homebrew_packages(packages: list[str]) -> set[str]:
         if result.returncode != 0:
             return set()
         outdated = set(result.stdout.decode().splitlines())
-        return {p for p in packages if any(p == o or p.startswith(o + "@") or o.startswith(p) for o in outdated)}
+        return {
+            package
+            for package in packages
+            if any(
+                package == item
+                or package.startswith(item + "@")
+                or item.startswith(package + "@")
+                or package.rsplit("/", 1)[-1] == item.rsplit("/", 1)[-1]
+                for item in outdated
+            )
+        }
     except (subprocess.SubprocessError, OSError):
         return set()
 
@@ -271,7 +293,7 @@ def _get_command_for_package(package: str) -> str:
     """Get the command name to check for a given Homebrew package."""
     package_to_command = {
         "python@3.12": "python3",
-        "node@22": "node",
+        "node@24": "node",
         "gh": "gh",
         "git": "git",
         "nvm": "nvm",
@@ -283,6 +305,43 @@ def _get_command_for_package(package: str) -> str:
         "ripgrep": "rg",
     }
     return package_to_command.get(package, package)
+
+
+def _node_at_least_24() -> bool:
+    if not command_exists("node"):
+        return False
+    try:
+        result = subprocess.run(
+            ["node", "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    match = re.search(r"\bv(\d+)\.", result.stdout)
+    return bool(result.returncode == 0 and match and int(match.group(1)) >= 24)
+
+
+def _activate_versioned_node_formula(formula: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["brew", "--prefix", formula],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if result.returncode != 0:
+        return False
+    node_bin = Path(result.stdout.strip()) / "bin"
+    if not node_bin.is_dir():
+        return False
+    os.environ["PATH"] = f"{node_bin}:{os.environ.get('PATH', '')}"
+    return _node_at_least_24()
 
 
 def _install_ripgrep_via_apt() -> bool:
@@ -403,16 +462,9 @@ def _install_linux_fallbacks(ui: Any) -> None:
     if not is_linux():
         return
 
-    if not command_exists("node"):
-        if ui:
-            with ui.spinner("Installing Node.js via system package manager..."):
-                success = _install_nodejs_via_pkg()
-            if success:
-                ui.success("Node.js installed via system package manager")
-            else:
-                ui.warning("Could not install Node.js - please install manually")
-        else:
-            _install_nodejs_via_pkg()
+    # The dependency step installs the manifest-pinned NVM and Node 24. Distro
+    # package managers commonly provide Node 20/22, which no longer satisfies
+    # Pilot's browser-tool runtime and must not be reported as success here.
 
 
 class PrerequisitesStep(BaseStep):
@@ -437,6 +489,9 @@ class PrerequisitesStep(BaseStep):
         for package in HOMEBREW_PACKAGES:
             if package == "nvm":
                 if not _is_nvm_installed():
+                    return False
+            elif package == "node@24":
+                if not _node_at_least_24():
                     return False
             else:
                 cmd = _get_command_for_package(package)
@@ -498,6 +553,8 @@ class PrerequisitesStep(BaseStep):
                 break
             if package == "nvm":
                 is_installed = _is_nvm_installed()
+            elif package == "node@24":
+                is_installed = _node_at_least_24() or _activate_versioned_node_formula(package)
             else:
                 cmd = _get_command_for_package(package)
                 is_installed = command_exists(cmd)
@@ -522,11 +579,16 @@ class PrerequisitesStep(BaseStep):
                 with ui.spinner(f"Installing {package}..."):
                     success = _install_homebrew_package(package)
                 if success:
+                    if package == "node@24":
+                        success = _activate_versioned_node_formula(package)
+                if success:
                     ui.success(f"{package} installed")
                 else:
                     ui.warning(f"Could not install {package} - please install manually")
             else:
-                _install_homebrew_package(package)
+                success = _install_homebrew_package(package)
+                if success and package == "node@24":
+                    _activate_versioned_node_formula(package)
 
         if not command_exists("rg") and is_linux() and is_apt_available():
             if ui:

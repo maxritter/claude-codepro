@@ -25,7 +25,7 @@ A synchronous permitted question needs no disk sentinel. For an asynchronous per
    ```
    AskUserQuestion: "Yes, squash merge" (Recommended) | "No, keep worktree" | "Discard all changes"
 
-   ⛔ **When no structured input tool is exposed and permitted for this approval**, ask in prose and yield for the required answer. Read `$HOME/.pilot/agents/agent-gate-protocol.md` and follow it, supplying `GATE_NAME` = `Worktree sync`, `OPTIONS` = the three above, `SENTINEL_PATH` = `verify-gate-pending`:
+   ⛔ **When no structured input tool is exposed and permitted for this approval**, do not ask yet. Read `$HOME/.pilot/agents/agent-gate-protocol.md` and follow it, supplying `GATE_NAME` = `Worktree sync`, `OPTIONS` = the three above, `SENTINEL_PATH` = `verify-gate-pending`; arm the sentinel before emitting the prose question:
 
    ```bash
    SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-}}}"
@@ -35,13 +35,13 @@ SESS_DIR="$HOME/.pilot/sessions/$SESSION_ID"
    mkdir -p "$SESS_DIR" && touch "$SESS_DIR/verify-gate-pending"
    ```
 
-   Then **end your turn**. The stop guard honours this sentinel once for an approved plan at `Status: COMPLETE`, so the user can answer. Treat their NEXT message as the choice. ⛔ Do NOT run the sync in the same turn — this gate guards a squash merge onto the base branch, which is the one decision in the workflow that cannot be undone by asking again. On resume, delete the sentinel first, then act on their choice:
+   Only after the command succeeds, ask the prose question and **end your turn**. The stop guard holds this sentinel for an approved plan at `Status: COMPLETE`, so the user can answer; UserPromptSubmit consumes it when their NEXT message arrives. Treat that message as the choice. ⛔ Do NOT run the sync in the same turn — this gate guards a squash merge onto the base branch, which is the one decision in the workflow that cannot be undone by asking again. On resume, deleting the already-consumed sentinel is a safe no-op, then act on their choice:
 
    ```bash
    rm -f "$SESS_DIR/verify-gate-pending"
    ```
 
-   The sentinel is consumed when honoured, so **re-touch it** every time you come back here and ask again.
+   The response hook consumes the sentinel on the next user message, so **re-touch it before** every later prose question at this gate.
 
 7. **Handle choice:**
 

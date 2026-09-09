@@ -34,10 +34,14 @@
       "handlers": [
         "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/session_announcements.py\"",
         "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/config_dir_guard.py\"",
+        "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/spec_interaction.py\"",
+        "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/impeccable_cache_migration.py\"",
         "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/session_startup_maintenance.py\"",
         "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/codegraph_init.py\""
       ],
       "async": [
+        false,
+        false,
         false,
         false,
         true,
@@ -46,7 +50,31 @@
       "timeout": [
         10,
         10,
+        5,
+        5,
         15,
+        120
+      ],
+      "contract_test": "pilot/hooks/tests/test_hook_lifecycle_matrix.py::test_referenced_local_command_targets_exist"
+    },
+    {
+      "id": "codex-sessionstart-codegraph",
+      "platform": "codex",
+      "event": "SessionStart",
+      "matcher": "startup",
+      "handlers": [
+        "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/spec_interaction.py\"",
+        "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/impeccable_cache_migration.py\"",
+        "CLAUDE_PROJECT_PLATFORM=codex uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/codegraph_init.py\""
+      ],
+      "async": [
+        false,
+        false,
+        true
+      ],
+      "timeout": [
+        5,
+        5,
         120
       ],
       "contract_test": "pilot/hooks/tests/test_hook_lifecycle_matrix.py::test_referenced_local_command_targets_exist"
@@ -137,12 +165,15 @@
       "event": "UserPromptSubmit",
       "matcher": null,
       "handlers": [
+        "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/spec_interaction.py\"",
         "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/spec_mode_guard.py\""
       ],
       "async": [
+        false,
         false
       ],
       "timeout": [
+        5,
         null
       ],
       "contract_test": "pilot/hooks/tests/test_hook_lifecycle_matrix.py::test_referenced_local_command_targets_exist"
@@ -529,12 +560,15 @@
       "event": "UserPromptSubmit",
       "matcher": null,
       "handlers": [
+        "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/spec_interaction.py\"",
         "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" --exec bun \"$HOME/.pilot/scripts/worker-service.cjs\" hook codex session-init"
       ],
       "async": [
+        false,
         true
       ],
       "timeout": [
+        5,
         15
       ],
       "contract_test": "pilot/hooks/tests/test_hook_lifecycle_matrix.py::test_referenced_local_command_targets_exist"

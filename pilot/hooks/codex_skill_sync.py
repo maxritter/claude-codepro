@@ -25,6 +25,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -808,6 +809,28 @@ def _merge_env_block(existing: str, env_lines: list[str]) -> str:
     return "\n".join(rest) + "\n"
 
 
+def _shell_environment_value(existing: str, key: str) -> str | None:
+    """Read one string from Codex's shell env table, even in healable TOML."""
+    in_env_table = False
+    for line in existing.splitlines():
+        stripped = line.split("#", 1)[0].strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_env_table = stripped == _ENV_SECTION_HEADER
+            continue
+        if not in_env_table or "=" not in line:
+            continue
+        name, raw_value = line.split("=", 1)
+        if name.strip() != key:
+            continue
+        try:
+            value = tomllib.loads(f"value = {raw_value}").get("value")
+        except tomllib.TOMLDecodeError:
+            continue
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def _sync_codex_env_vars() -> int:
     """Read Console settings and inject PILOT_* env vars into Codex config."""
     config_path = Path.home() / ".pilot" / "config.json"
@@ -826,6 +849,7 @@ def _sync_codex_env_vars() -> int:
     codex_rev = raw.get("codexReviewers", {})
 
     env_vars = {
+        "IMPECCABLE_CACHE_ROOT": "~/.pilot/cache/impeccable",
         "PILOT_BRANCH_ISOLATION_ENABLED": "true" if spec.get("branchIsolation", True) else "false",
         "PILOT_PLAN_QUESTIONS_ENABLED": "true" if spec.get("askQuestionsDuringPlanning", True) else "false",
         "PILOT_PLAN_APPROVAL_ENABLED": "true" if spec.get("planApproval", True) else "false",
@@ -845,6 +869,11 @@ def _sync_codex_env_vars() -> int:
         existing = codex_config.read_text(encoding="utf-8")
     except OSError:
         return 0
+
+    existing_cache_root = _shell_environment_value(existing, "IMPECCABLE_CACHE_ROOT")
+    if existing_cache_root is not None:
+        env_vars["IMPECCABLE_CACHE_ROOT"] = existing_cache_root
+        env_lines = [f'{k} = "{v}"' for k, v in sorted(env_vars.items())]
 
     new_content = _merge_env_block(existing, env_lines)
 

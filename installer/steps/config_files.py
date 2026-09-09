@@ -20,6 +20,6 @@ class ConfigFilesStep(BaseStep):
         ui = ctx.ui
 
         nvmrc_file = ctx.project_dir / ".nvmrc"
-        nvmrc_file.write_text("22\n")
+        nvmrc_file.write_text("24\n")
         if ui:
-            ui.success("Created .nvmrc for Node.js 22")
+            ui.success("Created .nvmrc for Node.js 24")

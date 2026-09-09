@@ -12,13 +12,16 @@ def _commands(event: list[dict]) -> list[dict]:
     return [hook for entry in event for hook in entry.get("hooks", [])]
 
 
-def test_codex_hooks_do_not_gate_sessions_or_initialize_repositories() -> None:
+def test_codex_hooks_do_not_gate_sessions_and_only_maintain_existing_codegraph_indexes() -> None:
     hooks = json.loads(MANIFEST.read_text())["hooks"]
     startup = _commands(hooks["SessionStart"])
     commands = [hook["command"] for hook in startup]
 
     assert not any("license_check.py" in command for command in commands)
-    assert not any("codegraph_init.py" in command for command in commands)
+    codegraph = next(hook for hook in startup if "codegraph_init.py" in hook["command"])
+    assert "CLAUDE_PROJECT_PLATFORM=codex" in codegraph["command"]
+    assert codegraph["async"] is True
+    assert codegraph["timeout"] == 120
 
 
 def test_codex_bookkeeping_uses_native_async_commands_after_synchronous_license_sync() -> None:

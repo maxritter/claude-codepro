@@ -191,13 +191,15 @@ job_console_tests() {
 job_trivy() {
   # skip-dirs mirrors release-dev.yml's Trivy job (vendored deps under
   # docs/*/node_modules and console are CI-skipped) plus the local-only
-  # .pnpm-store cache, so the hook's verdict matches CI.
+  # .pnpm-store cache and the ignored local worker lock, so the hook's verdict
+  # matches CI's clean checkout rather than scanning untracked workspace state.
   trivy fs . \
     --scanners vuln,secret \
     --severity CRITICAL,HIGH \
     --exit-code 1 \
     --ignore-unfixed \
     --skip-dirs .venv,node_modules,console/node_modules,launcher,docs/site/api,console,docs/site/node_modules,docs/docusaurus/node_modules,.pnpm-store \
+    --skip-files worker/bun.lock \
     --ignorefile .trivyignore \
     --quiet
 }

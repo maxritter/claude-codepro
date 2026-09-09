@@ -42,6 +42,16 @@
           },
           {
             "type": "command",
+            "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/spec_interaction.py\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/impeccable_cache_migration.py\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/session_startup_maintenance.py\"",
             "async": true,
             "timeout": 15
@@ -108,6 +118,11 @@
       },
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/spec_interaction.py\"",
+            "timeout": 5
+          },
           {
             "type": "command",
             "command": "uv run --no-project --python python3 python \"$HOME/.pilot/hooks/run_if_licensed.py\" \"$HOME/.pilot/hooks/spec_mode_guard.py\""

@@ -301,13 +301,15 @@ class TestCodexHooksInstallation:
         hooks = json.loads((codex_dir / "hooks.json").read_text())["hooks"]
         handlers = [handler for entries in hooks.values() for entry in entries for handler in entry.get("hooks", [])]
         async_handlers = [handler for handler in handlers if handler.get("async") is True]
-        assert len(async_handlers) == 4
+        assert len(async_handlers) == 5
         assert {handler["command"].split()[-1] for handler in async_handlers} >= {
             "session-init",
             "observation",
             "summarize",
             "memory-sync",
         }
+        codegraph = next(handler for handler in async_handlers if "codegraph_init.py" in handler["command"])
+        assert "CLAUDE_PROJECT_PLATFORM=codex" in codegraph["command"]
         startup_sync = next(handler for handler in handlers if "codex_skill_sync.py" in handler["command"])
         assert "async" not in startup_sync
         control_handlers = [

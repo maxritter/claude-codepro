@@ -45,7 +45,7 @@ When the argument ends with `.md`: read the plan, check `Status:` and `Approved:
 1. NO FIXES WITHOUT ROOT CAUSE — traced to file:line, explained WHY.
 2. NO CODE WITHOUT A FAILING REPRODUCING TEST — the RED must exist first.
 3. FIX AT THE SOURCE — not where the error appears.
-4. ONE UNIFORM STRUCTURE — every bugfix plan has the same three tasks.
+4. ONE UNIFORM CORE — every bugfix plan has the same three agent-owned tasks; a proven non-automatable checkpoint may add a separate user-owned task without replacing them.
 ```
 
 If Step 2 is incomplete, you cannot propose fixes. Symptom fixes are failure. Retroactive tests are failure. "I know the fix, I'll skip the test" is failure.
@@ -56,7 +56,7 @@ If Step 2 is incomplete, you cannot propose fixes. Symptom fixes are failure. Re
 
 - **NEVER write production code during planning** — planning and implementation are separate phases. When the runtime permits writes, temporary boundary instrumentation during Step 2 investigation (log/print lines marked `SPEC-DEBUG:`) is allowed to trace the root cause; it must be removed before the plan is written (and Step 1.5 of verification greps for the marker to catch leftovers).
 - **NEVER assume — verify by reading files.** Trace the bug to actual file:line.
-- **Lean ≠ skipping steps.** Small bugs get short tasks, not fewer tasks. The three-task structure (Reproducing Test → Fix → Quality Gate) is non-negotiable.
+- **Lean ≠ skipping steps.** Small bugs get short tasks, not fewer tasks. The three agent tasks (Reproducing Test → Fix → Quality Gate) are non-negotiable; any user-owned checkpoint is additional and separately numbered.
 - **Plan file is source of truth** — survives across auto-compaction cycles
 - **Keep progress updates brief and useful.** Report evidence, decisions, and blockers during longer investigations; omit routine step narration.
 <!-- CC-ONLY -->

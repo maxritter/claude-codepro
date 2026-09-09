@@ -7,7 +7,8 @@
     "CLAUDE_CODE_ENABLE_TODO_TOOLS": "true",
     "CLAUDE_CODE_ENABLE_TASKS": "true",
     "CLAUDE_CODE_TODO_REMINDER_MODE": "baseline",
-    "ENABLE_TOOL_SEARCH": "true"
+    "ENABLE_TOOL_SEARCH": "true",
+    "IMPECCABLE_CACHE_ROOT": "~/.pilot/cache/impeccable"
   },
   "permissions": {
     "defaultMode": "bypassPermissions"

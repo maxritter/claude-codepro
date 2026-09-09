@@ -88,7 +88,7 @@ class TestDriftDetection:
 
     def test_pinned_uvx_from_in_mcp_json_passes_when_in_manifest(self, drift_module, tmp_path: Path) -> None:
         mcp = tmp_path / ".mcp.json"
-        mcp.write_text('{"mcpServers": {"x": {"command": "uvx", "args": ["--from", "semble[mcp]==0.5.5", "semble"]}}}')
+        mcp.write_text('{"mcpServers": {"x": {"command": "uvx", "args": ["--from", "semble[mcp]==0.5.6", "semble"]}}}')
         assert not drift_module.scan_file(mcp)
         assert not drift_module.cross_reference_mcp(mcp)
 
@@ -103,7 +103,7 @@ class TestDriftDetection:
         mcp = tmp_path / ".mcp.json"
         mcp.write_text('{"mcpServers": {"x": {"command": "uvx", "args": ["--from", "semble[mcp]==0.4.0", "semble"]}}}')
         findings = drift_module.cross_reference_mcp(mcp)
-        assert any("0.5.5" in f.message for f in findings), [f.message for f in findings]
+        assert any("0.5.6" in f.message for f in findings), [f.message for f in findings]
 
     def test_npx_with_http_url_does_not_trigger(self, drift_module, tmp_path: Path) -> None:
         """HTTP URLs in args (e.g. typefully MCP endpoint) shouldn't trigger drift."""
@@ -288,6 +288,52 @@ class TestManifestSchemaGate:
         assert "sha256" in finding.message.lower()
 
 
+class TestWorkflowRuntimeCrossRef:
+    """CI runtime pins must follow the installer runtime manifest."""
+
+    @pytest.fixture
+    def runtime_manifest(self, tmp_path: Path) -> Path:
+        manifest = tmp_path / "upstreams.yaml"
+        manifest.write_text(
+            "version: 1\n"
+            "entries:\n"
+            "  - id: node-24-brew\n"
+            "    name: Node.js 24\n"
+            "    source_type: brew\n"
+            "    source_url: https://github.com/nodejs/node\n"
+            '    version: "24.20.0"\n'
+            "    pin_kind: monitor\n"
+            '    brew_formula: "node@24"\n'
+            "    brew_tap: homebrew/core\n"
+            '    last_audited: "2026-09-09"\n'
+            "  - id: bun-brew\n"
+            "    name: bun\n"
+            "    source_type: brew\n"
+            "    source_url: https://github.com/oven-sh/bun\n"
+            '    version: "1.4.2"\n'
+            "    pin_kind: monitor\n"
+            "    brew_formula: bun\n"
+            "    brew_tap: oven-sh/bun\n"
+            '    last_audited: "2026-09-09"\n'
+        )
+        return manifest
+
+    def test_stale_node_and_bun_workflow_pins_fail(self, drift_module, tmp_path: Path, runtime_manifest: Path) -> None:
+        workflow = tmp_path / "release.yml"
+        workflow.write_text('node-version: "22"\nbun-version: "1.3.11"\n')
+
+        findings = drift_module.cross_reference_workflow_runtimes([workflow], manifest_path=runtime_manifest)
+
+        assert any("Node" in finding.message and "24" in finding.message for finding in findings)
+        assert any("Bun" in finding.message and "1.4.2" in finding.message for finding in findings)
+
+    def test_matching_workflow_runtime_pins_pass(self, drift_module, tmp_path: Path, runtime_manifest: Path) -> None:
+        workflow = tmp_path / "release.yml"
+        workflow.write_text('node-version: "24.20.0"\nbun-version: "1.4.2"\n')
+
+        assert not drift_module.cross_reference_workflow_runtimes([workflow], manifest_path=runtime_manifest)
+
+
 class TestCleanRepository:
     """Running drift check against the current repo state."""
 
@@ -333,3 +379,14 @@ class TestCleanRepository:
             xref = drift_module.cross_reference_mcp(path)
             assert not scan, f"{rel} scan: {[f.message for f in scan]}"
             assert not xref, f"{rel} xref: {[f.message for f in xref]}"
+
+    def test_workflow_runtime_pins_match_manifest(self, drift_module) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        workflows = [
+            repo_root / ".github/workflows/release.yml",
+            repo_root / ".github/workflows/release-dev.yml",
+            repo_root / ".github/workflows/deploy-website.yml",
+        ]
+
+        findings = drift_module.cross_reference_workflow_runtimes(workflows)
+        assert not findings, [finding.message for finding in findings]

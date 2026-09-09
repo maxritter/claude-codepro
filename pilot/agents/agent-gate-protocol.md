@@ -21,17 +21,19 @@ Resolve gate files under the caller's run directory: `sessions/<session>/lanes/<
 
 ## Ask using the current runtime
 
+Choose the transport and arm any required persistence **before emitting the user-visible question**. The hard order is: permitted synchronous question tool, or validated sentinel write, then question, then yield. Never print a prose question first and hope to create its sentinel after the Stop guard fires.
+
 Use a structured question tool only when it is exposed and permitted for this question in the current mode. Codex and Claude toolsets vary; neither the agent brand nor the presence of `AskUserQuestion` determines what is allowed. Follow the tool's actual schema, including restrictions on approval questions.
 
 If an asynchronous input tool is available, ask early and continue independent work. Keep required input pending: dependent work cannot proceed until the answer arrives. Optional preferences may use a stated reasonable default when the runtime permits that.
 
-Without a permitted structured tool, ask one concise question in prose with enough context for a decision. Describe relevant alternatives naturally, or as a list only when the runtime permits that format. A subagent with no user-facing question surface reports the unresolved decision to its coordinating agent; the coordinator can relay it or answer only within authority already delegated by the user.
+Without a permitted structured tool, prepare one concise prose question with enough context for a decision, but do not emit it yet. Describe relevant alternatives naturally, or as a list only when the runtime permits that format. A subagent with no user-facing question surface reports the unresolved decision to its coordinating agent; the coordinator can relay it or answer only within authority already delegated by the user.
 
 ## Yield when required input is pending
 
 A synchronous permitted question needs no disk sentinel. Missing session identity blocks only an asynchronous persisted gate: keep the actual decision pending or use the permitted synchronous question surface. Never substitute a shared directory, and do not turn unavailable persistence into a task-wide denial. Before cleanup in a new shell call or after compaction, resolve and validate the same session/lane identity again.
 
-If no independent work remains, touch the caller's sentinel when applicable and end the turn so the user can answer:
+If no independent work remains, touch the caller's sentinel when applicable **before** sending the prepared prose question:
 
 ```bash
 SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-}}}"
@@ -40,6 +42,8 @@ SESS_DIR="$HOME/.pilot/sessions/$SESSION_ID"
 [ -z "$LANE_ID" ] || SESS_DIR="$SESS_DIR/lanes/$LANE_ID"
 mkdir -p "$SESS_DIR" && touch "$SESS_DIR/<sentinel-name>"
 ```
+
+Only after that command succeeds, emit the prepared question and end the turn immediately. The sentinel write is the final tool call before the question. If it fails, do not emit a question the Stop guard cannot safely yield for; use a permitted synchronous question or report the persistence blocker.
 
 On resume, interpret the response in context. Explicit approval of the presented result is sufficient; an unrelated message or routine "continue" does not silently approve a merge or verification sign-off. Follow the caller's sentinel cleanup rules and retain the actual answer across compaction.
 

@@ -24,8 +24,10 @@ Codex runs the skill refresh, session registration, memory observer, and turn su
 |------|------------|-------------|
 | `session_announcements.py` | Claude Code | Delivers one-time announcements and re-injects them until acknowledged. |
 | `config_dir_guard.py` | Claude Code | Privately tells the agent when the active Claude configuration directory differs from the installed profile; it is surfaced only if the mismatch actually prevents the requested work. |
+| `spec_interaction.py` | Both | Migrates the retired discussion-pause marker into plan-bound durable state once. |
+| `impeccable_cache_migration.py` | Both | Pretty-formats a valid legacy project-local Impeccable hook cache once; current hook state stays under Pilot's external cache root. |
 | `session_startup_maintenance.py` | Claude Code | Cleans stale Claude task files and dead PID-backed session directories. |
-| `codegraph_init.py` | Claude Code | Initializes CodeGraph for the current project. |
+| `codegraph_init.py` | Both | Initializes and maintains CodeGraph for Claude Code. Codex only syncs or rebuilds an index the user already initialized. |
 | Skill sync | Both | Refreshes managed skills for the active agent. |
 | Repository asset sync | Both | Silently synchronizes project rules and skills. A bounded scoped-rule index is supplied to the agent as suppressed context without printing in the session UI or hook-status log. |
 | Memory synchronization | Both | Refreshes shared storage silently. Agents retrieve task-relevant history and OKF knowledge on demand through `mem-search`; no automatic digest is injected. |
@@ -39,6 +41,7 @@ Codex runs the skill refresh, session registration, memory observer, and turn su
 | Hook | Applies to | Description |
 |------|------------|-------------|
 | `spec_mode_guard.py` | Claude Code | Warns outside bypassPermissions, blocks manual plan mode, and applies the configured `/spec` model-switching checks; Manual/Off modes have no model gate. |
+| `spec_interaction.py` | Both | Records real user interruptions and exact pause/resume/manual-task controls in the active plan before the agent responds. A response to an armed verification gate is recognized as expected input rather than auto-paused again. |
 | Session initializer | Both | Registers the session with the Console worker. |
 
 ## PreToolUse
@@ -90,7 +93,7 @@ After a failed `EnterPlanMode` call, Claude Code runs `plan_mode_tracker.py` to 
 
 | Hook | Applies to | Description |
 |------|------------|-------------|
-| `spec_stop_guard.py` | Both | Holds a registered `/spec` or `/build` open until its completion rules are met. Honors the user-initiated discussion pause (`/spec pause`, or the agent pausing when you question a decision mid-run) so discussion turns aren't blocked. |
+| `spec_stop_guard.py` | Both | Holds a registered `/spec` or `/build` open until its completion rules are met. A plan-bound interaction pause disables its continuation prompts for the whole discussion, regardless of continuation payload state. |
 | Repository asset sync | Both | Verifies parity silently and repairs safe drift automatically. Incomplete edits are already returned to the agent as private context; an unresolved maintenance error never blocks completion or creates a user-facing warning. |
 | Session summarizer | Both | Saves the turn's durable observations. |
 

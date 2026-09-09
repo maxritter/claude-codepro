@@ -11,7 +11,7 @@ A synchronous permitted question needs no disk sentinel. For an asynchronous per
 4. Show diff: `~/.pilot/bin/pilot worktree diff --json <plan_slug> $LANE_FLAG`
 5. Notify + AskUserQuestion: "Yes, squash merge" | "No, keep" | "Discard"
 
-   ⛔ **When no structured input tool is exposed and permitted for this approval**, ask in prose and yield for the required answer. Read `$HOME/.pilot/agents/agent-gate-protocol.md` and follow it, supplying `GATE_NAME` = `Worktree sync`, `OPTIONS` = the three above, `SENTINEL_PATH` = `verify-gate-pending`:
+   ⛔ **When no structured input tool is exposed and permitted for this approval**, do not ask yet. Read `$HOME/.pilot/agents/agent-gate-protocol.md` and follow it, supplying `GATE_NAME` = `Worktree sync`, `OPTIONS` = the three above, `SENTINEL_PATH` = `verify-gate-pending`; arm the sentinel before emitting the prose question:
 
    ```bash
    SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-${PILOT_SESSION_ID:-}}}"
@@ -21,7 +21,7 @@ SESS_DIR="$HOME/.pilot/sessions/$SESSION_ID"
    mkdir -p "$SESS_DIR" && touch "$SESS_DIR/verify-gate-pending"
    ```
 
-   Then **end your turn** — the guard honours the sentinel once for an approved plan at `Status: COMPLETE`. ⛔ Do NOT run the sync in the same turn: it squash-merges onto the base branch and cannot be undone by asking again. Treat the user's NEXT message as the choice, `rm -f "$SESS_DIR/verify-gate-pending"` on resume, and re-touch it whenever you ask again.
+   Only after the command succeeds, ask the prose question and **end your turn**. The guard holds the sentinel for an approved plan at `Status: COMPLETE`, and UserPromptSubmit consumes it when the user's NEXT message arrives. ⛔ Do NOT run the sync in the same turn: it squash-merges onto the base branch and cannot be undone by asking again. Treat that message as the choice; `rm -f "$SESS_DIR/verify-gate-pending"` is a safe no-op on resume, and re-touch the sentinel before every later prose question.
 6. Handle:
    - **Squash:** `worktree sync && cleanup --force + cd` — ALL in ONE Bash call chained with `&&`. Cleanup MUST NOT run if sync fails.
    - **Keep:** Report path

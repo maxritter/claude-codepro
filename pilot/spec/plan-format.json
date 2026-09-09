@@ -108,5 +108,11 @@
   },
   "_task_field_labels_comment": "Verbatim bold labels a task body must contain for the Console to render its fields as separate collapsible blocks. Plain 'Files:' or 'DoD:' does not render.",
 
+  "task_optional_fields": {
+    "Owner": { "allowed": ["Agent", "User"], "default": "Agent" },
+    "User Action": { "required_owner": "User" }
+  },
+  "_task_optional_fields_comment": "Owner is omitted for ordinary agent tasks. User-owned tasks are supported by Feature and Bugfix plans only and require a concrete User Action; Buildouts remain autonomous.",
+
   "placeholder_tokens": ["TBD", "TODO", "FIXME"]
 }

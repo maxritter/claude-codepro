@@ -396,7 +396,7 @@ class TestResumeExistingPlanBypass:
 class TestDiscussionPauseControlBypass:
     """`/spec pause` and `/spec resume` are dispatcher controls, not workflow starts.
 
-    `pause` only touches the session's discussion-pause marker, so it is
+    `pause` only changes the active plan's durable interaction state, so it is
     workflow-neutral: no model gate, and legal even in plan mode (blocking it
     would strand a paused run behind the very nags the pause exists to stop).
     `resume` re-enters the workflow, so it keeps the plan-mode block but skips
